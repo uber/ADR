@@ -192,7 +192,7 @@ requires-dist = [
     { name = "torch", specifier = ">=2.7.1" },
     { name = "tqdm", specifier = ">=4.66" },
     { name = "transformers", specifier = ">=4.53.2" },
-    { name = "tushare", specifier = ">=1.4.21" },
+    { name = "tushare", specifier = ">=1.4.29" },
     { name = "typer", specifier = ">=0.9.0" },
     { name = "typing-extensions", specifier = "==4.12.2" },
     { name = "uvicorn", specifier = ">=0.23.0" },
@@ -6299,7 +6299,7 @@ wheels = [
 
 [[package]]
 name = "tushare"
-version = "1.4.21"
+version = "1.4.29"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "bs4" },
@@ -6310,9 +6310,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "websocket-client" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/da/3e/c1818c73861273f7f75b059c8c0f54741387b279d34bdd1a2491ab94e728/tushare-1.4.21.tar.gz", hash = "sha256:3c08bf2596d7cf6e002bb4f5b56f00916622928b8881d22dbb942009a3cf6fee", size = 127673, upload-time = "2025-03-26T08:07:37.187Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/91/a4/5ce99585209410463e4b203d13c73d356c6ac92daea48af182932af7cb61/tushare-1.4.29.tar.gz", hash = "sha256:f578fb778868c0b744ac9173a837b695fd82e8d1b1e0d39c1f882b0e4fef7ecb", size = 128623, upload-time = "2026-03-25T06:33:44.722Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/38/33/0b4ed09bff3b69887c2545f1c587420c89685d36c377095e465cc000759b/tushare-1.4.21-py3-none-any.whl", hash = "sha256:2014c3866d8cee36da7325efff9b174dd458a1896aac39225944ab0e40593f7c", size = 142762, upload-time = "2025-03-26T08:07:35.423Z" },
+    { url = "https://files.pythonhosted.org/packages/33/3e/d426a56e5feac9b0aaada1c6b0745ed03422d4a713295e0bbb44c8ea86fe/tushare-1.4.29-py3-none-any.whl", hash = "sha256:82554af953ea5ac3d8771d42330493181031c7e68dccce03a491c7356e9ba4b2", size = 142920, upload-time = "2026-03-25T06:33:43.111Z" },
 ]
 
 [[package]]
