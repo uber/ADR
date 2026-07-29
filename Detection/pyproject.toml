@@ -79,7 +79,7 @@ dependencies = [
     # MCP Server dependencies
     "mcp>=1.0.0",
     "fastmcp>=0.1.0",
-    "claude-code-sdk>=0.0.14",
+    "claude-code-sdk>=0.0.25",
     # Web framework dependencies
     "flask>=2.3.0",
     "flask-cors>=4.0.0",
