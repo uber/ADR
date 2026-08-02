@@ -36,6 +36,17 @@ export OPENAI_API_KEY="your_key"      # For OpenAI triage LLM
 export HF_TOKEN="your_token"          # For Hugging Face models (optional)
 ```
 
+**OpenAI-compatible endpoints (optional):**
+
+Set `OPENAI_BASE_URL` to point the triage LLM at any OpenAI-compatible API. For example, to use [Abliteration.ai](https://docs.abliteration.ai):
+
+```bash
+export OPENAI_BASE_URL="https://api.abliteration.ai/v1"
+export OPENAI_API_KEY="$ABLIT_KEY"
+```
+
+Then set the triage model in `config_detector.yaml` to a model the endpoint serves (e.g. `abliterated-model`).
+
 **Models Used:**
 
 - Triage: `gpt-4o`

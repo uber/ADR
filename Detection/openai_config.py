@@ -30,9 +30,15 @@ def get_openai_client() -> OpenAI:
     Get a configured OpenAI client using OPENAI_API_KEY environment variable.
     All ads_platform components should use this function to get their OpenAI client.
 
+    Set the OPENAI_BASE_URL environment variable to point the client at any
+    OpenAI-compatible API endpoint (passed to the SDK as base_url).
+
     Returns:
         OpenAI: Configured client
     """
+    base_url = os.environ.get("OPENAI_BASE_URL")
+    if base_url:
+        return OpenAI(api_key=os.environ["OPENAI_API_KEY"], base_url=base_url)
     return OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 
@@ -41,11 +47,15 @@ def get_openai_config() -> Dict[str, Any]:
     Get the OpenAI configuration dictionary.
 
     Returns:
-        Dict containing api_key
+        Dict containing api_key, and base_url when OPENAI_BASE_URL is set
     """
-    return {
+    config = {
         'api_key': os.environ["OPENAI_API_KEY"],
     }
+    base_url = os.environ.get("OPENAI_BASE_URL")
+    if base_url:
+        config['base_url'] = base_url
+    return config
 
 
 def create_chat_completion(
