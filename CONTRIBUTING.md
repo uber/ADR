@@ -6,7 +6,7 @@ Thanks for taking the first step in contributing to our project.
 
 See the [Table of Contents](#table-of-contents) for different ways to contribute and details about how we treat each contribution. Please read the relevant section before making your contribution as it will not only make it a lot easier for us but also ensure you have the very best developer experience too.
 
-> ⭐ If you like the project, but don't have time to contribute just now, that's no problem at all! Give the Repo a star and we'll look forward to receiving your future contribution.
+> ⭐ If you like the project, but don't have time to contribute just now, that's no problem at all! Give the repo a star and we'll look forward to receiving your future contribution.
 
 ## Table of Contents
 
@@ -93,7 +93,7 @@ Bug reports shouldn't need the project maintainers to clarify or search for more
 
 - Make sure that you are using the latest version of the project.
 - **Determine if your bug is really a bug** and not an error on your side e.g. using incompatible environment components/versions.
-- To see if other users have experienced (and potentially already solved) the same issue you are having, **check if there is not already a bug report** existing for your bug or error in the [bug list](https://github.com/uber/ADR/issues?q=is%3Aissue%20state%3Aopen%20label%3Abug). If it has and the issue is still open, add a comment to the existing issue instead of opening a new one
+- To see if other users have experienced (and potentially already solved) the same issue you are having, **check if there is not already a bug report** existing for your bug or error in the [bug list](https://github.com/uber/ADR/issues?q=is%3Aissue%20state%3Aopen%20label%3Abug). If it has and the issue is still open, add a comment to the existing issue instead of opening a new one.
 - Collect information about the bug:
     - OS, Platform and Version (Windows, Linux, macOS, x86, ARM)
     - Version of the interpreter, compiler, SDK, runtime environment, package manager, depending on what seems relevant – for local instances only.
@@ -135,4 +135,4 @@ If you want to fix a bug or propose a new feature you'll do this through creatin
 - Provide a **short description of the solution you proposed** in as many details as possible.
 - **Use comments in the code** that you provide to give us more context to any code based submissions.
 
-Thanks for contributing into our project.
+Thanks for contributing to our project.
