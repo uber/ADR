@@ -8,6 +8,7 @@ Performance-optimized: Skips conversations older than 2 weeks.
 """
 
 import json
+import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -26,11 +27,15 @@ class CursorParser(BaseParser):
     """Parser for Cursor SQLite database logs."""
 
     def __init__(self, max_age_days: int = MAX_CONVERSATION_AGE_DAYS):
-        # Support macOS and Linux paths
+        # Support macOS, Linux, and Windows paths
         macos_path = Path.home() / "Library/Application Support/Cursor/User/globalStorage/state.vscdb"
         linux_path = Path.home() / ".config/Cursor/User/globalStorage/state.vscdb"
+        windows_path = Path(os.getenv("APPDATA", Path.home() / "AppData/Roaming")) / "Cursor/User/globalStorage/state.vscdb"
+        
         if macos_path.exists():
             self.db_path = macos_path
+        elif windows_path.exists():
+            self.db_path = windows_path
         else:
             self.db_path = linux_path
         self.max_age_days = max_age_days
