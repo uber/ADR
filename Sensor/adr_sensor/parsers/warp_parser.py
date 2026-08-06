@@ -3,11 +3,14 @@ Parser for Warp Terminal logs.
 Reads SQLite database from the Warp application data directory.
 
 Supports macOS path. Linux support can be added when Warp provides Linux paths.
+
+Performance-optimized: Skips conversations older than 2 weeks by default.
 """
 
 import json
 import sqlite3
 import traceback
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -15,13 +18,16 @@ from ..schemas.agent_event_schema import AgentEvent, ChatMessage, ToolUsage
 from ..utils.timestamp_utils import normalize_timestamp
 from .base_parser import BaseParser
 
+MAX_CONVERSATION_AGE_DAYS = 14
+
 
 class WarpParser(BaseParser):
     """Parser for Warp Terminal SQLite database."""
 
-    def __init__(self):
+    def __init__(self, max_age_days: int = MAX_CONVERSATION_AGE_DAYS):
         self.base_path = Path.home() / "Library/Application Support/dev.warp.Warp-Stable"
         self.db_path = self.base_path / "warp.sqlite"
+        self.max_age_days = max_age_days
 
     def parse_all(self) -> List[AgentEvent]:
         """Parse all available Warp Terminal logs."""
@@ -42,7 +48,12 @@ class WarpParser(BaseParser):
             conversations = self._get_all_conversations(conn)
             print(f"[WARP] Found {len(conversations)} conversations")
 
-            for conversation in conversations:
+            recent_conversations = self._filter_recent_conversations(conversations)
+            skipped_count = len(conversations) - len(recent_conversations)
+            if skipped_count > 0:
+                print(f"[WARP] Skipped {skipped_count} conversations older than {self.max_age_days} days")
+
+            for conversation in recent_conversations:
                 conversation_id = conversation["conversation_id"]
                 try:
                     exchanges = self._get_conversation_exchanges(conn, conversation_id)
@@ -61,14 +72,42 @@ class WarpParser(BaseParser):
         return entries
 
     def _get_all_conversations(self, conn) -> List[Dict]:
-        """Get all conversations from the database."""
+        """Get all conversation ids and timestamps from the database.
+
+        Deliberately excludes the conversation_data column: it is not used
+        anywhere in this parser (exchange content comes from ai_queries /
+        ai_blocks instead), so fetching it here would be wasted I/O for
+        every conversation on every run.
+        """
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT conversation_id, conversation_data, last_modified_at
+            SELECT conversation_id, last_modified_at
             FROM agent_conversations
             ORDER BY last_modified_at DESC
         """)
         return [dict(row) for row in cursor.fetchall()]
+
+    def _filter_recent_conversations(self, conversations: List[Dict]) -> List[Dict]:
+        """Filter out conversations whose last_modified_at is older than max_age_days.
+
+        A conversation with a missing or unparseable timestamp is kept rather than
+        dropped, since we can't determine its age.
+        """
+        cutoff_time = datetime.now(timezone.utc) - timedelta(days=self.max_age_days)
+        recent = []
+        for conversation in conversations:
+            last_modified = conversation.get("last_modified_at")
+            conv_timestamp = None
+            if last_modified is not None:
+                try:
+                    conv_timestamp = normalize_timestamp(last_modified)
+                except Exception:
+                    pass
+
+            if conv_timestamp is None or conv_timestamp >= cutoff_time:
+                recent.append(conversation)
+
+        return recent
 
     def _get_conversation_exchanges(self, conn, conversation_id: str) -> List[Dict]:
         """Get all exchanges for a conversation with LLM output."""
