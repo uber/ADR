@@ -54,7 +54,7 @@ class AgentObserver:
         )
         self.codex_parser = CodexParser()
         self.cline_parser = ClineParser()
-        self.warp_parser = WarpParser()
+        self.warp_parser = WarpParser(max_age_days=max_age_days) if max_age_days is not None else WarpParser()
 
         self.output_dir = output_dir if output_dir else Path("output")
         self.output_dir.mkdir(exist_ok=True)

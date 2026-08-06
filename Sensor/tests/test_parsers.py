@@ -1,8 +1,9 @@
 """Tests for ADR Sensor parsers."""
 
 import json
+import sqlite3
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -11,6 +12,7 @@ import pytest
 from adr_sensor.parsers.claude_parser import ClaudeParser
 from adr_sensor.parsers.cline_parser import ClineParser
 from adr_sensor.parsers.codex_parser import CodexParser
+from adr_sensor.parsers.warp_parser import WarpParser
 
 
 class TestClaudeParser:
@@ -211,3 +213,178 @@ class TestCodexParser:
         parser.base_path = Path("/nonexistent/path")
         entries = parser.parse_all()
         assert entries == []
+
+
+def _build_warp_db(db_path: Path, conversations: list) -> None:
+    """Create a synthetic warp.sqlite matching the schema WarpParser queries.
+
+    Each item in `conversations` is a dict with keys:
+        conversation_id, last_modified_at, exchanges
+    where `exchanges` is a list of (exchange_id, start_ts, input_json, llm_output_json).
+    """
+    conn = sqlite3.connect(str(db_path))
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        CREATE TABLE agent_conversations (
+            conversation_id TEXT PRIMARY KEY,
+            conversation_data TEXT,
+            last_modified_at TEXT
+        )
+        """
+    )
+    cursor.execute(
+        """
+        CREATE TABLE ai_queries (
+            exchange_id TEXT,
+            conversation_id TEXT,
+            start_ts TEXT,
+            input TEXT,
+            working_directory TEXT,
+            output_status TEXT,
+            model_id TEXT
+        )
+        """
+    )
+    cursor.execute("CREATE TABLE ai_blocks (exchange_id TEXT, output TEXT)")
+
+    for conv in conversations:
+        cursor.execute(
+            "INSERT INTO agent_conversations VALUES (?, ?, ?)",
+            (conv["conversation_id"], "unused_blob", conv["last_modified_at"]),
+        )
+        for exchange_id, start_ts, input_json, llm_output_json in conv.get("exchanges", []):
+            cursor.execute(
+                "INSERT INTO ai_queries VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (exchange_id, conv["conversation_id"], start_ts, input_json, "/tmp/project", "success", "claude"),
+            )
+            if llm_output_json is not None:
+                cursor.execute("INSERT INTO ai_blocks VALUES (?, ?)", (exchange_id, llm_output_json))
+
+    conn.commit()
+    conn.close()
+
+
+class TestWarpParser:
+    def _make_parser(self, tmp_path: Path, max_age_days: int = 14) -> WarpParser:
+        parser = WarpParser(max_age_days=max_age_days)
+        parser.base_path = tmp_path
+        parser.db_path = tmp_path / "warp.sqlite"
+        return parser
+
+    def _query_exchange(self, exchange_id: str, timestamp: str) -> tuple:
+        input_json = json.dumps([{"Query": {"text": f"hello from {exchange_id}"}}])
+        llm_output_json = json.dumps({"Received": {"output": [{"Text": {"text": f"reply for {exchange_id}"}}]}})
+        return (exchange_id, timestamp, input_json, llm_output_json)
+
+    def test_skips_conversations_older_than_max_age(self, tmp_path):
+        """Old conversations should be filtered out before the expensive per-conversation query runs."""
+        now = datetime.now(timezone.utc)
+        recent_ts = now.isoformat()
+        old_ts = (now - timedelta(days=30)).isoformat()
+
+        conversations = [
+            {
+                "conversation_id": "recent-conv",
+                "last_modified_at": recent_ts,
+                "exchanges": [self._query_exchange("ex-recent", recent_ts)],
+            },
+            {
+                "conversation_id": "old-conv",
+                "last_modified_at": old_ts,
+                "exchanges": [self._query_exchange("ex-old", old_ts)],
+            },
+        ]
+        db_path = tmp_path / "warp.sqlite"
+        _build_warp_db(db_path, conversations)
+
+        parser = self._make_parser(tmp_path, max_age_days=14)
+        entries = parser.parse_all()
+
+        session_ids = {e.session_id for e in entries}
+        assert "warp_recent-conv" in session_ids
+        assert "warp_old-conv" not in session_ids
+
+    def test_all_history_via_large_max_age_days(self, tmp_path):
+        """A larger max_age_days should include conversations that would otherwise be skipped."""
+        now = datetime.now(timezone.utc)
+        old_ts = (now - timedelta(days=30)).isoformat()
+
+        conversations = [
+            {
+                "conversation_id": "old-conv",
+                "last_modified_at": old_ts,
+                "exchanges": [self._query_exchange("ex-old", old_ts)],
+            }
+        ]
+        db_path = tmp_path / "warp.sqlite"
+        _build_warp_db(db_path, conversations)
+
+        parser = self._make_parser(tmp_path, max_age_days=10000)
+        entries = parser.parse_all()
+
+        assert {e.session_id for e in entries} == {"warp_old-conv"}
+
+    def test_parses_conversation_content(self, tmp_path):
+        """Recent conversations should still be parsed into chat history correctly."""
+        now = datetime.now(timezone.utc)
+        ts1 = now.isoformat()
+        ts2 = (now + timedelta(seconds=1)).isoformat()
+
+        action_result_input = json.dumps(
+            [
+                {
+                    "ActionResult": {
+                        "id": "tool-1",
+                        "result": {
+                            "RequestCommandOutput": {
+                                "result": {"Success": {"command": "ls", "output": "file.txt", "exit_code": 0}}
+                            }
+                        },
+                    }
+                }
+            ]
+        )
+
+        conversations = [
+            {
+                "conversation_id": "conv-1",
+                "last_modified_at": ts2,
+                "exchanges": [
+                    self._query_exchange("ex-1", ts1),
+                    ("ex-2", ts2, action_result_input, None),
+                ],
+            }
+        ]
+        db_path = tmp_path / "warp.sqlite"
+        _build_warp_db(db_path, conversations)
+
+        parser = self._make_parser(tmp_path)
+        entries = parser.parse_all()
+
+        assert len(entries) == 1
+        entry = entries[0]
+        assert entry.source == "warp"
+        assert entry.session_id == "warp_conv-1"
+        assert len(entry.chat_history) == 2
+
+        user_msg = entry.chat_history[0]
+        assert user_msg.role == "user"
+        assert "hello from ex-1" in user_msg.content
+
+        assistant_msg = entry.chat_history[1]
+        assert assistant_msg.role == "assistant"
+        assert len(assistant_msg.tools) == 1
+        assert assistant_msg.tools[0].tool_name == "execute_command"
+        assert assistant_msg.tools[0].status == "success"
+
+    def test_parse_all_no_database(self, tmp_path):
+        """Test parse_all when the database file doesn't exist."""
+        parser = self._make_parser(tmp_path)
+        entries = parser.parse_all()
+        assert entries == []
+
+    def test_default_max_age_days(self):
+        """Constructor should default to the module-level constant when unset."""
+        parser = WarpParser()
+        assert parser.max_age_days == 14
