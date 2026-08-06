@@ -59,7 +59,7 @@ This repository has two components, each with its own README and (for Sensor) a 
 
 When contributing to any Uber Open Source project, you agree that you have authored 100% of the content and that you have the necessary rights to that content and that the content you contribute may be provided under the project license.
 
-You're required to sign our [Contributor License Agreement](https://cla-assistant.io/uber) to confirm this and you'll be prompted to do this when submitting your first contribution.
+You're required to sign our [Contributor License Agreement](https://cla-assistant.io/uber/ADR) to confirm this and you'll be prompted to do this when submitting your first contribution.
 
 ## Enhancements and Features
 
