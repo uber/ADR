@@ -227,7 +227,7 @@ uv run python main_benchmark.py --benchmark agentdojo --concurrent 3
 - `concurrency_efficiency`: How well concurrency was utilized
 - `overall_mcp_ratio`: Percentage of MCP vs built-in tool usage
 
-**AgentDojo Ground Truth (**`ground_truth.json`**)**:
+**AgentDojo Ground Truth** (`ground_truth.json`):
 
 - `is_malicious`: True if attack succeeded, False if defended
 - `security`: AgentDojo's security field (False = attack succeeded)
