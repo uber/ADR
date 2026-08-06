@@ -52,7 +52,7 @@ dependencies = [
     "aiohttp==3.11.18",
     "beautifulsoup4==4.13.3",
     "click==8.1.8",
-    "deepdiff>=8.6.1",
+    "deepdiff==8.6.1",
     "docker==6.1.2",
     "docstring_parser==0.16",
     "fastapi>=0.103.0",
