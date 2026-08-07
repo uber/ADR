@@ -9,9 +9,11 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import random
 import re
 import shutil
+import signal
 import sys
 import time
 from datetime import datetime
@@ -675,11 +677,6 @@ class TaskExecutor:
                 capabilities = config.get("capabilities", [])
                 mcp_tools.extend([f"mcp__{server}__{tool}" for tool in capabilities])
 
-            claude_projects_dir = Path.home() / ".claude" / "projects"
-            existing_sessions = set()
-            if claude_projects_dir.exists():
-                existing_sessions = {f.name for f in claude_projects_dir.rglob("*.jsonl")}
-
             cmd = self.command_builder.build_claude_command(task, mcp_tools)
 
             success, error_message, result = await self._execute_command(cmd, workspace_dir)
@@ -689,9 +686,7 @@ class TaskExecutor:
 
             execution_time = time.time() - start_time
 
-            return await self._process_results(
-                workspace_dir, existing_sessions, result, execution_time
-            )
+            return await self._process_results(workspace_dir, result, execution_time)
 
         except Exception as e:
             print(f"❌ Error executing task: {e}")
@@ -781,12 +776,17 @@ class TaskExecutor:
 
     async def _execute_command(self, cmd: List[str], workspace_dir: Path) -> Tuple[bool, Optional[str], Optional[Dict[str, Any]]]:
         """Execute Claude CLI command."""
+        process = None
         try:
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 cwd=workspace_dir,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
+                # Puts the CLI and everything it spawns (MCP servers, etc.) in
+                # one process group, so a timeout can signal all of them at
+                # once instead of just the direct child. POSIX only.
+                start_new_session=(os.name == "posix"),
             )
 
             stdout, stderr = await asyncio.wait_for(
@@ -802,11 +802,48 @@ class TaskExecutor:
             return True, None, result
 
         except asyncio.TimeoutError:
+            # asyncio.wait_for() only cancels the await - it does not touch the
+            # child process. Killing just the direct child isn't enough either:
+            # it doesn't reach any descendants the CLI spawned (e.g. MCP
+            # servers), and if one of those descendants inherited the CLI's
+            # stdout/stderr pipes, it can hold them open indefinitely -
+            # asyncio's subprocess transport only reports completion once
+            # those pipes close, so process.wait() could hang forever instead
+            # of just leaking. Signal the whole process group instead: SIGTERM
+            # first for a clean shutdown, then SIGKILL if it hasn't exited
+            # within the grace period.
+            if process is not None and process.returncode is None:
+                await self._kill_process_tree(process)
             return False, "Task execution timed out", None
         except Exception as e:
             return False, str(e), None
 
-    async def _process_results(self, workspace_dir: Path, existing_sessions: set,
+    async def _kill_process_tree(self, process: "asyncio.subprocess.Process", grace_period: float = 5.0) -> None:
+        """Terminate a process and everything it spawned.
+
+        Falls back to killing just the direct child on platforms without
+        process-group support (e.g. Windows), matching create_subprocess_exec's
+        start_new_session=(os.name == "posix") above.
+        """
+        if not hasattr(os, "killpg"):
+            process.kill()
+            await process.wait()
+            return
+
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            return
+
+        try:
+            await asyncio.wait_for(process.wait(), timeout=grace_period)
+        except asyncio.TimeoutError:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+    async def _process_results(self, workspace_dir: Path,
                               result: Dict[str, Any], execution_time: float) -> Tuple[bool, Optional[str], Optional[Dict[str, Any]]]:
         """Process execution results using session ID from Claude CLI JSON output."""
         session_id = result.get("session_id")
