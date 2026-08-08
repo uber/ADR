@@ -69,3 +69,16 @@ jobs:
       - name: Build distributions
         if: matrix.python-version == '3.12'
         run: uv build
+
+  # Aggregate gate for the matrix above. Branch protection requires a check
+  # named exactly "Sensor tests" (the job's pre-matrix name); this reports it.
+  # `if: always()` matters: without it a failed leg would leave this job
+  # skipped, and skipped jobs satisfy required checks.
+  test-sensor-gate:
+    name: Sensor tests
+    runs-on: ubuntu-latest
+    needs: test-sensor
+    if: always()
+    steps:
+      - name: All Sensor matrix legs must pass
+        run: test "${{ needs.test-sensor.result }}" = "success"
