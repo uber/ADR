@@ -1,8 +1,14 @@
 """
 Parser for Warp Terminal logs.
-Reads SQLite database from the Warp application data directory.
+Reads the SQLite database from the Warp application data directory.
 
-Supports macOS path. Linux support can be added when Warp provides Linux paths.
+Checks known paths in order:
+  macOS:
+    1. ~/Library/Group Containers/2BBY89MBSN.dev.warp/Library/Application Support/
+       dev.warp.Warp-Stable/warp.sqlite
+    2. ~/Library/Application Support/dev.warp.Warp-Stable/warp.sqlite
+  Windows:
+    3. %LOCALAPPDATA%\\warp\\Warp\\data\\warp.sqlite
 
 Performance-optimized: Skips conversations older than 2 weeks by default.
 """
@@ -24,9 +30,21 @@ MAX_CONVERSATION_AGE_DAYS = 14
 class WarpParser(BaseParser):
     """Parser for Warp Terminal SQLite database."""
 
+    #: Candidate database locations, checked in order.
+    DB_PATHS = [
+        # macOS: the sandboxed group container takes precedence over the plain
+        # application-support path.
+        Path.home()
+        / "Library/Group Containers/2BBY89MBSN.dev.warp/Library/Application Support"
+        / "dev.warp.Warp-Stable/warp.sqlite",
+        Path.home() / "Library/Application Support/dev.warp.Warp-Stable/warp.sqlite",
+        # Windows (%LOCALAPPDATA%\warp\Warp\data\warp.sqlite)
+        Path.home() / "AppData/Local/warp/Warp/data/warp.sqlite",
+    ]
+
     def __init__(self, max_age_days: int = MAX_CONVERSATION_AGE_DAYS):
-        self.base_path = Path.home() / "Library/Application Support/dev.warp.Warp-Stable"
-        self.db_path = self.base_path / "warp.sqlite"
+        self.db_path = next((p for p in self.DB_PATHS if p.exists()), self.DB_PATHS[0])
+        self.base_path = self.db_path.parent
         self.max_age_days = max_age_days
 
     def parse_all(self) -> List[AgentEvent]:

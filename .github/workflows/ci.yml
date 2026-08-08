@@ -39,8 +39,12 @@ jobs:
         run: uv run pytest tests/ -q
 
   test-sensor:
-    name: Sensor tests
+    name: Sensor tests (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.11", "3.12", "3.13"]
     defaults:
       run:
         working-directory: Sensor
@@ -54,13 +58,14 @@ jobs:
           enable-cache: true
 
       - name: Set up Python
-        run: uv python install 3.12
+        run: uv python install ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: uv sync --extra dev
+        run: uv sync --extra dev --python ${{ matrix.python-version }}
 
       - name: Run tests
-        run: uv run pytest tests/ -q
+        run: uv run --python ${{ matrix.python-version }} pytest tests/ -q
 
       - name: Build distributions
+        if: matrix.python-version == '3.12'
         run: uv build

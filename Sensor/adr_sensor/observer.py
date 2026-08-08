@@ -10,7 +10,7 @@ import os
 import platform
 import sys
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -21,6 +21,7 @@ from .parsers.claude_parser import ClaudeParser
 from .parsers.cline_parser import ClineParser
 from .parsers.codex_parser import CodexParser
 from .parsers.cursor_parser import CursorParser
+from .parsers.opencode_parser import OpencodeParser
 from .parsers.warp_parser import WarpParser
 from .schemas.agent_event_schema import AgentEvent
 from .schemas.system_config_schema import SystemConfiguration
@@ -40,6 +41,24 @@ class AgentObserver:
         observer.save_to_file(events, configs)
     """
 
+    #: Supported sources in ingestion order, as (source key, display label).
+    #: The parser for each source is looked up as ``self.<source>_parser``.
+    SOURCES = (
+        ("claude", "Claude Code"),
+        ("cursor", "Cursor"),
+        ("claude_desktop", "Claude Desktop Agent Mode"),
+        ("cline", "Cline"),
+        ("warp", "Warp Terminal"),
+        ("codex", "Codex"),
+        ("opencode", "opencode"),
+    )
+
+    #: Sources that only produce logs on some operating systems. A source absent
+    #: from this map is attempted on every platform.
+    PLATFORM_RESTRICTED_SOURCES = {
+        "claude_desktop": ("Darwin", "Windows"),
+    }
+
     def __init__(self, output_dir: Optional[Path] = None, max_age_days: Optional[int] = None):
         """Initialize the AgentObserver.
 
@@ -55,6 +74,9 @@ class AgentObserver:
         self.codex_parser = CodexParser()
         self.cline_parser = ClineParser()
         self.warp_parser = WarpParser(max_age_days=max_age_days) if max_age_days is not None else WarpParser()
+        self.opencode_parser = (
+            OpencodeParser(max_age_days=max_age_days) if max_age_days is not None else OpencodeParser()
+        )
 
         self.output_dir = output_dir if output_dir else Path("output")
         self.output_dir.mkdir(exist_ok=True)
@@ -92,7 +114,7 @@ class AgentObserver:
 
         Args:
             source_filter: Which source to ingest. One of 'all', 'claude', 'cursor',
-                'cline', 'warp', 'codex', 'claude_desktop'.
+                'claude_desktop', 'cline', 'warp', 'codex', 'opencode'.
 
         Returns:
             Tuple of (agent_events, system_configs).
@@ -104,108 +126,26 @@ class AgentObserver:
         print("ADR Sensor Starting...")
         print("=" * 80 + "\n")
 
-        # Parse Claude Code logs
-        if source_filter in ["all", "claude"]:
-            print("Ingesting Claude Code logs...")
-            try:
-                claude_entries = self.claude_parser.parse_all()
-                claude_filtered = [e for e in claude_entries if e.has_meaningful_content()]
-                all_entries.extend(claude_filtered)
-                print(f"Found {len(claude_filtered)} entries\n")
-            except Exception as e:
-                print(f"Error ingesting Claude logs: {e}")
-                self._emit_error({
-                    "source": "claude",
-                    "stage": "parse",
-                    "error_type": e.__class__.__name__,
-                    "message": str(e),
-                    "trace": traceback.format_exc(limit=5),
-                })
+        host_os = platform.system()
 
-        # Parse Cursor logs
-        if source_filter in ["all", "cursor"]:
-            print("Ingesting Cursor logs...")
-            try:
-                cursor_entries = self.cursor_parser.parse_all()
-                cursor_filtered = [e for e in cursor_entries if e.has_meaningful_content()]
-                all_entries.extend(cursor_filtered)
-                print(f"Found {len(cursor_filtered)} entries\n")
-            except Exception as e:
-                print(f"Error ingesting Cursor logs: {e}")
-                self._emit_error({
-                    "source": "cursor",
-                    "stage": "parse",
-                    "error_type": e.__class__.__name__,
-                    "message": str(e),
-                    "trace": traceback.format_exc(limit=5),
-                })
+        for source, label in self.SOURCES:
+            if source_filter not in ("all", source):
+                continue
 
-        # Parse Claude Desktop Agent Mode logs (macOS only)
-        if source_filter in ["all", "claude_desktop"] and platform.system() == "Darwin":
-            print("Ingesting Claude Desktop Agent Mode logs...")
-            try:
-                desktop_entries = self.claude_desktop_parser.parse_all()
-                desktop_filtered = [e for e in desktop_entries if e.has_meaningful_content()]
-                all_entries.extend(desktop_filtered)
-                print(f"Found {len(desktop_filtered)} entries\n")
-            except Exception as e:
-                print(f"Error ingesting Claude Desktop logs: {e}")
-                self._emit_error({
-                    "source": "claude_desktop",
-                    "stage": "parse",
-                    "error_type": e.__class__.__name__,
-                    "message": str(e),
-                    "trace": traceback.format_exc(limit=5),
-                })
+            supported_platforms = self.PLATFORM_RESTRICTED_SOURCES.get(source)
+            if supported_platforms and host_os not in supported_platforms:
+                continue
 
-        # Parse Cline logs
-        if source_filter in ["all", "cline"]:
-            print("Ingesting Cline logs...")
+            print(f"Ingesting {label} logs...")
             try:
-                cline_entries = self.cline_parser.parse_all()
-                cline_filtered = [e for e in cline_entries if e.has_meaningful_content()]
-                all_entries.extend(cline_filtered)
-                print(f"Found {len(cline_filtered)} entries\n")
+                entries = getattr(self, f"{source}_parser").parse_all()
+                filtered = [e for e in entries if e.has_meaningful_content()]
+                all_entries.extend(filtered)
+                print(f"Found {len(filtered)} entries\n")
             except Exception as e:
-                print(f"Error ingesting Cline logs: {e}")
+                print(f"Error ingesting {label} logs: {e}")
                 self._emit_error({
-                    "source": "cline",
-                    "stage": "parse",
-                    "error_type": e.__class__.__name__,
-                    "message": str(e),
-                    "trace": traceback.format_exc(limit=5),
-                })
-
-        # Parse Warp logs
-        if source_filter in ["all", "warp"]:
-            print("Ingesting Warp Terminal logs...")
-            try:
-                warp_entries = self.warp_parser.parse_all()
-                warp_filtered = [e for e in warp_entries if e.has_meaningful_content()]
-                all_entries.extend(warp_filtered)
-                print(f"Found {len(warp_filtered)} entries\n")
-            except Exception as e:
-                print(f"Error ingesting Warp logs: {e}")
-                self._emit_error({
-                    "source": "warp",
-                    "stage": "parse",
-                    "error_type": e.__class__.__name__,
-                    "message": str(e),
-                    "trace": traceback.format_exc(limit=5),
-                })
-
-        # Parse Codex logs
-        if source_filter in ["all", "codex"]:
-            print("Ingesting Codex logs...")
-            try:
-                codex_entries = self.codex_parser.parse_all()
-                codex_filtered = [e for e in codex_entries if e.has_meaningful_content()]
-                all_entries.extend(codex_filtered)
-                print(f"Found {len(codex_filtered)} entries\n")
-            except Exception as e:
-                print(f"Error ingesting Codex logs: {e}")
-                self._emit_error({
-                    "source": "codex",
+                    "source": source,
                     "stage": "parse",
                     "error_type": e.__class__.__name__,
                     "message": str(e),

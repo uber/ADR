@@ -1,17 +1,20 @@
 """Tests for ADR Sensor parsers."""
 
 import json
+import os
 import sqlite3
-import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
+from adr_sensor.parsers.claude_desktop_parser import ClaudeDesktopParser
 from adr_sensor.parsers.claude_parser import ClaudeParser
 from adr_sensor.parsers.cline_parser import ClineParser
 from adr_sensor.parsers.codex_parser import CodexParser
+from adr_sensor.parsers.cursor_parser import CursorParser
+from adr_sensor.parsers.opencode_parser import OpencodeParser
 from adr_sensor.parsers.warp_parser import WarpParser
 
 
@@ -388,3 +391,692 @@ class TestWarpParser:
         """Constructor should default to the module-level constant when unset."""
         parser = WarpParser()
         assert parser.max_age_days == 14
+
+
+NOW_MS = int(datetime.now(timezone.utc).timestamp() * 1000)
+OLD_MS = NOW_MS - int(40 * 86400 * 1000)  # 40 days ago
+
+
+def _build_opencode_db(db_path, sessions, messages, parts):
+    """Create an opencode-shaped SQLite database with the given rows."""
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "CREATE TABLE session (id TEXT PRIMARY KEY, directory TEXT, title TEXT, version TEXT, "
+        "model TEXT, time_created INTEGER, time_updated INTEGER)"
+    )
+    conn.execute(
+        "CREATE TABLE message (id TEXT PRIMARY KEY, session_id TEXT, time_created INTEGER, data TEXT)"
+    )
+    conn.execute(
+        "CREATE TABLE part (id TEXT PRIMARY KEY, message_id TEXT, session_id TEXT, "
+        "time_created INTEGER, data TEXT)"
+    )
+    for s in sessions:
+        conn.execute(
+            "INSERT INTO session VALUES (?,?,?,?,?,?,?)",
+            (
+                s["id"],
+                s.get("directory"),
+                s.get("title"),
+                s.get("version"),
+                s.get("model"),
+                s.get("time_created", NOW_MS),
+                s.get("time_updated", NOW_MS),
+            ),
+        )
+    for m in messages:
+        conn.execute(
+            "INSERT INTO message VALUES (?,?,?,?)",
+            (m["id"], m["session_id"], m.get("time_created", NOW_MS), json.dumps(m["data"])),
+        )
+    for p in parts:
+        conn.execute(
+            "INSERT INTO part VALUES (?,?,?,?,?)",
+            (
+                p["id"],
+                p["message_id"],
+                p["session_id"],
+                p.get("time_created", NOW_MS),
+                json.dumps(p["data"]),
+            ),
+        )
+    conn.commit()
+    conn.close()
+
+
+def _make_opencode_parser(base_dir, max_age_days=0):
+    """Build an OpencodeParser whose backend detection points at base_dir."""
+    with patch.object(OpencodeParser, "_candidate_base_dirs", return_value=[base_dir]):
+        return OpencodeParser(max_age_days=max_age_days)
+
+
+class TestOpencodeParserBackendDetection:
+    def test_no_backend_found(self, tmp_path):
+        parser = _make_opencode_parser(tmp_path)
+        assert parser.backend is None
+        assert parser.parse_all() == []
+
+    def test_sqlite_backend_detected(self, tmp_path):
+        (tmp_path / "opencode.db").touch()
+        parser = _make_opencode_parser(tmp_path)
+        assert parser.backend == "sqlite"
+
+    def test_json_backend_detected(self, tmp_path):
+        (tmp_path / "storage").mkdir()
+        parser = _make_opencode_parser(tmp_path)
+        assert parser.backend == "json"
+
+    def test_sqlite_takes_priority_over_json(self, tmp_path):
+        (tmp_path / "opencode.db").touch()
+        (tmp_path / "storage").mkdir()
+        parser = _make_opencode_parser(tmp_path)
+        assert parser.backend == "sqlite"
+
+    def test_channel_suffixed_db_detected(self, tmp_path):
+        """Non-stable channels write opencode-<channel>.db instead."""
+        (tmp_path / "opencode-nightly.db").touch()
+        parser = _make_opencode_parser(tmp_path)
+        assert parser.backend == "sqlite"
+        assert parser.db_path.name == "opencode-nightly.db"
+
+    def test_default_db_preferred_over_channel_suffixed(self, tmp_path):
+        (tmp_path / "opencode.db").touch()
+        (tmp_path / "opencode-dev.db").touch()
+        parser = _make_opencode_parser(tmp_path)
+        assert parser.db_path.name == "opencode.db"
+
+    def test_opencode_db_env_override(self, tmp_path, monkeypatch):
+        custom = tmp_path / "custom.db"
+        custom.touch()
+        monkeypatch.setenv("OPENCODE_DB", str(custom))
+        parser = _make_opencode_parser(tmp_path)
+        assert parser.db_path == custom
+
+    def test_opencode_db_memory_value_ignored(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("OPENCODE_DB", ":memory:")
+        (tmp_path / "opencode.db").touch()
+        parser = _make_opencode_parser(tmp_path)
+        assert parser.db_path.name == "opencode.db"
+
+    def test_xdg_data_home_is_first_candidate(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+        assert OpencodeParser._candidate_base_dirs()[0] == tmp_path / "opencode"
+
+    def test_default_max_age_days(self):
+        assert OpencodeParser().max_age_days == 14
+
+
+class TestOpencodeParserSqlite:
+    def test_parses_conversation_with_tool(self, tmp_path):
+        db_path = tmp_path / "opencode.db"
+        _build_opencode_db(
+            db_path,
+            sessions=[
+                {
+                    "id": "ses_abc123",
+                    "directory": "/home/dev/project",
+                    "version": "1.17.14",
+                    "model": json.dumps({"id": "claude-sonnet-4", "providerID": "anthropic"}),
+                }
+            ],
+            messages=[
+                {"id": "msg_1", "session_id": "ses_abc123", "data": {"role": "user"}},
+                {
+                    "id": "msg_2",
+                    "session_id": "ses_abc123",
+                    "data": {"role": "assistant", "providerID": "anthropic", "modelID": "claude-sonnet-4"},
+                },
+            ],
+            parts=[
+                {
+                    "id": "prt_1",
+                    "message_id": "msg_1",
+                    "session_id": "ses_abc123",
+                    "data": {"type": "text", "text": "list the files"},
+                },
+                {
+                    "id": "prt_2",
+                    "message_id": "msg_2",
+                    "session_id": "ses_abc123",
+                    "data": {
+                        "type": "tool",
+                        "tool": "bash",
+                        "state": {"status": "completed", "input": {"command": "ls"}, "output": "a.py\nb.py"},
+                    },
+                },
+            ],
+        )
+
+        entries = _make_opencode_parser(tmp_path).parse_all()
+
+        assert len(entries) == 1
+        entry = entries[0]
+        assert entry.source == "opencode"
+        # The agent's own "ses_" prefix is stripped in favour of our source prefix.
+        assert entry.session_id == "opencode_abc123"
+        assert entry.project_path == "/home/dev/project"
+        assert entry.model == "claude-sonnet-4"
+        assert entry.user_id == "anthropic opencode/1.17.14"
+
+        assert [m.role for m in entry.chat_history] == ["user", "assistant"]
+        assert entry.chat_history[0].content == "list the files"
+
+        tool = entry.chat_history[1].tools[0]
+        assert tool.tool_name == "bash"
+        assert tool.tool_type == "function_call"
+        assert tool.server_name is None
+        assert tool.status == "success"
+        assert tool.result == "a.py\nb.py"
+
+    def test_mcp_tool_is_classified_with_server_name(self, tmp_path):
+        db_path = tmp_path / "opencode.db"
+        _build_opencode_db(
+            db_path,
+            sessions=[{"id": "ses_mcp"}],
+            messages=[{"id": "msg_1", "session_id": "ses_mcp", "data": {"role": "assistant"}}],
+            parts=[
+                {
+                    "id": "prt_1",
+                    "message_id": "msg_1",
+                    "session_id": "ses_mcp",
+                    "data": {
+                        "type": "tool",
+                        "tool": "github_create_issue",
+                        "state": {"status": "completed", "input": {"title": "bug"}, "output": "#42"},
+                    },
+                }
+            ],
+        )
+
+        entries = _make_opencode_parser(tmp_path).parse_all()
+
+        tool = entries[0].chat_history[0].tools[0]
+        assert tool.tool_type == "mcp_tool"
+        assert tool.server_name == "github"
+
+    def test_tool_error_is_captured(self, tmp_path):
+        db_path = tmp_path / "opencode.db"
+        _build_opencode_db(
+            db_path,
+            sessions=[{"id": "ses_err"}],
+            messages=[{"id": "msg_1", "session_id": "ses_err", "data": {"role": "assistant"}}],
+            parts=[
+                {
+                    "id": "prt_1",
+                    "message_id": "msg_1",
+                    "session_id": "ses_err",
+                    "data": {
+                        "type": "tool",
+                        "tool": "read",
+                        "state": {"status": "error", "input": {"filePath": "/nope"}, "error": "ENOENT"},
+                    },
+                }
+            ],
+        )
+
+        tool = _make_opencode_parser(tmp_path).parse_all()[0].chat_history[0].tools[0]
+        assert tool.status == "error"
+        assert tool.error == "ENOENT"
+        assert tool.result == "ENOENT"
+
+    def test_reasoning_subtask_and_file_parts(self, tmp_path):
+        db_path = tmp_path / "opencode.db"
+        _build_opencode_db(
+            db_path,
+            sessions=[{"id": "ses_parts"}],
+            messages=[
+                {"id": "msg_1", "session_id": "ses_parts", "data": {"role": "user"}},
+                {"id": "msg_2", "session_id": "ses_parts", "data": {"role": "assistant"}},
+            ],
+            parts=[
+                {
+                    "id": "prt_1",
+                    "message_id": "msg_1",
+                    "session_id": "ses_parts",
+                    "data": {"type": "subtask", "agent": "reviewer", "prompt": "review the diff"},
+                },
+                {
+                    "id": "prt_2",
+                    "message_id": "msg_1",
+                    "session_id": "ses_parts",
+                    "data": {"type": "file", "filename": "diff.patch"},
+                },
+                {
+                    "id": "prt_3",
+                    "message_id": "msg_2",
+                    "session_id": "ses_parts",
+                    "data": {"type": "reasoning", "text": "thinking it through"},
+                },
+            ],
+        )
+
+        entry = _make_opencode_parser(tmp_path).parse_all()[0]
+
+        assert "[Subtask: reviewer]\nreview the diff" in entry.chat_history[0].content
+        assert "[Attached file: diff.patch]" in entry.chat_history[0].content
+        assert entry.chat_history[1].content == "[Reasoning]\nthinking it through"
+
+    def test_structural_only_message_is_skipped(self, tmp_path):
+        db_path = tmp_path / "opencode.db"
+        _build_opencode_db(
+            db_path,
+            sessions=[{"id": "ses_struct"}],
+            messages=[
+                {"id": "msg_1", "session_id": "ses_struct", "data": {"role": "user"}},
+                {"id": "msg_2", "session_id": "ses_struct", "data": {"role": "assistant"}},
+            ],
+            parts=[
+                {
+                    "id": "prt_1",
+                    "message_id": "msg_1",
+                    "session_id": "ses_struct",
+                    "data": {"type": "text", "text": "a real question"},
+                },
+                {
+                    "id": "prt_2",
+                    "message_id": "msg_2",
+                    "session_id": "ses_struct",
+                    "data": {"type": "step-start"},
+                },
+            ],
+        )
+
+        entry = _make_opencode_parser(tmp_path).parse_all()[0]
+        assert len(entry.chat_history) == 1
+
+    def test_age_filter_excludes_old_sessions(self, tmp_path):
+        db_path = tmp_path / "opencode.db"
+        _build_opencode_db(
+            db_path,
+            sessions=[{"id": "ses_old", "time_created": OLD_MS, "time_updated": OLD_MS}],
+            messages=[{"id": "msg_1", "session_id": "ses_old", "data": {"role": "user"}}],
+            parts=[
+                {
+                    "id": "prt_1",
+                    "message_id": "msg_1",
+                    "session_id": "ses_old",
+                    "data": {"type": "text", "text": "an old conversation"},
+                }
+            ],
+        )
+
+        assert _make_opencode_parser(tmp_path, max_age_days=14).parse_all() == []
+        assert len(_make_opencode_parser(tmp_path, max_age_days=0).parse_all()) == 1
+
+    def test_large_tool_output_is_truncated(self, tmp_path):
+        db_path = tmp_path / "opencode.db"
+        _build_opencode_db(
+            db_path,
+            sessions=[{"id": "ses_big"}],
+            messages=[{"id": "msg_1", "session_id": "ses_big", "data": {"role": "assistant"}}],
+            parts=[
+                {
+                    "id": "prt_1",
+                    "message_id": "msg_1",
+                    "session_id": "ses_big",
+                    "data": {
+                        "type": "tool",
+                        "tool": "bash",
+                        "state": {
+                            "status": "completed",
+                            "input": {"command": "x" * 2000},
+                            "output": "y" * 5000,
+                        },
+                    },
+                }
+            ],
+        )
+
+        tool = _make_opencode_parser(tmp_path).parse_all()[0].chat_history[0].tools[0]
+        assert "[truncated" in tool.result
+        assert "[truncated" in tool.arguments["command"]
+
+
+class TestOpencodeParserJsonStorage:
+    def test_project_scoped_layout(self, tmp_path):
+        storage = tmp_path / "storage"
+        (storage / "session" / "proj1").mkdir(parents=True)
+        (storage / "session" / "proj1" / "ses_json1.json").write_text(
+            json.dumps(
+                {
+                    "id": "ses_json1",
+                    "directory": "/home/dev/legacy",
+                    "version": "0.9.0",
+                    "time": {"created": NOW_MS, "updated": NOW_MS},
+                }
+            )
+        )
+        (storage / "message" / "ses_json1").mkdir(parents=True)
+        (storage / "message" / "ses_json1" / "msg_1.json").write_text(json.dumps({"id": "msg_1", "role": "user"}))
+        (storage / "part" / "msg_1").mkdir(parents=True)
+        (storage / "part" / "msg_1" / "prt_1.json").write_text(
+            json.dumps({"type": "text", "text": "hello from the json backend"})
+        )
+
+        entries = _make_opencode_parser(tmp_path).parse_all()
+
+        assert len(entries) == 1
+        assert entries[0].session_id == "opencode_json1"
+        assert entries[0].project_path == "/home/dev/legacy"
+        assert entries[0].chat_history[0].content == "hello from the json backend"
+
+    def test_legacy_layout_with_embedded_parts(self, tmp_path):
+        storage = tmp_path / "storage"
+        (storage / "session" / "info").mkdir(parents=True)
+        (storage / "session" / "info" / "ses_json2.json").write_text(
+            json.dumps({"id": "ses_json2", "time": {"created": NOW_MS, "updated": NOW_MS}})
+        )
+        (storage / "session" / "message" / "ses_json2").mkdir(parents=True)
+        (storage / "session" / "message" / "ses_json2" / "msg_1.json").write_text(
+            json.dumps(
+                {
+                    "id": "msg_1",
+                    "role": "assistant",
+                    "parts": [
+                        {"type": "text", "text": "running a command"},
+                        {
+                            "type": "tool-invocation",
+                            "toolInvocation": {
+                                "toolName": "bash",
+                                "args": {"command": "pwd"},
+                                "result": "/home/dev",
+                                "state": "result",
+                            },
+                        },
+                    ],
+                }
+            )
+        )
+
+        entry = _make_opencode_parser(tmp_path).parse_all()[0]
+
+        assert entry.chat_history[0].content == "running a command"
+        tool = entry.chat_history[0].tools[0]
+        assert tool.tool_name == "bash"
+        assert tool.status == "success"
+        assert tool.result == "/home/dev"
+
+    def test_json_age_filter(self, tmp_path):
+        storage = tmp_path / "storage"
+        (storage / "session" / "info").mkdir(parents=True)
+        session_file = storage / "session" / "info" / "ses_old.json"
+        session_file.write_text(json.dumps({"id": "ses_old"}))
+        (storage / "session" / "message" / "ses_old").mkdir(parents=True)
+        (storage / "session" / "message" / "ses_old" / "msg_1.json").write_text(
+            json.dumps({"id": "msg_1", "role": "user", "parts": [{"type": "text", "text": "stale chatter"}]})
+        )
+
+        old_epoch = OLD_MS / 1000
+        os.utime(session_file, (old_epoch, old_epoch))
+
+        assert _make_opencode_parser(tmp_path, max_age_days=14).parse_all() == []
+        assert len(_make_opencode_parser(tmp_path, max_age_days=0).parse_all()) == 1
+
+
+class TestOpencodeToolClassification:
+    @pytest.mark.parametrize("name", ["bash", "read", "web_search", "apply_patch", "todowrite"])
+    def test_builtin_tools_are_function_calls(self, name):
+        assert OpencodeParser._classify_tool(name) == ("function_call", None)
+
+    def test_underscored_unknown_tool_is_mcp(self):
+        assert OpencodeParser._classify_tool("linear_list_issues") == ("mcp_tool", "linear")
+
+    def test_unknown_tool_without_underscore_is_function_call(self):
+        assert OpencodeParser._classify_tool("mystery") == ("function_call", None)
+
+
+def _write_agent_mode_session(org_dir, session_dir_name, audit_lines, metadata):
+    """Write an agent-mode session directory plus its sibling metadata file."""
+    org_dir.mkdir(parents=True, exist_ok=True)
+    session_dir = org_dir / session_dir_name
+    session_dir.mkdir()
+    (session_dir / "audit.jsonl").write_text("\n".join(json.dumps(line) for line in audit_lines))
+    (org_dir / f"{session_dir_name}.json").write_text(json.dumps(metadata))
+    return session_dir
+
+
+class TestClaudeDesktopParser:
+    def test_parses_interactive_session(self, tmp_path):
+        org_dir = tmp_path / "user-1" / "org-1"
+        _write_agent_mode_session(
+            org_dir,
+            "local_11111111-2222-3333-4444-555555555555",
+            audit_lines=[
+                {
+                    "type": "system",
+                    "subtype": "init",
+                    "tools": ["Bash", "Read"],
+                    "mcp_servers": [{"name": "github"}],
+                    "permissionMode": "acceptEdits",
+                    "model": "claude-sonnet-4",
+                    "claude_code_version": "2.1.0",
+                    "plugins": ["reviewer"],
+                    "skills": ["pdf"],
+                },
+                {"type": "user", "uuid": "u1", "message": {"content": "read the config"}},
+                {
+                    "type": "assistant",
+                    "uuid": "a1",
+                    "message": {
+                        "content": [
+                            {"type": "thinking", "thinking": "should be dropped"},
+                            {"type": "text", "text": "Reading it now."},
+                            {"type": "tool_use", "id": "t1", "name": "Read", "input": {"path": "config.yaml"}},
+                        ]
+                    },
+                },
+                {
+                    "type": "user",
+                    "uuid": "u2",
+                    "message": {"content": [{"type": "tool_result", "tool_use_id": "t1", "content": "port: 8080"}]},
+                },
+            ],
+            metadata={
+                "sessionId": "local_11111111-2222-3333-4444-555555555555",
+                "cwd": "/home/dev/project",
+                "model": "claude-sonnet-4",
+                "title": "Config review",
+                "lastActivityAt": NOW_MS,
+                "memoryEnabled": True,
+                "skillsEnabled": False,
+                "slashCommands": [{"name": "review"}, "deploy"],
+            },
+        )
+
+        entries = ClaudeDesktopParser(base_path=str(tmp_path)).parse_all()
+
+        assert len(entries) == 1
+        entry = entries[0]
+        assert entry.source == "claude_desktop"
+        assert entry.session_id == "claude_desktop_11111111-2222-3333-4444-555555555555"
+        assert entry.project_path == "/home/dev/project"
+
+        assert [m.role for m in entry.chat_history] == ["user", "assistant"]
+        assistant = entry.chat_history[1]
+        # Thinking blocks are dropped; text and tool_use are kept.
+        assert assistant.content == "Reading it now."
+        assert assistant.tools[0].tool_name == "Read"
+        # The later tool_result is back-filled onto the originating tool call.
+        assert assistant.tools[0].result == "port: 8080"
+        assert assistant.tools[0].status == "success"
+
+        context = entry.session_context
+        assert context["title"] == "Config review"
+        assert context["init"]["claude_code_version"] == "2.1.0"
+        assert context["init"]["plugins"] == ["reviewer"]
+        assert context["memory_enabled"] is True
+        assert context["skills_enabled"] is False
+        assert context["available_slash_commands"] == ["review", "deploy"]
+        assert "is_dispatch" not in context
+
+    def test_parses_dispatch_session(self, tmp_path):
+        org_dir = tmp_path / "user-1" / "org-1"
+        _write_agent_mode_session(
+            org_dir / "agent",
+            "local_ditto_aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            audit_lines=[
+                {"type": "user", "uuid": "u1", "message": {"content": "run the nightly checks"}},
+                {"type": "assistant", "uuid": "a1", "message": {"content": [{"type": "text", "text": "On it."}]}},
+            ],
+            metadata={
+                "sessionId": "local_ditto_aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                "lastActivityAt": NOW_MS,
+                "sessionType": "dispatch",
+                "cliSessionId": "cli-99",
+            },
+        )
+
+        entries = ClaudeDesktopParser(base_path=str(tmp_path)).parse_all()
+
+        assert len(entries) == 1
+        entry = entries[0]
+        assert entry.source == "claude_desktop"
+        assert entry.session_id == "claude_desktop_dispatch_aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        assert entry.session_context["is_dispatch"] is True
+        assert entry.session_context["session_type"] == "dispatch"
+        assert entry.session_context["cli_session_id"] == "cli-99"
+
+    def test_discovers_interactive_and_dispatch_together(self, tmp_path):
+        org_dir = tmp_path / "user-1" / "org-1"
+        conversation = [
+            {"type": "user", "uuid": "u1", "message": {"content": "a question worth keeping"}},
+            {"type": "assistant", "uuid": "a1", "message": {"content": [{"type": "text", "text": "an answer"}]}},
+        ]
+        _write_agent_mode_session(
+            org_dir, "local_aaaa", conversation, {"sessionId": "local_aaaa", "lastActivityAt": NOW_MS}
+        )
+        _write_agent_mode_session(
+            org_dir / "agent",
+            "local_ditto_bbbb",
+            conversation,
+            {"sessionId": "local_ditto_bbbb", "lastActivityAt": NOW_MS},
+        )
+
+        session_ids = {e.session_id for e in ClaudeDesktopParser(base_path=str(tmp_path)).parse_all()}
+        assert session_ids == {"claude_desktop_aaaa", "claude_desktop_dispatch_bbbb"}
+
+    def test_skips_sessions_older_than_max_age(self, tmp_path):
+        org_dir = tmp_path / "user-1" / "org-1"
+        _write_agent_mode_session(
+            org_dir,
+            "local_stale",
+            audit_lines=[
+                {"type": "user", "uuid": "u1", "message": {"content": "an ancient question"}},
+                {"type": "assistant", "uuid": "a1", "message": {"content": [{"type": "text", "text": "reply"}]}},
+            ],
+            metadata={"sessionId": "local_stale", "lastActivityAt": OLD_MS},
+        )
+
+        assert ClaudeDesktopParser(base_path=str(tmp_path)).parse_all() == []
+        assert len(ClaudeDesktopParser(base_path=str(tmp_path), max_age_days=100).parse_all()) == 1
+
+    def test_missing_metadata_still_parses_audit_log(self, tmp_path):
+        org_dir = tmp_path / "user-1" / "org-1"
+        org_dir.mkdir(parents=True)
+        session_dir = org_dir / "local_nometa"
+        session_dir.mkdir()
+        (session_dir / "audit.jsonl").write_text(
+            "\n".join(
+                json.dumps(line)
+                for line in [
+                    {"type": "user", "uuid": "u1", "message": {"content": "no metadata here"}},
+                    {"type": "assistant", "uuid": "a1", "message": {"content": [{"type": "text", "text": "ok"}]}},
+                ]
+            )
+        )
+
+        entries = ClaudeDesktopParser(base_path=str(tmp_path)).parse_all()
+
+        assert len(entries) == 1
+        assert entries[0].session_id == "claude_desktop_nometa"
+        assert entries[0].session_context is None
+
+    def test_malformed_lines_are_skipped(self, tmp_path):
+        org_dir = tmp_path / "user-1" / "org-1"
+        org_dir.mkdir(parents=True)
+        session_dir = org_dir / "local_broken"
+        session_dir.mkdir()
+        (session_dir / "audit.jsonl").write_text(
+            "not json\n"
+            + json.dumps({"type": "user", "uuid": "u1", "message": {"content": "a valid question"}})
+            + "\n\n"
+            + json.dumps({"type": "rate_limit_event", "uuid": "r1"})
+            + "\n"
+            + json.dumps({"type": "assistant", "uuid": "a1", "message": {"content": [{"type": "text", "text": "y"}]}})
+        )
+        (org_dir / "local_broken.json").write_text("{ not valid json")
+
+        entries = ClaudeDesktopParser(base_path=str(tmp_path)).parse_all()
+
+        assert len(entries) == 1
+        assert len(entries[0].chat_history) == 2
+
+    def test_parse_all_no_base_path(self, tmp_path):
+        assert ClaudeDesktopParser(base_path=str(tmp_path / "missing")).parse_all() == []
+
+    def test_default_max_age_days(self):
+        assert ClaudeDesktopParser().max_age_days == 14
+
+
+
+class TestPlatformPathCoverage:
+    """Each parser must probe every platform its agent ships on.
+
+    These agents are installed at different locations per OS, and a missing
+    candidate path means the source is silently invisible on that platform.
+    """
+
+    def test_cursor_covers_macos_linux_and_windows(self):
+        paths = [str(p) for p in CursorParser.DB_PATHS]
+        assert any("Library/Application Support" in p for p in paths)  # macOS
+        assert any("/.config/" in p for p in paths)  # Linux
+        assert any("AppData/Roaming" in p for p in paths)  # Windows
+        assert all(p.endswith("Cursor/User/globalStorage/state.vscdb") for p in paths)
+
+    def test_cline_covers_macos_linux_and_windows(self):
+        paths = [str(p) for p in ClineParser.BASE_PATHS]
+        assert any("Library/Application Support" in p for p in paths)  # macOS
+        assert any("/.config/" in p for p in paths)  # Linux
+        assert any("AppData/Roaming" in p for p in paths)  # Windows
+        assert all(p.endswith("saoudrizwan.claude-dev/tasks") for p in paths)
+
+    def test_warp_covers_both_macos_locations_and_windows(self):
+        paths = [str(p) for p in WarpParser.DB_PATHS]
+        assert any("Group Containers/2BBY89MBSN.dev.warp" in p for p in paths)  # macOS sandboxed
+        assert any(p.endswith("Library/Application Support/dev.warp.Warp-Stable/warp.sqlite") for p in paths)
+        assert any("AppData/Local/warp" in p for p in paths)  # Windows
+        assert all(p.endswith("warp.sqlite") for p in paths)
+
+    def test_claude_desktop_covers_macos_and_windows(self):
+        from adr_sensor.parsers.claude_desktop_parser import DEFAULT_BASE_PATHS
+
+        assert any("Library/Application Support" in p for p in DEFAULT_BASE_PATHS)  # macOS
+        assert any("AppData/Roaming" in p for p in DEFAULT_BASE_PATHS)  # Windows
+
+    def test_opencode_covers_xdg_and_macos(self, monkeypatch):
+        monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+        paths = [str(p) for p in OpencodeParser._candidate_base_dirs()]
+        assert any(p.endswith(".local/share/opencode") for p in paths)  # Linux + macOS default
+        assert any("Library/Application Support/opencode" in p for p in paths)  # macOS fallback
+
+    @pytest.mark.parametrize(
+        ("parser_cls", "attr"),
+        [(CursorParser, "DB_PATHS"), (ClineParser, "BASE_PATHS"), (WarpParser, "DB_PATHS")],
+    )
+    def test_first_candidate_used_when_none_exist(self, parser_cls, attr):
+        """With no agent installed the parser reports the primary path, not a crash."""
+        parser = parser_cls()
+        resolved = getattr(parser, "db_path", None) or parser.base_path
+        assert resolved == getattr(parser_cls, attr)[0]
+
+    def test_existing_path_wins_over_earlier_candidates(self, tmp_path, monkeypatch):
+        """A later candidate is selected when it is the one that exists on disk."""
+        windows_db = tmp_path / "AppData/Roaming/Cursor/User/globalStorage/state.vscdb"
+        windows_db.parent.mkdir(parents=True)
+        windows_db.touch()
+        monkeypatch.setattr(
+            CursorParser,
+            "DB_PATHS",
+            [tmp_path / "nonexistent/state.vscdb", windows_db],
+        )
+        assert CursorParser().db_path == windows_db

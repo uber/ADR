@@ -2,33 +2,35 @@
 Parser for Cline (Claude Dev) logs.
 Reads JSON files from the Cline extension's task directories.
 
-Supports both macOS and Linux paths.
+Supports macOS, Linux and Windows paths.
 """
 
 import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from ..schemas.agent_event_schema import AgentEvent, ChatMessage, ToolUsage
-from ..utils.timestamp_utils import normalize_timestamp
 from .base_parser import BaseParser
+
+# Cline stores task history inside the Cursor extension's global storage,
+# relative to the per-platform app-data root.
+_CLINE_TASKS_SUFFIX = "Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks"
 
 
 class ClineParser(BaseParser):
     """Parser for Cline (Claude Dev) logs."""
 
+    #: Candidate task directories, checked in order.
+    BASE_PATHS = [
+        Path.home() / "Library/Application Support" / _CLINE_TASKS_SUFFIX,  # macOS
+        Path.home() / ".config" / _CLINE_TASKS_SUFFIX,  # Linux
+        Path.home() / "AppData/Roaming" / _CLINE_TASKS_SUFFIX,  # Windows
+    ]
+
     def __init__(self):
-        # Support macOS and Linux paths
-        macos_path = (
-            Path.home()
-            / "Library/Application Support/Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks"
-        )
-        linux_path = (
-            Path.home() / ".config/Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks"
-        )
-        self.base_path = macos_path if macos_path.exists() else linux_path
+        self.base_path = next((p for p in self.BASE_PATHS if p.exists()), self.BASE_PATHS[0])
 
     def parse_all(self) -> List[AgentEvent]:
         """Parse all available Cline logs."""

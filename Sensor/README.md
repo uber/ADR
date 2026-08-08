@@ -10,46 +10,76 @@ ADR Sensor is a Python library that collects telemetry from AI coding agents to 
 ## Supported AI Agents
 
 
-| Agent                         | Log Format                    | Platform     |
-| ----------------------------- | ----------------------------- | ------------ |
-| **Claude Code**               | JSONL (`~/.claude/projects/`) | macOS, Linux |
-| **Cursor IDE**                | SQLite (`state.vscdb`)        | macOS, Linux |
-| **Cline (Claude Dev)**        | JSON task files               | macOS, Linux |
-| **Claude Desktop Agent Mode** | JSONL audit logs              | macOS        |
-| **OpenAI Codex CLI**          | JSONL (`~/.codex/sessions/`)  | macOS, Linux |
-| **Warp Terminal**             | SQLite (`warp.sqlite`)        | macOS        |
+| Agent                      | Source key       | Log Format                          | Platform               |
+| -------------------------- | ---------------- | ----------------------------------- | ---------------------- |
+| **Claude Code**            | `claude`         | JSONL (`~/.claude/projects/`)       | macOS, Linux, Windows  |
+| **Cursor IDE**             | `cursor`         | SQLite (`state.vscdb`)              | macOS, Linux, Windows  |
+| **Cline (Claude Dev)**     | `cline`          | JSON task files                     | macOS, Linux, Windows  |
+| **Claude Desktop**         | `claude_desktop` | JSONL audit logs                    | macOS, Windows         |
+| **OpenAI Codex CLI**       | `codex`          | JSONL (`~/.codex/sessions/`)        | macOS, Linux, Windows  |
+| **Warp Terminal**          | `warp`           | SQLite (`warp.sqlite`)              | macOS, Windows         |
+| **opencode**               | `opencode`       | SQLite (`opencode.db`) or JSON tree | macOS, Linux           |
+
+### Claude Desktop Agent Mode
+
+The `claude_desktop` source covers Claude Desktop's local agent mode (released as
+Claude Cowork), on both macOS and Windows. Two kinds of session are captured:
+
+- **Interactive sessions** — `.../local-agent-mode-sessions/<user>/<org>/local_<uuid>/audit.jsonl`
+- **Dispatch sessions** (delegated background agents) — `.../<user>/<org>/agent/local_ditto_<uuid>/audit.jsonl`
+
+Both emit `source: "claude_desktop"`. Dispatch sessions get a distinct
+`claude_desktop_dispatch_` session-id prefix and an `is_dispatch: true` flag in
+`session_context`, so detection rules can treat unattended runs differently from
+interactive ones. Interactive session ids are unchanged.
+
+### opencode
+
+[opencode](https://github.com/sst/opencode) uses the XDG layout on every platform,
+so its data directory is `~/.local/share/opencode` on both Linux and macOS
+(`$XDG_DATA_HOME` and `$OPENCODE_DB` are honored when set). Both storage backends
+are read:
+
+- **SQLite** (current releases) — `opencode.db`, or `opencode-<channel>.db` on
+  non-stable channels. Opened read-only so a running opencode process is never disturbed.
+- **JSON file tree** (older releases) — a `storage/` directory of per-session,
+  per-message and per-part JSON files, in both the project-scoped and legacy layouts.
+
+MCP tools are namespaced by opencode as `<server>_<tool>`, so any tool that is not a
+known built-in and contains an underscore is recorded as `tool_type: "mcp_tool"` with
+its `server_name` populated.
 
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                     AI Agent Logs                       │
-│  Claude Code │ Cursor │ Cline │ Codex │ Warp │ Desktop  │
-└──────┬───────┴───┬────┴───┬───┴───┬───┴──┬───┴────┬─────┘
-       │           │        │       │      │        │
-       ▼           ▼        ▼       ▼      ▼        ▼
-┌─────────────────────────────────────────────────────────┐
-│              Source-Specific Parsers                    │
-│         (Each implements BaseParser)                    │
-└─────────────────────┬───────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────┐
-│            Unified Schema (AgentEvent)                  │
-│   session_id │ timestamp │ chat_history │ tools │ model │
-└─────────────────────┬───────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────┐
-│              AgentObserver (Orchestrator)               │
-│       Ingest → Filter → Display → Export                │
-└─────────────────────┬───────────────────────────────────┘
-                      │
-              ┌───────┴───────┐
-              ▼               ▼
-        JSON/JSONL      Your Detection
-         Export          Pipeline / SIEM
+┌─────────────────────────────────────────────────────────────────┐
+│                        AI Agent Logs                            │
+│ Claude Code │ Cursor │ Cline │ Codex │ Warp │ Desktop │ opencode│
+└──────┬──────┴───┬────┴───┬───┴───┬───┴──┬───┴───┬────┴─────┬────┘
+       │          │        │       │      │       │          │
+       ▼          ▼        ▼       ▼      ▼       ▼          ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Source-Specific Parsers                      │
+│                  (Each implements BaseParser)                   │
+└─────────────────────────────┬───────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                   Unified Schema (AgentEvent)                   │
+│      session_id │ timestamp │ chat_history │ tools │ model      │
+└─────────────────────────────┬───────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    AgentObserver (Orchestrator)                 │
+│              Ingest → Filter → Display → Export                 │
+└─────────────────────────────┬───────────────────────────────────┘
+                              │
+                      ┌───────┴───────┐
+                      ▼               ▼
+                JSON/JSONL      Your Detection
+                 Export          Pipeline / SIEM
 ```
 
 ## Quick Start
@@ -80,6 +110,8 @@ adr-sensor
 adr-sensor --source claude
 adr-sensor --source cursor
 adr-sensor --source codex
+adr-sensor --source claude_desktop
+adr-sensor --source opencode
 
 # Save individual session files (incremental)
 adr-sensor --save-sessions
@@ -93,6 +125,9 @@ adr-sensor --all-history
 # Custom output directory
 adr-sensor --output-dir ./my-output
 ```
+
+Sources whose agent only runs on some operating systems are skipped automatically
+on other platforms — `--source all` on Linux will not attempt `claude_desktop`, for example.
 
 ### Python API
 
@@ -167,6 +202,37 @@ Each parsed session produces an `AgentEvent` with the following structure:
 }
 ```
 
+### `session_context`
+
+Parsers that can recover session-level configuration attach it under
+`session_context`. This is the agent's own view of what it was allowed to do, which
+is often more useful for detection than the conversation itself. Claude Desktop
+agent mode populates the richest version:
+
+```json
+{
+  "session_context": {
+    "title": "Config review",
+    "is_dispatch": true,
+    "session_type": "dispatch",
+    "cli_session_id": "cli-99",
+    "memory_enabled": true,
+    "skills_enabled": false,
+    "plugins_enabled": true,
+    "available_slash_commands": ["review", "deploy"],
+    "init": {
+      "tools": ["Bash", "Read"],
+      "mcp_servers": [{"name": "github"}],
+      "permission_mode": "acceptEdits",
+      "model": "claude-sonnet-4",
+      "claude_code_version": "2.1.0",
+      "plugins": ["reviewer"],
+      "skills": ["pdf"]
+    }
+  }
+}
+```
+
 ## Adding a New Parser
 
 ADR Sensor is designed to be extensible. To add support for a new AI agent:
@@ -174,38 +240,70 @@ ADR Sensor is designed to be extensible. To add support for a new AI agent:
 1. Create a new parser in `adr_sensor/parsers/`:
 
 ```python
+from pathlib import Path
+
 from adr_sensor.parsers.base_parser import BaseParser
 from adr_sensor.schemas.agent_event_schema import AgentEvent, ChatMessage, ToolUsage
 
+
 class MyAgentParser(BaseParser):
-    def __init__(self):
+    def __init__(self, max_age_days: int = 14):
         self.base_path = Path.home() / ".my-agent/logs"
+        self.max_age_days = max_age_days
 
     def parse_all(self) -> list[AgentEvent]:
         entries = []
-        # Parse your agent's log files
-        # Convert to AgentEvent objects
+        # Parse your agent's log files and convert them to AgentEvent objects
         return entries
 ```
 
-1. Register it in `adr_sensor/observer.py`:
+2. Export it from `adr_sensor/parsers/__init__.py`, then register it in
+   `adr_sensor/observer.py` by constructing it as `self.<source>_parser` and adding
+   the source key to `AgentObserver.SOURCES`:
 
 ```python
-from .parsers.my_agent_parser import MyAgentParser
-
 class AgentObserver:
+    SOURCES = (
+        ...,
+        ("my_agent", "My Agent"),
+    )
+
     def __init__(self, ...):
         ...
         self.my_agent_parser = MyAgentParser()
-
-    def ingest_all(self, source_filter="all"):
-        ...
-        if source_filter in ["all", "my_agent"]:
-            entries = self.my_agent_parser.parse_all()
-            all_entries.extend(entries)
 ```
 
-1. Add tests in `tests/`.
+`ingest_all()` walks `SOURCES` and looks the parser up as `self.<source>_parser`, so
+no per-source branch is needed. If the agent only exists on some operating systems,
+add it to `PLATFORM_RESTRICTED_SOURCES` and it will be skipped elsewhere. The CLI
+builds its `--source` choices from `SOURCES`, so it picks the new agent up for free.
+
+3. Add tests in `tests/`.
+
+## Environment
+
+### Runtime support
+
+| | |
+| --------------- | ------------------------------------------- |
+| Python          | 3.9, 3.10, 3.11, 3.12, 3.13                 |
+| Operating system| macOS, Linux, Windows                       |
+| Dependencies    | `tabulate` (runtime only — no native deps)  |
+
+Which sources yield data depends on the host OS and on which agents are installed;
+see the platform column in [Supported AI Agents](#supported-ai-agents). Sources that
+cannot run on the current platform are skipped rather than failing.
+
+### Environment variables
+
+| Variable          | Read by                    | Effect                                                            |
+| ----------------- | -------------------------- | ----------------------------------------------------------------- |
+| `XDG_CACHE_HOME`  | `AgentObserver`            | Base for `--save-sessions` output (`$XDG_CACHE_HOME/adr_sensor`, default `~/.cache/adr_sensor`) |
+| `XDG_DATA_HOME`   | opencode parser            | Overrides the opencode data directory (default `~/.local/share/opencode`) |
+| `OPENCODE_DB`     | opencode parser            | Overrides the opencode SQLite filename or path (`:memory:` is ignored) |
+
+Errors during ingestion never abort the run: each source is isolated, and failures
+are appended as single-line JSON records to `error.log` in the output directory.
 
 ## Security Use Cases
 
@@ -249,6 +347,7 @@ adr-sensor/
 │   │   ├── cline_parser.py
 │   │   ├── claude_desktop_parser.py
 │   │   ├── codex_parser.py
+│   │   ├── opencode_parser.py
 │   │   └── warp_parser.py
 │   ├── schemas/
 │   │   ├── agent_event_schema.py    # AgentEvent, ChatMessage, ToolUsage

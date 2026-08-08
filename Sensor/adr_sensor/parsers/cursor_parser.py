@@ -21,18 +21,22 @@ from .base_parser import BaseParser
 DB_BATCH_SIZE = 500
 MAX_CONVERSATION_AGE_DAYS = 14
 
+# Path to Cursor's global storage database, relative to the per-platform app-data root.
+_CURSOR_STORAGE_SUFFIX = "Cursor/User/globalStorage/state.vscdb"
+
 
 class CursorParser(BaseParser):
     """Parser for Cursor SQLite database logs."""
 
+    #: Candidate database locations, checked in order.
+    DB_PATHS = [
+        Path.home() / "Library/Application Support" / _CURSOR_STORAGE_SUFFIX,  # macOS
+        Path.home() / ".config" / _CURSOR_STORAGE_SUFFIX,  # Linux
+        Path.home() / "AppData/Roaming" / _CURSOR_STORAGE_SUFFIX,  # Windows
+    ]
+
     def __init__(self, max_age_days: int = MAX_CONVERSATION_AGE_DAYS):
-        # Support macOS and Linux paths
-        macos_path = Path.home() / "Library/Application Support/Cursor/User/globalStorage/state.vscdb"
-        linux_path = Path.home() / ".config/Cursor/User/globalStorage/state.vscdb"
-        if macos_path.exists():
-            self.db_path = macos_path
-        else:
-            self.db_path = linux_path
+        self.db_path = next((p for p in self.DB_PATHS if p.exists()), self.DB_PATHS[0])
         self.max_age_days = max_age_days
 
     def parse_all(self) -> List[AgentEvent]:

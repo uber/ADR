@@ -19,7 +19,7 @@ This repository contains the open-source **ADR Sensor**, **ADR-Bench**, and **AD
 
 | Path                                               | ADR component              | Description                                                                          |
 | -------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------ |
-| [Sensor/](Sensor/)                                 | ADR Observability          | Collect and normalize agent telemetry from Claude Code, Cursor, Codex, and others    |
+| [Sensor/](Sensor/)                                 | ADR Observability          | Collect and normalize agent telemetry from Claude Code, Cursor, Codex, opencode, Claude Desktop, and others |
 | [Detection/](Detection/)                           | ADR Benchmark + Detection  | Dual-agent detector, 133 MCP servers, 303 benchmark tasks, baselines, figure scripts |
 | [docs/REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md) | Evaluation                 | Step-by-step workflow to reproduce benchmark detection and paper figures             |
 

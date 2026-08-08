@@ -41,6 +41,8 @@ Examples:
   adr-sensor                              Ingest from all sources
   adr-sensor --source claude              Ingest Claude Code logs only
   adr-sensor --source cursor              Ingest Cursor IDE logs only
+  adr-sensor --source claude_desktop      Ingest Claude Desktop agent-mode logs only (macOS/Windows)
+  adr-sensor --source opencode            Ingest opencode logs only
   adr-sensor --save-sessions              Save individual session files
   adr-sensor --output-format jsonl        Export as JSONL
   adr-sensor --all-history                Include all logs (not just last 2 weeks)
@@ -54,7 +56,7 @@ Examples:
     )
     parser.add_argument(
         "--source",
-        choices=["claude", "cursor", "cline", "warp", "codex", "claude_desktop", "all"],
+        choices=["all", *(source for source, _ in AgentObserver.SOURCES)],
         default="all",
         help="Source to ingest logs from (default: all)",
     )

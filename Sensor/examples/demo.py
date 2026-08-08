@@ -8,7 +8,7 @@ Run with: python examples/demo.py
 
 from datetime import datetime, timezone
 
-from adr_sensor import AgentObserver, AgentEvent, ChatMessage, ToolUsage
+from adr_sensor import AgentEvent, AgentObserver, ChatMessage, ToolUsage
 
 
 def create_sample_events():
@@ -70,7 +70,11 @@ def create_sample_events():
         username="developer",
         chat_history=[
             ChatMessage(role="user", content="Explain what this function does", sequence_id="seq_0"),
-            ChatMessage(role="assistant", content="This function handles user authentication by...", sequence_id="seq_1"),
+            ChatMessage(
+                role="assistant",
+                content="This function handles user authentication by...",
+                sequence_id="seq_1",
+            ),
         ],
     )
     events.append(cursor_event)
@@ -102,6 +106,77 @@ def create_sample_events():
         ],
     )
     events.append(codex_event)
+
+    # Sample 4: opencode session calling an MCP tool
+    opencode_event = AgentEvent(
+        timestamp=datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc),
+        source="opencode",
+        session_id="opencode_demo_session_4",
+        project_path="/home/user/my-project",
+        model="claude-sonnet-4-20250514",
+        user_id="anthropic opencode/1.17.14",
+        hostname="demo-laptop",
+        username="developer",
+        chat_history=[
+            ChatMessage(role="user", content="File an issue for the auth bug", sequence_id="msg_0"),
+            ChatMessage(
+                role="assistant",
+                content="Filing it now.",
+                tools=[
+                    ToolUsage(
+                        # opencode namespaces MCP tools as <server>_<tool>
+                        tool_name="github_create_issue",
+                        tool_type="mcp_tool",
+                        server_name="github",
+                        arguments={"title": "authenticate() never validates the password"},
+                        result="Created issue #42",
+                        status="success",
+                    )
+                ],
+                sequence_id="msg_1",
+            ),
+        ],
+    )
+    events.append(opencode_event)
+
+    # Sample 5: Claude Desktop Dispatch session (delegated background agent)
+    claude_desktop_event = AgentEvent(
+        timestamp=datetime(2025, 6, 15, 12, 30, 0, tzinfo=timezone.utc),
+        source="claude_desktop",
+        session_id="claude_desktop_dispatch_demo_session_5",
+        project_path="/home/user/my-project",
+        model="claude-sonnet-4-20250514",
+        hostname="demo-laptop",
+        username="developer",
+        session_context={
+            "title": "Nightly dependency audit",
+            "is_dispatch": True,
+            "session_type": "dispatch",
+            "init": {
+                "tools": ["Bash", "Read"],
+                "mcp_servers": [{"name": "github"}],
+                "permission_mode": "acceptEdits",
+            },
+        },
+        chat_history=[
+            ChatMessage(role="user", content="Audit our dependencies for CVEs", sequence_id="msg_0"),
+            ChatMessage(
+                role="assistant",
+                content="Running the audit.",
+                tools=[
+                    ToolUsage(
+                        tool_name="Bash",
+                        tool_type="tool_use",
+                        arguments={"command": "pip-audit"},
+                        result="No known vulnerabilities found",
+                        status="success",
+                    )
+                ],
+                sequence_id="msg_1",
+            ),
+        ],
+    )
+    events.append(claude_desktop_event)
 
     return events
 

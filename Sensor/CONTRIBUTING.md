@@ -73,35 +73,57 @@ class MyAgentParser(BaseParser):
 
 ### Step 2: Register in Observer
 
-Add your parser to `adr_sensor/observer.py`:
+Export the parser from `adr_sensor/parsers/__init__.py`, then register it in
+`adr_sensor/observer.py`:
 
 ```python
 from .parsers.my_agent_parser import MyAgentParser
 
-# In __init__:
-self.my_agent_parser = MyAgentParser()
 
-# In ingest_all:
-if source_filter in ["all", "my_agent"]:
-    print("Ingesting MyAgent logs...")
-    try:
-        entries = self.my_agent_parser.parse_all()
-        filtered = [e for e in entries if e.has_meaningful_content()]
-        all_entries.extend(filtered)
-    except Exception as e:
-        print(f"Error ingesting MyAgent logs: {e}")
+class AgentObserver:
+    SOURCES = (
+        ...,
+        ("my_agent", "MyAgent"),  # (source key, display label)
+    )
+
+    def __init__(self, ...):
+        ...
+        # The parser must be named <source key>_parser
+        self.my_agent_parser = MyAgentParser()
+```
+
+`ingest_all()` iterates `SOURCES` and resolves each parser as
+`self.<source>_parser`, so no per-source branch is needed — it handles the
+`has_meaningful_content()` filter, error isolation and `error.log` reporting for you.
+
+If the agent only exists on some operating systems, add it to
+`PLATFORM_RESTRICTED_SOURCES` so it is skipped elsewhere instead of failing:
+
+```python
+PLATFORM_RESTRICTED_SOURCES = {
+    "claude_desktop": ("Darwin", "Windows"),
+    "my_agent": ("Darwin",),
+}
 ```
 
 ### Step 3: Add CLI Source
 
-Update `adr_sensor/cli.py` to add the new source choice.
+Nothing to do — `adr_sensor/cli.py` builds its `--source` choices from
+`AgentObserver.SOURCES`. Add an example line to the CLI epilog if the new source
+needs explanation.
+
+Source keys are part of the Sensor's public contract — downstream detection
+pipelines filter on them. Treat renaming one as a breaking change and avoid it;
+prefer adding a new key alongside the existing one.
 
 ### Step 4: Write Tests
 
-Create `tests/test_my_agent_parser.py` with test cases covering:
+Add test cases to `tests/test_parsers.py` (or `tests/test_my_agent_parser.py` for a
+larger parser) covering:
 - Parsing valid log files
 - Handling missing directories
 - Handling malformed data
+- Age filtering, if the parser supports `max_age_days`
 - Edge cases
 
 ## Code Style
