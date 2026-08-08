@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from ..schemas.agent_event_schema import AgentEvent, ChatMessage, ToolUsage
+from ..utils.platform_paths import windows_appdata
 from .base_parser import BaseParser
 
 # Cline stores task history inside the Cursor extension's global storage,
@@ -26,7 +27,7 @@ class ClineParser(BaseParser):
     BASE_PATHS = [
         Path.home() / "Library/Application Support" / _CLINE_TASKS_SUFFIX,  # macOS
         Path.home() / ".config" / _CLINE_TASKS_SUFFIX,  # Linux
-        Path.home() / "AppData/Roaming" / _CLINE_TASKS_SUFFIX,  # Windows
+        windows_appdata() / _CLINE_TASKS_SUFFIX,  # Windows (%APPDATA%)
     ]
 
     def __init__(self):

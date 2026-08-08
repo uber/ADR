@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..schemas.agent_event_schema import AgentEvent, ChatMessage, ToolUsage
+from ..utils.platform_paths import windows_local_appdata
 from ..utils.timestamp_utils import normalize_timestamp
 from .base_parser import BaseParser
 
@@ -38,8 +39,7 @@ class WarpParser(BaseParser):
         / "Library/Group Containers/2BBY89MBSN.dev.warp/Library/Application Support"
         / "dev.warp.Warp-Stable/warp.sqlite",
         Path.home() / "Library/Application Support/dev.warp.Warp-Stable/warp.sqlite",
-        # Windows (%LOCALAPPDATA%\warp\Warp\data\warp.sqlite)
-        Path.home() / "AppData/Local/warp/Warp/data/warp.sqlite",
+        windows_local_appdata() / "warp/Warp/data/warp.sqlite",  # Windows (%LOCALAPPDATA%)
     ]
 
     def __init__(self, max_age_days: int = MAX_CONVERSATION_AGE_DAYS):

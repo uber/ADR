@@ -2,7 +2,7 @@
 Parser for Cursor IDE logs.
 Extracts composerData from SQLite database.
 
-Supports both macOS and Linux paths.
+Supports macOS, Linux and Windows paths.
 Memory-optimized: Uses cursor iteration instead of fetchall().
 Performance-optimized: Skips conversations older than 2 weeks.
 """
@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional
 
 from ..schemas.agent_event_schema import AgentEvent, ChatMessage, ToolUsage
+from ..utils.platform_paths import windows_appdata
 from ..utils.string_utils import truncate_middle
 from ..utils.timestamp_utils import normalize_timestamp
 from .base_parser import BaseParser
@@ -32,7 +33,7 @@ class CursorParser(BaseParser):
     DB_PATHS = [
         Path.home() / "Library/Application Support" / _CURSOR_STORAGE_SUFFIX,  # macOS
         Path.home() / ".config" / _CURSOR_STORAGE_SUFFIX,  # Linux
-        Path.home() / "AppData/Roaming" / _CURSOR_STORAGE_SUFFIX,  # Windows
+        windows_appdata() / _CURSOR_STORAGE_SUFFIX,  # Windows (%APPDATA%)
     ]
 
     def __init__(self, max_age_days: int = MAX_CONVERSATION_AGE_DAYS):

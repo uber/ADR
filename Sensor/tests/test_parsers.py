@@ -16,6 +16,7 @@ from adr_sensor.parsers.codex_parser import CodexParser
 from adr_sensor.parsers.cursor_parser import CursorParser
 from adr_sensor.parsers.opencode_parser import OpencodeParser
 from adr_sensor.parsers.warp_parser import WarpParser
+from adr_sensor.utils.platform_paths import windows_appdata, windows_local_appdata
 
 
 class TestClaudeParser:
@@ -1030,28 +1031,32 @@ class TestPlatformPathCoverage:
         paths = [str(p) for p in CursorParser.DB_PATHS]
         assert any("Library/Application Support" in p for p in paths)  # macOS
         assert any("/.config/" in p for p in paths)  # Linux
-        assert any("AppData/Roaming" in p for p in paths)  # Windows
+        # Windows root comes from %APPDATA% (redirected-profile safe), not a hardcoded guess.
+        assert windows_appdata() / "Cursor/User/globalStorage/state.vscdb" in CursorParser.DB_PATHS
         assert all(p.endswith("Cursor/User/globalStorage/state.vscdb") for p in paths)
 
     def test_cline_covers_macos_linux_and_windows(self):
         paths = [str(p) for p in ClineParser.BASE_PATHS]
         assert any("Library/Application Support" in p for p in paths)  # macOS
         assert any("/.config/" in p for p in paths)  # Linux
-        assert any("AppData/Roaming" in p for p in paths)  # Windows
+        assert (
+            windows_appdata() / "Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks"
+            in ClineParser.BASE_PATHS
+        )
         assert all(p.endswith("saoudrizwan.claude-dev/tasks") for p in paths)
 
     def test_warp_covers_both_macos_locations_and_windows(self):
         paths = [str(p) for p in WarpParser.DB_PATHS]
         assert any("Group Containers/2BBY89MBSN.dev.warp" in p for p in paths)  # macOS sandboxed
         assert any(p.endswith("Library/Application Support/dev.warp.Warp-Stable/warp.sqlite") for p in paths)
-        assert any("AppData/Local/warp" in p for p in paths)  # Windows
+        assert windows_local_appdata() / "warp/Warp/data/warp.sqlite" in WarpParser.DB_PATHS
         assert all(p.endswith("warp.sqlite") for p in paths)
 
     def test_claude_desktop_covers_macos_and_windows(self):
         from adr_sensor.parsers.claude_desktop_parser import DEFAULT_BASE_PATHS
 
-        assert any("Library/Application Support" in p for p in DEFAULT_BASE_PATHS)  # macOS
-        assert any("AppData/Roaming" in p for p in DEFAULT_BASE_PATHS)  # Windows
+        assert any("Library/Application Support" in str(p) for p in DEFAULT_BASE_PATHS)  # macOS
+        assert windows_appdata() / "Claude/local-agent-mode-sessions" in DEFAULT_BASE_PATHS
 
     def test_opencode_covers_xdg_and_macos(self, monkeypatch):
         monkeypatch.delenv("XDG_DATA_HOME", raising=False)
@@ -1080,3 +1085,57 @@ class TestPlatformPathCoverage:
             [tmp_path / "nonexistent/state.vscdb", windows_db],
         )
         assert CursorParser().db_path == windows_db
+
+
+class TestWindowsAppDataResolution:
+    """%APPDATA% / %LOCALAPPDATA% must win over the profile-relative default.
+
+    On roaming-profile and redirected-folder setups these roots live outside
+    the user profile, so hardcoding ~/AppData/... silently finds nothing
+    (the failure mode reported in issue #21; env-first fix adopted from #25).
+    """
+
+    def test_appdata_env_var_wins(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("APPDATA", str(tmp_path / "Redirected/Roaming"))
+        assert windows_appdata() == tmp_path / "Redirected/Roaming"
+
+    def test_appdata_falls_back_to_profile_default(self, monkeypatch):
+        monkeypatch.delenv("APPDATA", raising=False)
+        assert windows_appdata() == Path.home() / "AppData/Roaming"
+
+    def test_empty_appdata_treated_as_unset(self, monkeypatch):
+        monkeypatch.setenv("APPDATA", "")
+        assert windows_appdata() == Path.home() / "AppData/Roaming"
+
+    def test_localappdata_env_var_wins(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "Redirected/Local"))
+        assert windows_local_appdata() == tmp_path / "Redirected/Local"
+
+    def test_localappdata_falls_back_to_profile_default(self, monkeypatch):
+        monkeypatch.delenv("LOCALAPPDATA", raising=False)
+        assert windows_local_appdata() == Path.home() / "AppData/Local"
+
+    def test_redirected_appdata_end_to_end(self, tmp_path):
+        """A Cursor DB under a redirected %APPDATA% (outside the profile) is found."""
+        import importlib
+        import os as os_mod
+
+        from adr_sensor.parsers import cursor_parser as cursor_parser_module
+
+        redirected = tmp_path / "fileserver/profiles$/alice/AppData/Roaming"
+        db = redirected / "Cursor/User/globalStorage/state.vscdb"
+        db.parent.mkdir(parents=True)
+        db.touch()
+
+        original = os_mod.environ.get("APPDATA")
+        os_mod.environ["APPDATA"] = str(redirected)
+        try:
+            # DB_PATHS is built at import time, so reload under the redirected env.
+            importlib.reload(cursor_parser_module)
+            assert cursor_parser_module.CursorParser().db_path == db
+        finally:
+            if original is None:
+                os_mod.environ.pop("APPDATA", None)
+            else:
+                os_mod.environ["APPDATA"] = original
+            importlib.reload(cursor_parser_module)

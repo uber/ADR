@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..schemas.agent_event_schema import AgentEvent, ChatMessage, ToolUsage
+from ..utils.platform_paths import windows_appdata
 from ..utils.string_utils import truncate_middle
 from .base_parser import BaseParser
 
@@ -30,8 +31,8 @@ MAX_LOG_AGE_DAYS = 14
 
 # Default base paths for agent-mode sessions, checked in order.
 DEFAULT_BASE_PATHS = [
-    "~/Library/Application Support/Claude/local-agent-mode-sessions",  # macOS
-    "~/AppData/Roaming/Claude/local-agent-mode-sessions",  # Windows
+    Path.home() / "Library/Application Support/Claude/local-agent-mode-sessions",  # macOS
+    windows_appdata() / "Claude/local-agent-mode-sessions",  # Windows (%APPDATA%)
 ]
 
 # Dispatch session directories are named local_ditto_<uuid>; interactive ones local_<uuid>.
@@ -55,8 +56,7 @@ class ClaudeDesktopParser(BaseParser):
         if base_path:
             self.base_path = Path(base_path)
         else:
-            candidates = [Path(p).expanduser() for p in DEFAULT_BASE_PATHS]
-            self.base_path = next((p for p in candidates if p.exists()), candidates[0])
+            self.base_path = next((p for p in DEFAULT_BASE_PATHS if p.exists()), DEFAULT_BASE_PATHS[0])
         self.max_age_days = max_age_days
 
     def parse_all(self) -> List[AgentEvent]:
