@@ -122,6 +122,53 @@ class CodexParser(BaseParser):
 
         return truncated
 
+    def _parse_tool_arguments(self, raw_arguments: Any) -> Dict[str, Any]:
+        """Coerce a tool's raw argument payload into a dict.
+
+        Falls back to {"raw": ...} for anything that is not a JSON object, so a
+        non-JSON command string is preserved rather than silently discarded.
+        """
+        if isinstance(raw_arguments, dict):
+            return raw_arguments
+
+        if isinstance(raw_arguments, str):
+            try:
+                parsed = json.loads(raw_arguments)
+            except (json.JSONDecodeError, ValueError):
+                return {"raw": raw_arguments}
+            return parsed if isinstance(parsed, dict) else {"raw": raw_arguments}
+
+        return {"raw": raw_arguments} if raw_arguments else {}
+
+    def _normalize_tool_output(self, output: Any) -> Optional[str]:
+        """Normalize a tool result to a truncated string.
+
+        function_call_output carries a plain string; custom_tool_call_output
+        carries a list of content items ({"type": "input_text", "text": ...}).
+        """
+        if output is None:
+            return None
+
+        if isinstance(output, str):
+            text = output
+        elif isinstance(output, list):
+            parts = []
+            for item in output:
+                if isinstance(item, str):
+                    parts.append(item)
+                elif isinstance(item, dict):
+                    value = item.get("text")
+                    if isinstance(value, str):
+                        parts.append(value)
+            text = "\n".join(parts)
+        else:
+            text = str(output)
+
+        if not text:
+            return text
+
+        return truncate_middle(text, max_length=1000, edge_chars=400)
+
     def _process_event(self, event: Dict[str, Any], session_data: Dict[str, Any]):
         """Process a single event."""
         evt_type = event.get("type")
@@ -151,22 +198,29 @@ class CodexParser(BaseParser):
                 if text_content:
                     session_data["messages"].append({"role": role, "content": text_content, "tools": []})
 
-            elif item_type == "function_call":
+            elif item_type in ("function_call", "custom_tool_call"):
                 call_id = payload.get("call_id")
                 tool_name = payload.get("name")
-                arguments_str = payload.get("arguments", "{}")
-                try:
-                    arguments = json.loads(arguments_str)
-                except json.JSONDecodeError:
-                    arguments = {"raw": arguments_str}
 
+                # The two record shapes differ in where the arguments live and how
+                # they are encoded: function_call carries a JSON string under
+                # "arguments", while custom_tool_call (used by agent tools such as
+                # `exec`) carries a raw, frequently non-JSON string under "input".
+                # Reading the wrong key yields a tool with no arguments at all,
+                # which for a shell-execution tool discards the whole signal.
+                if item_type == "custom_tool_call":
+                    raw_arguments = payload.get("input", "")
+                else:
+                    raw_arguments = payload.get("arguments", "{}")
+
+                arguments = self._parse_tool_arguments(raw_arguments)
                 arguments = self._truncate_large_arguments(arguments)
 
                 tool_dict = {
                     "tool_name": tool_name,
-                    "tool_type": "function_call",
+                    "tool_type": item_type,
                     "arguments": arguments,
-                    "status": "pending",
+                    "status": payload.get("status") or "pending",
                     "result": None,
                 }
 
@@ -176,12 +230,9 @@ class CodexParser(BaseParser):
                 session_data["messages"][-1]["tools"].append(tool_dict)
                 session_data["pending_tool_calls"][call_id] = tool_dict
 
-            elif item_type == "function_call_output":
+            elif item_type in ("function_call_output", "custom_tool_call_output"):
                 call_id = payload.get("call_id")
-                output = payload.get("output")
-
-                if output and isinstance(output, str):
-                    output = truncate_middle(output, max_length=1000, edge_chars=400)
+                output = self._normalize_tool_output(payload.get("output"))
 
                 if call_id in session_data["pending_tool_calls"]:
                     tool_dict = session_data["pending_tool_calls"][call_id]

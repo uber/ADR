@@ -211,6 +211,222 @@ class TestCodexParser:
         has_tools = any(len(m.tools) > 0 for m in assistant_msgs)
         assert has_tools
 
+    def test_parses_custom_tool_call(self, tmp_path):
+        """custom_tool_call records must yield tools with their arguments intact.
+
+        Shapes taken from a real Codex Desktop session: the call carries a raw,
+        non-JSON string under "input" (not a JSON string under "arguments"), and
+        the output is a list of content items rather than a plain string.
+        """
+        jsonl_file = tmp_path / "rollout-custom.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "s-custom", "timestamp": "2026-08-08T17:17:28.774Z",
+                                                 "cwd": "/tmp/project"}},
+            {"type": "turn_context", "payload": {"model": "gpt-5.6-sol"}},
+            {"type": "response_item", "payload": {"type": "message", "role": "user",
+                                                  "content": [{"type": "input_text", "text": "check the repo"}]}},
+            {"type": "response_item", "payload": {
+                "type": "custom_tool_call", "call_id": "call_1", "name": "exec",
+                "status": "completed",
+                "input": 'bash -lc "git status --short"'}},
+            {"type": "response_item", "payload": {
+                "type": "custom_tool_call_output", "call_id": "call_1",
+                "output": [{"type": "input_text", "text": "M  README.md"},
+                           {"type": "input_text", "text": "exit code 0"}]}},
+        ]
+        with open(jsonl_file, "w") as f:
+            for e in events:
+                f.write(json.dumps(e) + "\n")
+
+        entry = CodexParser().parse_jsonl_file(jsonl_file)
+
+        tools = [t for m in entry.chat_history for t in m.tools]
+        assert len(tools) == 1
+        tool = tools[0]
+        assert tool.tool_name == "exec"
+        assert tool.tool_type == "custom_tool_call"
+        # The command string is the security signal - it must survive.
+        assert tool.arguments == {"raw": 'bash -lc "git status --short"'}
+        assert tool.result == "M  README.md\nexit code 0"
+        assert tool.status == "success"
+
+    def test_custom_tool_call_json_input_is_parsed(self, tmp_path):
+        """A custom_tool_call whose input IS valid JSON should parse as a dict."""
+        jsonl_file = tmp_path / "rollout-json-input.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "s-json", "timestamp": "2026-08-08T17:00:00.000Z"}},
+            {"type": "response_item", "payload": {"type": "message", "role": "user",
+                                                  "content": [{"type": "input_text", "text": "hello there"}]}},
+            {"type": "response_item", "payload": {
+                "type": "custom_tool_call", "call_id": "c2", "name": "fetch",
+                "input": '{"url": "https://example.com"}'}},
+        ]
+        with open(jsonl_file, "w") as f:
+            for e in events:
+                f.write(json.dumps(e) + "\n")
+
+        entry = CodexParser().parse_jsonl_file(jsonl_file)
+        tool = [t for m in entry.chat_history for t in m.tools][0]
+        assert tool.arguments == {"url": "https://example.com"}
+        assert tool.status == "pending"  # no status field, no output -> unchanged
+
+    def test_custom_tool_call_output_is_truncated(self, tmp_path):
+        """A large list-shaped output must be normalized AND truncated."""
+        jsonl_file = tmp_path / "rollout-big.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "s-big", "timestamp": "2026-08-08T17:00:00.000Z"}},
+            {"type": "response_item", "payload": {"type": "message", "role": "user",
+                                                  "content": [{"type": "input_text", "text": "dump the file"}]}},
+            {"type": "response_item", "payload": {"type": "custom_tool_call", "call_id": "c3",
+                                                  "name": "exec", "input": "cat big.txt"}},
+            {"type": "response_item", "payload": {"type": "custom_tool_call_output", "call_id": "c3",
+                                                  "output": [{"type": "input_text", "text": "A" * 5000}]}},
+        ]
+        with open(jsonl_file, "w") as f:
+            for e in events:
+                f.write(json.dumps(e) + "\n")
+
+        entry = CodexParser().parse_jsonl_file(jsonl_file)
+        tool = [t for m in entry.chat_history for t in m.tools][0]
+        assert isinstance(tool.result, str)
+        assert len(tool.result) < 1200
+        assert "[truncated" in tool.result
+
+    def test_function_call_still_works(self, tmp_path):
+        """The classic function_call path must be unaffected by the new branch."""
+        jsonl_file = tmp_path / "rollout-fn.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "s-fn", "timestamp": "2026-08-08T17:00:00.000Z"}},
+            {"type": "response_item", "payload": {"type": "message", "role": "user",
+                                                  "content": [{"type": "input_text", "text": "read the file"}]}},
+            {"type": "response_item", "payload": {"type": "function_call", "call_id": "c4",
+                                                  "name": "read_file",
+                                                  "arguments": '{"path": "main.py"}'}},
+            {"type": "response_item", "payload": {"type": "function_call_output", "call_id": "c4",
+                                                  "output": "def main(): pass"}},
+        ]
+        with open(jsonl_file, "w") as f:
+            for e in events:
+                f.write(json.dumps(e) + "\n")
+
+        entry = CodexParser().parse_jsonl_file(jsonl_file)
+        tool = [t for m in entry.chat_history for t in m.tools][0]
+        assert tool.tool_name == "read_file"
+        assert tool.tool_type == "function_call"
+        assert tool.arguments == {"path": "main.py"}
+        assert tool.result == "def main(): pass"
+
+    def test_mixed_tool_types_in_one_session(self, tmp_path):
+        """Both record shapes can appear in the same session and must both survive."""
+        jsonl_file = tmp_path / "rollout-mixed.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "s-mix", "timestamp": "2026-08-08T17:00:00.000Z"}},
+            {"type": "response_item", "payload": {"type": "message", "role": "user",
+                                                  "content": [{"type": "input_text", "text": "do both things"}]}},
+            {"type": "response_item", "payload": {"type": "function_call", "call_id": "f1",
+                                                  "name": "apply_patch", "arguments": '{"path": "a.py"}'}},
+            {"type": "response_item", "payload": {"type": "function_call_output", "call_id": "f1",
+                                                  "output": "patched"}},
+            {"type": "response_item", "payload": {"type": "custom_tool_call", "call_id": "c1",
+                                                  "name": "exec", "input": "ls -la"}},
+            {"type": "response_item", "payload": {"type": "custom_tool_call_output", "call_id": "c1",
+                                                  "output": [{"type": "input_text", "text": "total 0"}]}},
+        ]
+        with open(jsonl_file, "w") as f:
+            for e in events:
+                f.write(json.dumps(e) + "\n")
+
+        entry = CodexParser().parse_jsonl_file(jsonl_file)
+        tools = {t.tool_name: t for m in entry.chat_history for t in m.tools}
+        assert set(tools) == {"apply_patch", "exec"}
+        assert tools["apply_patch"].tool_type == "function_call"
+        assert tools["apply_patch"].arguments == {"path": "a.py"}
+        assert tools["exec"].tool_type == "custom_tool_call"
+        assert tools["exec"].arguments == {"raw": "ls -la"}
+        assert tools["exec"].result == "total 0"
+
+    def test_custom_tool_call_without_output(self, tmp_path):
+        """An orphaned call (no matching output) keeps its arguments and stays pending."""
+        jsonl_file = tmp_path / "rollout-orphan.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "s-orphan", "timestamp": "2026-08-08T17:00:00.000Z"}},
+            {"type": "response_item", "payload": {"type": "message", "role": "user",
+                                                  "content": [{"type": "input_text", "text": "run something"}]}},
+            {"type": "response_item", "payload": {"type": "custom_tool_call", "call_id": "orphan",
+                                                  "name": "exec", "input": "sleep 60"}},
+        ]
+        with open(jsonl_file, "w") as f:
+            for e in events:
+                f.write(json.dumps(e) + "\n")
+
+        tool = [t for m in CodexParser().parse_jsonl_file(jsonl_file).chat_history for t in m.tools][0]
+        assert tool.arguments == {"raw": "sleep 60"}
+        assert tool.result is None
+        assert tool.status == "pending"
+
+    def test_output_without_matching_call_is_ignored(self, tmp_path):
+        """An output whose call_id was never seen must not raise or invent a tool."""
+        jsonl_file = tmp_path / "rollout-stray.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "s-stray", "timestamp": "2026-08-08T17:00:00.000Z"}},
+            {"type": "response_item", "payload": {"type": "message", "role": "user",
+                                                  "content": [{"type": "input_text", "text": "a question here"}]}},
+            {"type": "response_item", "payload": {"type": "custom_tool_call_output", "call_id": "never-seen",
+                                                  "output": [{"type": "input_text", "text": "orphan output"}]}},
+        ]
+        with open(jsonl_file, "w") as f:
+            for e in events:
+                f.write(json.dumps(e) + "\n")
+
+        entry = CodexParser().parse_jsonl_file(jsonl_file)
+        assert [t for m in entry.chat_history for t in m.tools] == []
+
+    def test_output_list_with_unexpected_items(self, tmp_path):
+        """Non-dict and text-less items in the output list are skipped, not fatal."""
+        jsonl_file = tmp_path / "rollout-odd.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "s-odd", "timestamp": "2026-08-08T17:00:00.000Z"}},
+            {"type": "response_item", "payload": {"type": "message", "role": "user",
+                                                  "content": [{"type": "input_text", "text": "mixed output"}]}},
+            {"type": "response_item", "payload": {"type": "custom_tool_call", "call_id": "c9",
+                                                  "name": "exec", "input": "echo hi"}},
+            {"type": "response_item", "payload": {"type": "custom_tool_call_output", "call_id": "c9",
+                                                  "output": ["bare string", 42, None,
+                                                             {"type": "image", "url": "x"},
+                                                             {"type": "input_text", "text": "kept"}]}},
+        ]
+        with open(jsonl_file, "w") as f:
+            for e in events:
+                f.write(json.dumps(e) + "\n")
+
+        tool = [t for m in CodexParser().parse_jsonl_file(jsonl_file).chat_history for t in m.tools][0]
+        assert tool.result == "bare string\nkept"
+
+    def test_event_msg_records_are_ignored(self, tmp_path):
+        """event_msg records (token_count, web_search_end, ...) must not break parsing.
+
+        They are currently unparsed; this pins that they are skipped cleanly rather
+        than raising or polluting chat_history.
+        """
+        jsonl_file = tmp_path / "rollout-eventmsg.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "s-em", "timestamp": "2026-08-08T17:00:00.000Z"}},
+            {"type": "event_msg", "payload": {"type": "token_count",
+                                              "info": {"total_token_usage": {"input_tokens": 10}}}},
+            {"type": "event_msg", "payload": {"type": "web_search_end", "call_id": "w1", "query": "anything"}},
+            {"type": "response_item", "payload": {"type": "message", "role": "user",
+                                                  "content": [{"type": "input_text", "text": "hello there"}]}},
+            {"type": "response_item", "payload": {"type": "custom_tool_call", "call_id": "c1",
+                                                  "name": "exec", "input": "true"}},
+        ]
+        with open(jsonl_file, "w") as f:
+            for e in events:
+                f.write(json.dumps(e) + "\n")
+
+        entry = CodexParser().parse_jsonl_file(jsonl_file)
+        assert len(entry.chat_history) == 2  # user message + assistant tool turn
+        assert len([t for m in entry.chat_history for t in m.tools]) == 1
+
     def test_parse_no_directory(self):
         """Test parse_all when directory doesn't exist."""
         parser = CodexParser()
