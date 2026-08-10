@@ -67,6 +67,24 @@ class ClaudeParser(BaseParser):
 
         return entries
 
+    def _classify_tool(self, tool_name: str) -> tuple:
+        """Classify a Claude Code tool call and attribute MCP tools to their server.
+
+        Claude Code namespaces MCP tools as ``mcp__<server>__<tool>``, so the server is
+        recoverable from the name alone. Without this, every call — including third-party
+        MCP servers — collapses into a single ``tool_use`` bucket with no server attribution.
+        """
+        if tool_name.startswith("mcp__"):
+            parts = tool_name.split("__")
+            if len(parts) >= 3 and parts[1]:
+                return "mcp_tool", parts[1]
+            return "mcp_tool", None
+
+        if tool_name in ("Bash", "PowerShell", "BashOutput", "KillShell"):
+            return "terminal_command", None
+
+        return "tool_use", None
+
     def _normalize_result_content(self, result_content: Any) -> str:
         """Normalize result content which can be a string or list of content items."""
         if isinstance(result_content, str):
@@ -186,7 +204,13 @@ class ClaudeParser(BaseParser):
 
                         if result_content and isinstance(result_content, str):
                             result_content = truncate_middle(result_content, max_length=1000, edge_chars=400)
-                        tool_results.append({"tool_use_id": tool_use_id, "result": result_content})
+                        tool_results.append(
+                            {
+                                "tool_use_id": tool_use_id,
+                                "result": result_content,
+                                "is_error": bool(item.get("is_error")),
+                            }
+                        )
 
             if tool_results:
                 extracted["tool_results"] = tool_results
@@ -245,14 +269,23 @@ class ClaudeParser(BaseParser):
                         for tool_result in tool_results:
                             tool_use_id = tool_result.get("tool_use_id")
                             result = tool_result.get("result")
+                            is_error = tool_result.get("is_error", False)
                             if tool_use_id in pending_tools:
                                 old_tool = pending_tools[tool_use_id]
+                                if is_error:
+                                    status = "error"
+                                elif result:
+                                    status = "success"
+                                else:
+                                    status = "unknown"
                                 updated_tool = ToolUsage(
                                     tool_name=old_tool.tool_name,
                                     tool_type=old_tool.tool_type,
+                                    server_name=old_tool.server_name,
                                     arguments=old_tool.arguments,
                                     result=result,
-                                    status="success" if result else "unknown",
+                                    status=status,
+                                    error=result if is_error else None,
                                 )
                                 for msg in entry.chat_history:
                                     if msg.role == "assistant":
@@ -274,9 +307,12 @@ class ClaudeParser(BaseParser):
                     tools = []
 
                     for tool_data in msg_data.get("tools", []):
+                        tool_name = tool_data.get("name", "unknown")
+                        tool_type, server_name = self._classify_tool(tool_name)
                         tool = ToolUsage(
-                            tool_name=tool_data.get("name", "unknown"),
-                            tool_type="tool_use",
+                            tool_name=tool_name,
+                            tool_type=tool_type,
+                            server_name=server_name,
                             arguments=tool_data.get("input", {}),
                             result=None,
                         )
