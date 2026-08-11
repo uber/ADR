@@ -6,12 +6,13 @@ ADR is **deployed in production at Uber**, and the accompanying paper was accept
 
 ## How ADR secures enterprise AI agents
 
-ADR secures enterprise AI agents through four complementary capabilities: observing agent activity, evaluating defenses, detecting threats, and preventing unsafe actions.
+ADR secures enterprise AI agents through five complementary capabilities: observing agent activity, evaluating defenses, detecting threats, preventing unsafe actions, and discovering unsanctioned AI tools.
 
 1. **ADR Observability: Understand what AI agents are doing and why.** In production, ADR captures agent intent, tool use, and execution traces across 7+ AI coding tools on macOS, Linux, and Windows, as well as internal automation and customer-facing support agents.
 2. **ADR Benchmark: Test agent security under realistic enterprise conditions.** ADR-Bench includes 300+ tasks, 133 MCP servers, and coverage of all 17 agent attack techniques.
 3. **ADR Detection: Detect risky agent behavior efficiently.** Its two-tier architecture combines high-recall triage with deeper agentic reasoning for suspicious sessions.
 4. **ADR Prevention: Stop unsafe actions before they cause harm.** This component is not included in the current open-source release. **Stay tuned.**
+5. **ADR Discovery: Find the AI tools present on employee endpoints.** Inventories installed AI applications, CLI agents, local model runtimes, and MCP servers. This component is not included in the current open-source release. **Stay tuned.**
 
 ## Repository layout
 
