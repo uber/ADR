@@ -177,10 +177,13 @@ class CodexParser(BaseParser):
 
         event_timestamp = event.get("timestamp")
         if event_timestamp:
-            normalized = normalize_timestamp(event_timestamp)
-            current = session_data.get("last_event_timestamp")
-            if current is None or normalized > current:
-                session_data["last_event_timestamp"] = normalized
+            try:
+                normalized = normalize_timestamp(event_timestamp)
+                current = session_data.get("last_event_timestamp")
+                if current is None or normalized > current:
+                    session_data["last_event_timestamp"] = normalized
+            except Exception:
+                pass
 
         if evt_type == "session_meta":
             session_data["id"] = payload.get("id")
