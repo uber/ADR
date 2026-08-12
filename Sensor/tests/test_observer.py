@@ -16,6 +16,8 @@ class TestAgentObserver:
         """Test default initialization."""
         observer = AgentObserver(output_dir=tmp_path)
         assert observer.output_dir == tmp_path
+        assert hasattr(observer, "copilot_parser")
+        assert ("copilot", "GitHub Copilot") in observer.SOURCES
 
     def test_display_summary_empty(self, tmp_path, capsys):
         """Test display summary with no data."""
