@@ -48,6 +48,7 @@ class CodexParser(BaseParser):
             session_data: Dict[str, Any] = {
                 "id": None,
                 "timestamp": None,
+                "last_event_timestamp": None,
                 "cwd": None,
                 "model": None,
                 "messages": [],
@@ -94,7 +95,7 @@ class CodexParser(BaseParser):
                 )
 
             return AgentEvent(
-                timestamp=session_data["timestamp"] or datetime.now(timezone.utc),
+                timestamp=session_data["last_event_timestamp"] or session_data["timestamp"] or datetime.now(timezone.utc),
                 source="codex",
                 session_id=f"codex_{session_data['id']}",
                 project_path=session_data["cwd"],
@@ -173,6 +174,13 @@ class CodexParser(BaseParser):
         """Process a single event."""
         evt_type = event.get("type")
         payload = event.get("payload", {})
+
+        event_timestamp = event.get("timestamp")
+        if event_timestamp:
+            normalized = normalize_timestamp(event_timestamp)
+            current = session_data.get("last_event_timestamp")
+            if current is None or normalized > current:
+                session_data["last_event_timestamp"] = normalized
 
         if evt_type == "session_meta":
             session_data["id"] = payload.get("id")

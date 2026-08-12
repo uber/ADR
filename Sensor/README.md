@@ -17,6 +17,7 @@ ADR Sensor is a Python library that collects telemetry from AI coding agents to 
 | **Cline (Claude Dev)**     | `cline`          | JSON task files                     | macOS, Linux, Windows  |
 | **Claude Desktop**         | `claude_desktop` | JSONL audit logs                    | macOS, Windows         |
 | **OpenAI Codex CLI**       | `codex`          | JSONL (`~/.codex/sessions/`)        | macOS, Linux, Windows  |
+| **GitHub Copilot**         | `copilot`        | JSONL (`~/.copilot/session-state/`) | macOS, Linux, Windows  |
 | **Warp Terminal**          | `warp`           | SQLite (`warp.sqlite`)              | macOS, Windows         |
 | **opencode**               | `opencode`       | SQLite (`opencode.db`) or JSON tree | macOS, Linux           |
 
@@ -110,6 +111,7 @@ adr-sensor
 adr-sensor --source claude
 adr-sensor --source cursor
 adr-sensor --source codex
+adr-sensor --source copilot
 adr-sensor --source claude_desktop
 adr-sensor --source opencode
 
@@ -349,6 +351,7 @@ adr-sensor/
 │   │   ├── cline_parser.py
 │   │   ├── claude_desktop_parser.py
 │   │   ├── codex_parser.py
+│   │   ├── copilot_parser.py
 │   │   ├── opencode_parser.py
 │   │   └── warp_parser.py
 │   ├── schemas/
