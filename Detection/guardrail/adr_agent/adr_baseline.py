@@ -361,7 +361,7 @@ CONFIDENCE: [0.0-1.0]"""
         confidence = 0.8  # Default
         if "confidence:" in result_lower:
             try:
-                conf_part = result_text.split("confidence:")[1].split()[0].strip()
+                conf_part = result_lower.split("confidence:", 1)[1].split()[0].strip()
                 confidence = float(conf_part)
             except (IndexError, ValueError):
                 confidence = 0.8

@@ -34,6 +34,13 @@ class TestTriageParsing:
         assert result.threat_tactic == "N/A"
         assert result.confidence == 0.2
 
+    def test_parse_uppercase_confidence_from_prompt_format(self):
+        triage = TriageLLM(MagicMock(), ADSConfig())
+        result = triage._parse_triage_result(
+            "CLASSIFICATION: BENIGN\nTHREAT_TACTIC: N/A\nREASONING: routine request\nCONFIDENCE: 0.99"
+        )
+        assert result.confidence == 0.99
+
     def test_parse_suspicious_result(self):
         triage = TriageLLM(MagicMock(), ADSConfig())
         result = triage._parse_triage_result(
