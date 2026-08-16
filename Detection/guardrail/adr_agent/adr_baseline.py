@@ -366,14 +366,18 @@ CONFIDENCE: [0.0-1.0]"""
             r"""
             ^\s*                         # Start of a line, allowing indentation.
             (?:[-*>]\s*)?               # Optional Markdown list/quote marker.
-            \**confidence\s*:\**\s*     # Label, optionally wrapped in asterisks.
+            \**                          # Optional opening Markdown emphasis.
+            confidence
+            \**\s*:                      # Emphasis may end before the colon.
+            \**\s*                       # Or it may end after the colon.
             \[?\**\s*                   # Optional bracket/asterisks before value.
             (?P<value>                   # Decimal confidence value.
                 (?:\d+(?:\.\d*)?|\.\d+)
             )
             \s*(?P<percent>%?)           # Optional percentage notation.
             \s*\**\]?                   # Optional closing asterisks/bracket.
-            \s*[.,;:]?\s*$              # Optional trailing punctuation.
+            \s*[.,;:]?                   # Optional trailing punctuation.
+            (?=\s|$)                     # Allow commentary, but not numeric runoff.
             """,
             re.IGNORECASE | re.VERBOSE,
         )
@@ -383,7 +387,11 @@ CONFIDENCE: [0.0-1.0]"""
                 continue
 
             parsed_confidence = float(match.group("value"))
-            if match.group("percent"):
+            # Special case: treat percentage values at or above 1 as a 0-100
+            # scale ("1%" -> 0.01), but preserve values below 1 unchanged
+            # ("0.95%" -> 0.95). The latter intentionally favors the likely
+            # model intent: an already-normalized confidence with an extra "%".
+            if match.group("percent") and parsed_confidence >= 1.0:
                 parsed_confidence /= 100
             if 0.0 <= parsed_confidence <= 1.0:
                 confidence = parsed_confidence

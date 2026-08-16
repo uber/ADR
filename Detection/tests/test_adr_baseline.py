@@ -44,6 +44,14 @@ class TestTriageParsing:
             ("REASONING: low confidence: agent intent unclear\nCONFIDENCE: 0.30", 0.30),
             ("CONFIDENCE: 0.75.", 0.75),
             ("CONFIDENCE: 95%", 0.95),
+            ("CONFIDENCE: 95.1%", 0.951),
+            ("CONFIDENCE: 0.95%", 0.95),
+            ("CONFIDENCE: 1%", 0.01),
+            ("confidence: 0.9 - agent behavior normal", 0.9),
+            ("CONFIDENCE: 0.9 (high)", 0.9),
+            ("**CONFIDENCE**: 0.95", 0.95),
+            ("*CONFIDENCE*: 0.9", 0.9),
+            ("> **Confidence**: 0.6", 0.6),
         ],
     )
     def test_parse_common_confidence_formats(self, triage_output, expected_confidence):
@@ -53,8 +61,17 @@ class TestTriageParsing:
         )
         assert result.confidence == expected_confidence
 
-    @pytest.mark.parametrize("triage_output", ["CONFIDENCE: 1.1", "CONFIDENCE: 101%"])
-    def test_out_of_range_confidence_uses_default(self, triage_output):
+    @pytest.mark.parametrize(
+        "triage_output",
+        [
+            "CONFIDENCE: 1.1",
+            "CONFIDENCE: 101%",
+            "CONFIDENCE: 0.95.2",
+            "CONFIDENCE: 0.95high",
+            "CLASSIFICATION: BENIGN | CONFIDENCE: 0.9",
+        ],
+    )
+    def test_invalid_confidence_uses_default(self, triage_output):
         triage = TriageLLM(MagicMock(), ADSConfig())
         result = triage._parse_triage_result(triage_output)
         assert result.confidence == 0.8
