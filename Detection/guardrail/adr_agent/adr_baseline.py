@@ -359,12 +359,23 @@ CONFIDENCE: [0.0-1.0]"""
 
         # Extract confidence
         confidence = 0.8  # Default
-        if "confidence:" in result_lower:
-            try:
-                conf_part = result_lower.split("confidence:", 1)[1].split()[0].strip()
-                confidence = float(conf_part)
-            except (IndexError, ValueError):
-                confidence = 0.8
+        confidence_pattern = re.compile(
+            r"^\s*(?:[-*>]\s*)?\**confidence\s*:\**\s*"
+            r"\[?\**\s*(?P<value>(?:\d+(?:\.\d*)?|\.\d+))"
+            r"\s*(?P<percent>%?)\s*\**\]?\s*[.,;:]?\s*$",
+            re.IGNORECASE,
+        )
+        for line in result_text.splitlines():
+            match = confidence_pattern.match(line)
+            if not match:
+                continue
+
+            parsed_confidence = float(match.group("value"))
+            if match.group("percent"):
+                parsed_confidence /= 100
+            if 0.0 <= parsed_confidence <= 1.0:
+                confidence = parsed_confidence
+                break
 
         # Extract reasoning (note: prompt says "REASONING:", not "REASON:")
         reason = "Fast triage assessment"  # Default

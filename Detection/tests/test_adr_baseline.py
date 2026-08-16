@@ -2,6 +2,8 @@
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from guardrail.adr_agent.adr_baseline import ADSConfig, ReasoningAgent, TriageLLM, _safe_task_id_for_path
 
 
@@ -34,12 +36,28 @@ class TestTriageParsing:
         assert result.threat_tactic == "N/A"
         assert result.confidence == 0.2
 
-    def test_parse_uppercase_confidence_from_prompt_format(self):
+    @pytest.mark.parametrize(
+        ("triage_output", "expected_confidence"),
+        [
+            ("CONFIDENCE: 0.99", 0.99),
+            ("**CONFIDENCE:** 0.95", 0.95),
+            ("REASONING: low confidence: agent intent unclear\nCONFIDENCE: 0.30", 0.30),
+            ("CONFIDENCE: 0.75.", 0.75),
+            ("CONFIDENCE: 95%", 0.95),
+        ],
+    )
+    def test_parse_common_confidence_formats(self, triage_output, expected_confidence):
         triage = TriageLLM(MagicMock(), ADSConfig())
         result = triage._parse_triage_result(
-            "CLASSIFICATION: BENIGN\nTHREAT_TACTIC: N/A\nREASONING: routine request\nCONFIDENCE: 0.99"
+            f"CLASSIFICATION: BENIGN\nTHREAT_TACTIC: N/A\n{triage_output}"
         )
-        assert result.confidence == 0.99
+        assert result.confidence == expected_confidence
+
+    @pytest.mark.parametrize("triage_output", ["CONFIDENCE: 1.1", "CONFIDENCE: 101%"])
+    def test_out_of_range_confidence_uses_default(self, triage_output):
+        triage = TriageLLM(MagicMock(), ADSConfig())
+        result = triage._parse_triage_result(triage_output)
+        assert result.confidence == 0.8
 
     def test_parse_suspicious_result(self):
         triage = TriageLLM(MagicMock(), ADSConfig())
