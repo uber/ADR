@@ -19,6 +19,7 @@ from tabulate import tabulate
 from .parsers.claude_desktop_parser import ClaudeDesktopParser
 from .parsers.claude_parser import ClaudeParser
 from .parsers.cline_parser import ClineParser
+from .parsers.copilot_parser import CopilotParser
 from .parsers.codex_parser import CodexParser
 from .parsers.cursor_parser import CursorParser
 from .parsers.opencode_parser import OpencodeParser
@@ -50,6 +51,7 @@ class AgentObserver:
         ("cline", "Cline"),
         ("warp", "Warp Terminal"),
         ("codex", "Codex"),
+        ("copilot", "GitHub Copilot"),
         ("opencode", "opencode"),
     )
 
@@ -72,6 +74,7 @@ class AgentObserver:
             ClaudeDesktopParser(max_age_days=max_age_days) if max_age_days is not None else ClaudeDesktopParser()
         )
         self.codex_parser = CodexParser()
+        self.copilot_parser = CopilotParser()
         self.cline_parser = ClineParser()
         self.warp_parser = WarpParser(max_age_days=max_age_days) if max_age_days is not None else WarpParser()
         self.opencode_parser = (
@@ -114,7 +117,7 @@ class AgentObserver:
 
         Args:
             source_filter: Which source to ingest. One of 'all', 'claude', 'cursor',
-                'claude_desktop', 'cline', 'warp', 'codex', 'opencode'.
+                'claude_desktop', 'cline', 'warp', 'codex', 'copilot', 'opencode'.
 
         Returns:
             Tuple of (agent_events, system_configs).
