@@ -359,11 +359,23 @@ CONFIDENCE: [0.0-1.0]"""
 
         # Extract confidence
         confidence = 0.8  # Default
+        # Match only a dedicated confidence field, not incidental phrases such as
+        # "REASONING: low confidence: agent intent unclear". Models sometimes add
+        # Markdown decoration even though the prompt requests plain field labels.
         confidence_pattern = re.compile(
-            r"^\s*(?:[-*>]\s*)?\**confidence\s*:\**\s*"
-            r"\[?\**\s*(?P<value>(?:\d+(?:\.\d*)?|\.\d+))"
-            r"\s*(?P<percent>%?)\s*\**\]?\s*[.,;:]?\s*$",
-            re.IGNORECASE,
+            r"""
+            ^\s*                         # Start of a line, allowing indentation.
+            (?:[-*>]\s*)?               # Optional Markdown list/quote marker.
+            \**confidence\s*:\**\s*     # Label, optionally wrapped in asterisks.
+            \[?\**\s*                   # Optional bracket/asterisks before value.
+            (?P<value>                   # Decimal confidence value.
+                (?:\d+(?:\.\d*)?|\.\d+)
+            )
+            \s*(?P<percent>%?)           # Optional percentage notation.
+            \s*\**\]?                   # Optional closing asterisks/bracket.
+            \s*[.,;:]?\s*$              # Optional trailing punctuation.
+            """,
+            re.IGNORECASE | re.VERBOSE,
         )
         for line in result_text.splitlines():
             match = confidence_pattern.match(line)
