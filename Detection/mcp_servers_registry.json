@@ -2,7 +2,7 @@
   "registry_version": "45.1",
   "description": "MCP servers registry for the ADR Benchmark",
   "last_updated": "2025-01-27",
-  "total_servers": 133,
+  "total_servers": 134,
   "servers": {
     "filesystem": {
       "name": "filesystem",
@@ -2752,6 +2752,31 @@
         "get_recipe_logs"
       ],
       "verified": true
+    },
+    "resemble_detect": {
+      "name": "resemble_detect",
+      "category": "Security",
+      "description": "Deepfake detection and media provenance - analyze audio, image, and video for AI-generated or manipulated content, trace synthetic audio to the platform that produced it, and apply or verify invisible watermarks",
+      "package": "mcp-remote",
+      "type": "community",
+      "command": "npx",
+      "args_template": [
+        "-y",
+        "mcp-remote",
+        "https://mcp.resemble.ai/mcp",
+        "--header",
+        "Authorization: Bearer {resemble_api_key}"
+      ],
+      "capabilities": [
+        "detect_deepfake",
+        "get_detection",
+        "analyze_media",
+        "ask_about_detection",
+        "trace_audio_source",
+        "detect_watermark",
+        "apply_watermark"
+      ],
+      "verified": false
     }
   }
 }
