@@ -13,7 +13,7 @@ from ..base_probe import BaseProbe, Observation
 from ..env import DiscoveryEnv, ProcessInfo
 from ..paths import install_method, install_root
 from ..redact import redact_argv
-from .mcp import classify_launch, server_identity
+from .mcp import DOCKER_VALUE_OPTIONS, classify_launch, first_operand, server_identity
 
 #: Interpreters that say nothing on their own - the payload is in argv.
 INTERPRETERS = frozenset({"node", "python", "python3", "bun", "deno", "ruby", "sh", "bash"})
@@ -65,7 +65,8 @@ class ProcessProbe(BaseProbe):
         """An agent inside a container is invisible to a host-path scan."""
         if posixpath.basename(process.exe) != "docker" or "run" not in process.argv:
             return None
-        image = _docker_image(process.argv)
+        image = first_operand(process.argv[1:], DOCKER_VALUE_OPTIONS,
+                              skip={"run", "exec", "create"})
         entry = None
         for candidate in self.catalog.entries:
             names = candidate.get("binaries", []) + [candidate["id"]]
@@ -222,27 +223,6 @@ def looks_like_server(argv: List[str]) -> bool:
         if "mcp" in components:
             return True
     return False
-
-
-#: docker flags whose next argument is a value, not the image.
-DOCKER_VALUE_FLAGS = frozenset({"-v", "--volume", "-e", "--env", "-w", "--workdir",
-                                "--name", "--network", "-p", "--publish", "-u", "--user"})
-
-
-def _docker_image(argv: List[str]) -> str:
-    """The image is the first bare token after ``run`` that is not a flag value."""
-    skip = False
-    for token in argv[1:]:
-        if skip:
-            skip = False
-            continue
-        if token in DOCKER_VALUE_FLAGS:
-            skip = True
-            continue
-        if token.startswith("-") or token == "run":
-            continue
-        return token
-    return ""
 
 
 def _server_name(argv: List[str]) -> str:

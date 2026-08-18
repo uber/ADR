@@ -16,7 +16,14 @@ from ..base_probe import BaseProbe, Observation
 from ..env import DiscoveryEnv
 from ..net import host_of, matches_any
 from ..paths import is_descendant
-from ..redact import redact_argv, redact_env_block, redact_url, sanitize
+from ..redact import (
+    normalize_flag,
+    redact_argv,
+    redact_env_block,
+    redact_url,
+    sanitize,
+    split_flag,
+)
 
 #: (path, host application, config key, scope). The key differs per host on
 #: purpose: VS Code uses "servers", Zed uses "context_servers", everyone else
@@ -103,6 +110,23 @@ FLOATING_SPECIFIERS = ("@latest", "@next", "@^", "@~", "@*", "@>", "@<")
 
 #: Sources that resolve to whatever a branch happens to hold.
 VCS_PREFIXES = ("github:", "git+", "gitlab:", "bitbucket:")
+
+#: Options whose next argument is a value rather than the thing being run.
+#: Without these, ``docker run -v /host:tag image:latest`` reads the volume as
+#: the image and calls an unpinned launch pinned - a wrong verdict in the
+#: direction that hides risk.
+DOCKER_VALUE_OPTIONS = frozenset({
+    "-v", "--volume", "-p", "--publish", "-e", "--env", "--env-file", "-w", "--workdir",
+    "--name", "--network", "--net", "-u", "--user", "--mount", "--label", "-l", "--add-host",
+    "--entrypoint", "--platform", "--memory", "-m", "--cpus", "--device", "--log-driver",
+    "--restart", "--pull", "--health-cmd", "--tmpfs", "--ulimit", "--security-opt",
+})
+
+LAUNCHER_VALUE_OPTIONS = frozenset({
+    "--registry", "--cache", "--userconfig", "--shell", "--node-arg", "--package", "-p",
+    "--prefix", "--from", "--with", "--python", "--index-url", "--extra-index-url",
+    "--spec", "--pip-args", "--python-version",
+})
 
 #: Shell shapes that fetch and execute code at launch. Deliberately loose about
 #: what sits between the download and the interpreter: an ``env`` prefix, an
@@ -333,6 +357,13 @@ class McpProbe(BaseProbe):
             except ValueError as exc:
                 self.error(env, MDM_REGISTRY_KEY, "malformed policy json: %s" % exc)
                 continue
+            if not isinstance(settings, dict):
+                # Decoded successfully and still the wrong shape. The macOS
+                # payload was already checked for this; the registry one has to
+                # be, or a single policy record empties the whole probe.
+                self.error(env, MDM_REGISTRY_KEY, "expected a policy object, found %s"
+                           % type(settings).__name__)
+                continue
             servers = self._cap(env, MDM_REGISTRY_KEY,
                                 self._servers_map(env, MDM_REGISTRY_KEY,
                                                   settings.get("mcpServers")))
@@ -366,8 +397,13 @@ class McpProbe(BaseProbe):
         if server is not None and not isinstance(server, dict):
             self.error(env, folder, "bundle server block is %s, not an object"
                        % type(server).__name__)
-            server = {}
+            return self._malformed_bundle(env, folder, manifest, name)
         server = server or {}
+        if not server.get("command"):
+            # A bundle with nothing to launch is an installed extension, not a
+            # server. Emitting one anyway inflates the MCP count and can raise a
+            # finding about something that cannot run.
+            return self._malformed_bundle(env, folder, manifest, name)
         spec = {"command": server.get("command", ""), "args": server.get("args", [])}
         observation = self._observe(env, folder, "claude-desktop",
                                     manifest.get("name", name), spec, "user")
@@ -377,6 +413,20 @@ class McpProbe(BaseProbe):
         if not manifest.get("signature"):
             observation.extra["risk_factors"].append("unsigned_bundle")
         return observation
+
+    def _malformed_bundle(self, env: DiscoveryEnv, folder: str, manifest: Dict[str, Any],
+                          name: str) -> Observation:
+        """Record the installation without inventing the server it failed to declare."""
+        return Observation(
+            probe=self.name, channel="filesystem", kind="mcp_bundle",
+            name=str(manifest.get("name", name)), path=folder, matched_on="bundle",
+            version=manifest.get("version"), install_root=folder, install_method="mcpb",
+            owner=env.user,
+            extra={"flags": ["malformed_manifest"], "scope": "user",
+                   "risk_factors": [] if manifest.get("signature") else ["unsigned_bundle"],
+                   "bundle": str(manifest.get("name", name))},
+            confidence=0.5,
+        )
 
     def _apply_enablement(self, env: DiscoveryEnv, observations: List[Observation]) -> None:
         """Project servers are inert until approved, and that is worth recording."""
@@ -532,7 +582,12 @@ def normalize_command(command: str) -> str:
     Same launch, and identity has to say so or the two channels never meet.
     """
     base = posixpath.basename(str(command or "").replace("\\", "/"))
-    return base[:-4] if base.lower().endswith(".exe") else base
+    if base.lower().endswith(".exe"):
+        base = base[:-4]
+    # Case-folded: Windows reports the same executable in whatever casing the
+    # caller happened to type, and an identity that splits on that never lets
+    # the config and runtime channels meet.
+    return base.lower()
 
 
 def server_identity(transport: str, command: str, args: List[str], url: str) -> str:
@@ -566,7 +621,7 @@ def classify_launch(command: str, args: List[str], url: str) -> Tuple[bool, List
             factors.append("plaintext_remote")
         return True, factors, "remote"
     if base == "docker":
-        image = next((arg for arg in args if "/" in arg or ":" in arg), "")
+        image = first_operand(args, DOCKER_VALUE_OPTIONS, skip={"run", "exec", "create"})
         tag = image.rsplit("/", 1)[-1]
         if not image or image.endswith(":latest") or ":" not in tag:
             factors.append("unpinned_supply_chain")
@@ -574,7 +629,7 @@ def classify_launch(command: str, args: List[str], url: str) -> Tuple[bool, List
         return True, factors, "container"
     if base in EPHEMERAL_LAUNCHERS:
         method = "pypi-ephemeral" if base in PYPI_LAUNCHERS else "npm-ephemeral"
-        package = next((arg for arg in args if not arg.startswith("-")), "")
+        package = first_operand(args, LAUNCHER_VALUE_OPTIONS, skip={"run", "dlx", "exec"})
         if any(package.startswith(prefix) for prefix in VCS_PREFIXES):
             factors.extend(["unpinned_supply_chain", "vcs_source"])
             return False, factors, method
@@ -587,3 +642,27 @@ def classify_launch(command: str, args: List[str], url: str) -> Tuple[bool, List
             factors.append("unpinned_supply_chain")
         return pinned, factors, method
     return True, factors, "unknown"
+
+
+def first_operand(args: List[str], value_options: frozenset, skip: set) -> str:
+    """The first argument that is the thing being run, not an option's value.
+
+    Ambiguity resolves toward unpinned: returning "" makes the caller treat the
+    launch as unpinned, which is the safe direction for a verdict whose whole
+    purpose is to catch a package resolved at run time.
+    """
+    expect_value = False
+    for token in list(args or []):
+        text = str(token)
+        if expect_value:
+            expect_value = False
+            continue
+        if text.startswith("-"):
+            name, separator, _ = split_flag(text)
+            if not separator and normalize_flag(name) in value_options:
+                expect_value = True
+            continue
+        if text in skip:
+            continue
+        return text
+    return ""

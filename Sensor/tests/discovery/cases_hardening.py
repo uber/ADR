@@ -634,3 +634,104 @@ def r33():
                    lambda s: bool(result.error) and "changed" in result.error),
                has("and the refusal is recorded",
                    lambda s: any("check and open" in e.get("message", "") for e in env.errors))]
+
+
+@case("R-34")
+def r34():
+    """A decoded registry policy of the wrong shape is one bad source."""
+    w = World(platform="windows")
+    w.reg(Key="HKLM\\SOFTWARE\\Policies\\ClaudeCode", Settings="[]")
+    w.json("~/.claude.json", {"mcpServers": {"valid": {"command": "node", "args": ["v.js"]}}})
+    return w, [has("the valid config still yields its server",
+                   lambda s: [a.name for a in assets(s, kind="mcp_server")] == ["valid"]),
+               has("the policy record is reported",
+                   lambda s: any("policy object" in e.get("message", "") for e in s.errors))]
+
+
+@case("R-35")
+def r35():
+    """Credential flags in every spelling a tool might use."""
+    from adr_sensor.discovery.redact import redact_argv
+    out = redact_argv(["srv", "--api_key", "ordinary-secret-value",
+                       "--token:ordinary-secret-value", "--auth-token", "another-secret-value",
+                       "--port", "8080", "--dangerously-skip-permissions"])
+    w = World()
+    return w, [has("no credential value survives",
+                   lambda s: not [t for t in out if "secret-value" in t]),
+               has("an inline colon form keeps its name and loses its value",
+                   lambda s: "--token:[REDACTED]" in out),
+               has("and does not consume the flag that follows it",
+                   lambda s: "--auth-token" in out and out.index("--auth-token") < len(out) - 1
+                   and out[out.index("--auth-token") + 1] == "[REDACTED]"),
+               has("benign flags and values are untouched",
+                   lambda s: "--port" in out and "8080" in out
+                   and "--dangerously-skip-permissions" in out)]
+
+
+@case("R-36")
+def r36():
+    """An option's value is not the image, and not the package."""
+    from adr_sensor.discovery.probes.mcp import classify_launch
+    unpinned = [("docker", ["run", "-v", "/host:tag", "vendor/server:latest"]),
+                ("docker", ["run", "-p", "127.0.0.1:8080:80", "vendor/server:latest"]),
+                ("npx", ["--registry", "https://user@registry.example", "unversioned-package"]),
+                ("npx", ["--cache", "cache@local", "unversioned-package"])]
+    pinned = [("docker", ["run", "-v", "/host:tag", "vendor/server@sha256:ab34cd"]),
+              ("docker", ["run", "-p", "127.0.0.1:8080:80", "ghcr.io/x/mcp:1.4.2"]),
+              ("npx", ["--registry", "https://user@registry.example", "pkg@1.2.3"]),
+              ("npx", ["-y", "@modelcontextprotocol/server-github@1.4.2"])]
+    w = World()
+    return w, [has("an option value never supplies a version",
+                   lambda s: all(classify_launch(c, a, "")[0] is False for c, a in unpinned)),
+               has("a genuine pin behind an option still reads pinned",
+                   lambda s: all(classify_launch(c, a, "")[0] is True for c, a in pinned))]
+
+
+@case("R-37")
+def r37():
+    """Windows reports one executable in whatever casing was typed."""
+    from adr_sensor.discovery.probes.mcp import server_identity
+    left = server_identity("stdio", "C:\\Tools\\Node.EXE", ["quiet.js"], "")
+    right = server_identity("stdio", "c:/tools/node.exe", ["quiet.js"], "")
+    other = server_identity("stdio", "python", ["quiet.js"], "")
+    w = World()
+    return w, [has("casing and separators do not split identity", lambda s: left == right),
+               has("a different executable still differs", lambda s: left != other)]
+
+
+@case("R-38")
+def r38():
+    """A bracketed IPv6 authority has colons inside it."""
+    from adr_sensor.discovery.net import domain_matches, host_of
+    w = World()
+    return w, [has("loopback IPv6 parses",
+                   lambda s: host_of("http://[::1]:8000/v1") == "::1"),
+               has("a full IPv6 address parses",
+                   lambda s: host_of("https://[2001:db8::1]/x") == "2001:db8::1"),
+               has("ordinary hosts and wildcard patterns still parse",
+                   lambda s: host_of("https://api.openai.com/*") == "api.openai.com"
+                   and host_of("*://*.corp.example/*") == "corp.example"),
+               has("domain matching is unaffected",
+                   lambda s: domain_matches(host_of("https://mcp.corp.example/v1"),
+                                            "corp.example"))]
+
+
+@case("R-39")
+def r39():
+    """A bundle that declares no runnable server is not a server."""
+    w = World()
+    w.json("~/Library/Application Support/Claude/Claude Extensions/broken/manifest.json",
+           {"name": "broken", "version": "1.0", "server": "not-a-map"})
+    w.json("~/Library/Application Support/Claude/Claude Extensions/empty/manifest.json",
+           {"name": "empty", "version": "2.0"})
+    w.json("~/Library/Application Support/Claude/Claude Extensions/good/manifest.json",
+           {"name": "good", "version": "3.0",
+            "server": {"command": "node", "args": ["server.js"]}})
+    return w, [has("only the runnable bundle is an MCP server",
+                   lambda s: [a.name for a in assets(s, kind="mcp_server")] == ["good"]),
+               has("the other two are still inventoried as bundles",
+                   lambda s: sorted(a.name for a in assets(s, kind="mcp_bundle"))
+                   == ["broken", "empty"]),
+               has("and are marked malformed",
+                   lambda s: all("malformed_manifest" in a.flags
+                                 for a in assets(s, kind="mcp_bundle")))]

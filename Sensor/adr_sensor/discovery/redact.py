@@ -49,8 +49,12 @@ _SECRETISH = re.compile(
 )
 
 #: A flag whose *name* says it carries a credential, whatever its spelling.
-_SECRET_FLAG = re.compile(r"^--?[A-Za-z0-9-]*(key|token|secret|password|passwd|credential|auth)",
+#: Matched against a normalized name, so --api_key and --api-key are one thing.
+_SECRET_FLAG = re.compile(r"^-{1,2}[a-z0-9-]*(key|token|secret|password|passwd|credential|auth)",
                           re.IGNORECASE)
+
+#: Separators a flag may use to carry its value inline.
+_INLINE_SEPARATORS = ("=", ":")
 
 
 def is_denied(path: str) -> bool:
@@ -77,6 +81,32 @@ def redact_secretish(text: str) -> str:
     return _SECRETISH.sub("[REDACTED]", sanitize(text))
 
 
+def split_flag(token: str):
+    """Split ``--name=value`` or ``--name:value`` into its parts.
+
+    Both separators are in common use, and a flag that carries its value inline
+    must not be mistaken for a bare flag: doing so leaks the value *and* leaves
+    the parser one token out of step, so the next real flag is eaten as a value
+    and its value walks out in the clear.
+    """
+    for separator in _INLINE_SEPARATORS:
+        if separator in token:
+            name, _, value = token.partition(separator)
+            if name.startswith("-"):
+                return name, separator, value
+    return token, "", ""
+
+
+def normalize_flag(name: str) -> str:
+    """Compare flag names on their letters, not on their punctuation."""
+    return name.replace("_", "-").lower()
+
+
+def is_secret_flag(name: str) -> bool:
+    normalized = normalize_flag(name)
+    return normalized in VALUE_BEARING_FLAGS or bool(_SECRET_FLAG.match(normalized))
+
+
 def redact_argv(argv: Iterable[str]) -> List[str]:
     """Keep argv[0] and flag names; drop every free-text or secret value."""
     items = [str(item) for item in argv]
@@ -85,18 +115,20 @@ def redact_argv(argv: Iterable[str]) -> List[str]:
     out = [sanitize(items[0])]
     drop_next = False
     for token in items[1:]:
-        if drop_next:
-            out.append("[REDACTED]")
-            drop_next = False
-            continue
         clean = sanitize(token)
+        if drop_next:
+            # A flag never doubles as another flag's value. If one turns up
+            # where a value was expected, the value was simply absent.
+            if clean.startswith("-"):
+                drop_next = False
+            else:
+                out.append("[REDACTED]")
+                drop_next = False
+                continue
         if clean.startswith("-"):
-            name, separator, _ = clean.partition("=")
-            # Match on what the flag is called as well as on a fixed list: a
-            # tool nobody catalogued still spells its credential flag in a way
-            # that says so.
-            if name in VALUE_BEARING_FLAGS or _SECRET_FLAG.match(name):
-                out.append(name + "=[REDACTED]" if separator else name)
+            name, separator, _ = split_flag(clean)
+            if is_secret_flag(name):
+                out.append(name + separator + "[REDACTED]" if separator else name)
                 drop_next = not separator
             else:
                 out.append(redact_secretish(clean))
