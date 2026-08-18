@@ -10,12 +10,18 @@ test corpus they are backed by a fixture directory.
 
 import errno
 import os
+import re
 import stat
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from .redact import is_denied
+
+#: ``${NAME}``, ``$NAME`` and ``%NAME%``, matched as whole tokens.
+_VARIABLE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}"
+                       r"|\$([A-Za-z_][A-Za-z0-9_]*)"
+                       r"|%([A-Za-z_][A-Za-z0-9_]*)%")
 
 #: Ceiling on any single file read, so a hostile or merely enormous config
 #: cannot exhaust memory on an employee laptop.
@@ -201,13 +207,22 @@ class DiscoveryEnv:
         return str(real)
 
     def expand(self, logical: str) -> str:
-        """Expand ``~`` and ``%VAR%`` / ``$VAR`` using the injected environment."""
+        """Expand ``~``, ``$VAR``, ``${VAR}`` and ``%VAR%`` in a single pass.
+
+        Substituting one variable at a time by substring rewrites the *names* of
+        other variables: with PATH and PATH_EXTRA both set, ``$PATH_EXTRA``
+        becomes ``/bin_EXTRA``. Whole tokens are matched instead, so the longest
+        name always wins because it is the token that was written.
+        """
         text = logical
         if text.startswith("~"):
             text = self.home + text[1:]
-        for name, value in self.env_vars.items():
-            text = text.replace("%%%s%%" % name, value).replace("$" + name, value)
-        return text
+
+        def substitute(match):
+            name = match.group(1) or match.group(2) or match.group(3)
+            return self.env_vars.get(name, match.group(0))
+
+        return _VARIABLE.sub(substitute, text)
 
     def exists(self, logical: str) -> bool:
         target, refusal = self.resolve_target(logical)
@@ -267,9 +282,15 @@ class DiscoveryEnv:
             if following == current:
                 break
             current = following
-        if not self._within_root(Path(os.path.realpath(str(current)))):
+        canonical = Path(os.path.realpath(str(current)))
+        if not self._within_root(canonical):
             # A link out of the tree resolves to nothing we may describe, so the
             # path we were given is the most we can honestly report.
+            resolved = self.expand(logical)
+        elif is_denied(self.logical(canonical)):
+            # Reporting where a denied link points discloses the very path the
+            # deny-list exists to keep out of the output.
+            self.coverage.setdefault("denied", []).append(self.expand(logical))
             resolved = self.expand(logical)
         else:
             resolved = self.logical(current)
@@ -339,11 +360,28 @@ class DiscoveryEnv:
         if not stat.S_ISREG(info.st_mode):
             return ReadResult(error="not a regular file")
         try:
+            expected = os.stat(str(Path(os.path.realpath(str(path)))))
+        except OSError as exc:
+            return ReadResult(error="stat: %s" % (exc.strerror or exc))
+        try:
             handle = os.open(str(path), os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
         except OSError as exc:
             if exc.errno in (errno.EACCES, errno.EPERM):
                 return ReadResult(error="permission denied")
             return ReadResult(error="open: %s" % (exc.strerror or exc))
+        # Checking a path and then opening it are two operations, and a symlink
+        # can be swapped between them. Compare what was actually opened against
+        # what was validated, so a swap is a refusal rather than a read.
+        try:
+            opened = os.fstat(handle)
+        except OSError as exc:
+            os.close(handle)
+            return ReadResult(error="fstat: %s" % (exc.strerror or exc))
+        if (opened.st_dev, opened.st_ino) != (expected.st_dev, expected.st_ino):
+            os.close(handle)
+            self.errors.append({"probe": "env", "path": self.expand(logical),
+                                "message": "refused: path changed between check and open"})
+            return ReadResult(error="path changed during read")
         try:
             chunks = []
             total = 0

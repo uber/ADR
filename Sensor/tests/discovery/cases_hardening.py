@@ -499,3 +499,138 @@ def r26():
     return w, [has("fingerprinting a null-valued asset works",
                    lambda s: len(config_fingerprint(asset)) == 12),
                has("and is stable", lambda s: config_fingerprint(asset) == config_fingerprint(asset))]
+
+
+@case("R-27")
+def r27():
+    """Config arguments carry credentials as readily as command lines do."""
+    w = World().json("~/.claude.json", {"mcpServers": {"s": {
+        "command": "node",
+        "args": ["srv.js", "--token", "ordinary-secret-not-pattern-shaped",
+                 "--header", "Authorization: Bearer also-secret", "--port", "8080"]}}})
+    return w, [has("no argument value reaches the snapshot",
+                   lambda s: "ordinary-secret-not-pattern-shaped" not in s.to_json()
+                   and "also-secret" not in s.to_json()),
+               has("flag names and benign values survive",
+                   lambda s: {"--token", "--header", "--port", "8080"}
+                   <= set(assets(s, kind="mcp_server")[0].risk["args"]))]
+
+
+@case("R-28")
+def r28():
+    """A malformed managed policy is one bad source, not a lost inventory."""
+    w = World(preferences={"com.anthropic.claudecode": {"mcpServers": ["not-a-map"]}})
+    w.json("~/.claude.json", {"mcpServers": {"valid": {"command": "node", "args": ["v.js"]}}})
+    win = World(platform="windows")
+    win.reg(Key="HKLM\\SOFTWARE\\Policies\\ClaudeCode", Settings='{"mcpServers": "not-a-map"}')
+    win.json("~/.claude.json", {"mcpServers": {"valid": {"command": "node", "args": ["v.js"]}}})
+    return w, [has("the valid config still yields its server",
+                   lambda s: [a.name for a in assets(s, kind="mcp_server")] == ["valid"]),
+               has("the malformed policy is reported",
+                   lambda s: any("server map" in e.get("message", "") for e in s.errors)),
+               has("the same holds for a malformed registry policy",
+                   lambda s: [a.name for a in assets(win.scan(), kind="mcp_server")] == ["valid"])]
+
+
+@case("R-29")
+def r29():
+    """A malformed bundle manifest must not take the probe down with it."""
+    w = World()
+    w.json("~/Library/Application Support/Claude/Claude Extensions/acme/manifest.json",
+           {"name": "acme", "version": "1.0", "server": "not-a-map"})
+    w.json("~/.claude.json", {"mcpServers": {"valid": {"command": "node", "args": ["v.js"]}}})
+    return w, [has("the valid server survives",
+                   lambda s: "valid" in {a.name for a in assets(s, kind="mcp_server")}),
+               has("the bundle is reported rather than dropped silently",
+                   lambda s: any("server block" in e.get("message", "") for e in s.errors))]
+
+
+@case("R-30")
+def r30():
+    """One launch, written two ways, is one server."""
+    forms = [("/usr/local/bin/node", ["quiet.js"], ["node", "quiet.js"]),
+             ("node", ["quiet.js", "--token", "ordinary-secret"],
+              ["node", "quiet.js", "--token", "ordinary-secret"]),
+             ("node.exe", ["quiet.js"], ["node", "quiet.js"])]
+    results = []
+    for command, args, argv in forms:
+        world = World().path("/usr/local/bin")
+        world.file("/usr/local/bin/claude").file("/usr/local/bin/node")
+        world.json("~/.claude.json", {"mcpServers": {"quiet": {"command": command, "args": args}}})
+        world.proc(1, "/usr/local/bin/claude")
+        world.proc(2, "/usr/local/bin/node", argv=argv, ppid=1)
+        snapshot = world.scan()
+        servers = assets(snapshot, kind="mcp_server")
+        results.append((len(servers), servers[0].channels if servers else []))
+        world.cleanup()
+    w = World()
+    return w, [has("every spelling resolves to one server on both channels",
+                   lambda s: all(count == 1 and channels == ["config", "runtime"]
+                                 for count, channels in results) or results)]
+
+
+@case("R-31")
+def r31():
+    """Variable expansion matches whole names, not prefixes."""
+    w = World()
+    env = w.env()
+    env.env_vars.update({"PATH": "/bin", "PATH_EXTRA": "/special", "HOME2": "/h2"})
+    return w, [has("a longer name is not eaten by a shorter one",
+                   lambda s: env.expand("$PATH_EXTRA/tool") == "/special/tool"),
+               has("braced and windows forms expand",
+                   lambda s: env.expand("${PATH}/x") == "/bin/x"
+                   and env.expand("%HOME2%/y") == "/h2/y"),
+               has("an unknown name is left alone",
+                   lambda s: env.expand("$NOT_SET/z") == "$NOT_SET/z")]
+
+
+@case("R-32")
+def r32():
+    """Where a denied link points is itself something not to disclose."""
+    w = World()
+    w.file("/Users/alice/Documents/secret.json", "{}")
+    w.raw_link("/Users/alice/.claude.json", str(w._real("/Users/alice/Documents/secret.json")))
+    env = w.env()
+    resolved = env.realpath("/Users/alice/.claude.json")
+    return w, [has("the denied target is not reported",
+                   lambda s: "Documents" not in resolved),
+               has("the permitted path is returned instead",
+                   lambda s: resolved == "/Users/alice/.claude.json"),
+               has("the refusal appears in coverage",
+                   lambda s: bool(env.coverage.get("denied")))]
+
+
+@case("R-33")
+def r33():
+    """A path swapped between the check and the open is refused, not read."""
+    import os
+
+    from adr_sensor.discovery import env as env_mod
+
+    w = World()
+    w.file("/allowed/real.json", '{"mcpServers": {}}')
+    w.file("/allowed/other.json", "SWAPPED-CANARY")
+    w.raw_link("/allowed/link.json", str(w._real("/allowed/real.json")))
+    env = w.env()
+
+    original_open = env_mod.os.open
+
+    def swapping_open(path, *args, **kwargs):
+        # Stand in for a concurrent process repointing the link after the check.
+        link = str(w._real("/allowed/link.json"))
+        if link in str(path):
+            os.unlink(link)
+            os.symlink(str(w._real("/allowed/other.json")), link)
+        return original_open(path, *args, **kwargs)
+
+    env_mod.os.open = swapping_open
+    try:
+        result = env.read("/allowed/link.json")
+    finally:
+        env_mod.os.open = original_open
+    return w, [has("the swapped content is not returned",
+                   lambda s: "SWAPPED-CANARY" not in (result.text if result else "")),
+               has("the read is refused with a reason",
+                   lambda s: bool(result.error) and "changed" in result.error),
+               has("and the refusal is recorded",
+                   lambda s: any("check and open" in e.get("message", "") for e in env.errors))]

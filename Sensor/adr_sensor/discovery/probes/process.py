@@ -179,15 +179,18 @@ class ProcessProbe(BaseProbe):
 
     def _child_server(self, env: DiscoveryEnv, process: ProcessInfo, parent: ProcessInfo) -> Observation:
         """A child of an agent process is an MCP server until shown otherwise."""
+        # Identity from the raw launch, storage from the redacted one - the same
+        # split the config side makes, or the two channels describe one server
+        # with two identities and never merge.
+        raw_args = list(process.argv[1:])
         argv = redact_argv(process.argv)
-        launcher = posixpath.basename(process.exe)
-        args = argv[1:]
-        pinned, factors, method = classify_launch(launcher, args, "")
+        pinned, factors, method = classify_launch(process.exe, raw_args, "")
         parent_entry = self.catalog.match("binaries", posixpath.basename(parent.exe))
         return Observation(
             probe=self.name, channel="runtime", kind="mcp_server", name=_server_name(argv),
             path=process.exe, matched_on="child_of:%s" % posixpath.basename(parent.exe),
-            install_method=method, identity_hint=server_identity("stdio", launcher, args, ""),
+            install_method=method,
+            identity_hint=server_identity("stdio", process.exe, raw_args, ""),
             owner=process.user or env.user,
             extra={"pid": process.pid, "ppid": parent.pid, "argv": argv,
                    "parent_agent": (parent_entry or {}).get("id"), "transport": "stdio",

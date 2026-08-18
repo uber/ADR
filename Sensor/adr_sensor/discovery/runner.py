@@ -271,7 +271,7 @@ def correlate_declared_servers(env, observations, catalog):
         if not parent_entry:
             continue
         argv = redact_argv(process.argv)
-        identity = server_identity("stdio", posixpath.basename(process.exe), argv[1:], "")
+        identity = server_identity("stdio", process.exe, list(process.argv[1:]), "")
         if identity not in declared or identity in seen_runtime:
             continue
         seen_runtime.add(identity)

@@ -16,7 +16,7 @@ from ..base_probe import BaseProbe, Observation
 from ..env import DiscoveryEnv
 from ..net import host_of, matches_any
 from ..paths import is_descendant
-from ..redact import redact_env_block, redact_url, sanitize
+from ..redact import redact_argv, redact_env_block, redact_url, sanitize
 
 #: (path, host application, config key, scope). The key differs per host on
 #: purpose: VS Code uses "servers", Zed uses "context_servers", everyone else
@@ -127,11 +127,9 @@ class McpProbe(BaseProbe):
             servers = self._parse(env, logical, key)
             if not servers:
                 continue
-            servers = self._cap(env, logical, servers)
+            servers = self._cap(env, logical, self._servers_map(env, logical, servers))
             for name, spec in servers.items():
-                observation = self.isolate(env, "%s#%s" % (logical, name),
-                                           lambda n=name, sp=spec: self._observe(
-                                               env, logical, host, n, sp, scope))
+                observation = self._emit(env, logical, host, name, spec, scope)
                 if observation is not None:
                     out.append(observation)
         out.extend(self._project_scoped(env))
@@ -140,6 +138,26 @@ class McpProbe(BaseProbe):
         out.extend(self._bundles(env))
         self._apply_enablement(env, out)
         return out
+
+    def _servers_map(self, env: DiscoveryEnv, logical: str, value: Any) -> Dict[str, Any]:
+        """A server collection is a mapping. Anything else is one bad source.
+
+        Validated at every entry point rather than only at the main one: a
+        managed policy or a bundle manifest of the wrong shape used to take the
+        whole probe down with it, valid discoveries included.
+        """
+        if isinstance(value, dict):
+            return value
+        if value is None:
+            return {}
+        self.error(env, logical, "expected a server map, found %s" % type(value).__name__)
+        return {}
+
+    def _emit(self, env: DiscoveryEnv, logical: str, host: str, name: str, spec: Any,
+              scope: str) -> Optional[Observation]:
+        """One server, isolated, so a bad neighbour cannot erase it."""
+        return self.isolate(env, "%s#%s" % (logical, name),
+                            lambda: self._observe(env, logical, host, name, spec, scope))
 
     def _cap(self, env: DiscoveryEnv, logical: str, servers: Dict[str, Any]) -> Dict[str, Any]:
         """A cap that fires is reported. Silent truncation reads as coverage."""
@@ -261,9 +279,13 @@ class McpProbe(BaseProbe):
                 for suffix, host, key in PROJECT_CONFIGS:
                     if not logical.endswith("/" + suffix):
                         continue
-                    servers = self._cap(env, logical, self._parse(env, logical, key) or {})
+                    servers = self._cap(env, logical,
+                                        self._servers_map(env, logical,
+                                                          self._parse(env, logical, key)))
                     for name, spec in servers.items():
-                        out.append(self._observe(env, logical, host, name, spec, "project"))
+                        observation = self._emit(env, logical, host, name, spec, "project")
+                        if observation is not None:
+                            out.append(observation)
         return out
 
     def _plugin_servers(self, env: DiscoveryEnv) -> List[Observation]:
@@ -276,24 +298,33 @@ class McpProbe(BaseProbe):
             logical = posixpath.join(base, plugin, ".mcp.json")
             if not env.exists(logical):
                 continue
-            for name, spec in self._cap(env, logical,
-                                        self._parse(env, logical, "mcpServers") or {}).items():
-                observation = self._observe(env, logical, "claude-code", name, spec, "plugin")
-                observation.extra["plugin"] = plugin
-                out.append(observation)
+            servers = self._cap(env, logical,
+                                self._servers_map(env, logical,
+                                                  self._parse(env, logical, "mcpServers")))
+            for name, spec in servers.items():
+                observation = self._emit(env, logical, "claude-code", name, spec, "plugin")
+                if observation is not None:
+                    observation.extra["plugin"] = plugin
+                    out.append(observation)
         return out
 
     def _managed_policy(self, env: DiscoveryEnv) -> List[Observation]:
         """Policy delivered by MDM rather than by a file on disk."""
         out: List[Observation] = []
+        domain = "defaults:%s" % MDM_PREFERENCE_DOMAIN
         payload = env.preferences.get(MDM_PREFERENCE_DOMAIN)
+        if payload is not None and not isinstance(payload, dict):
+            self.error(env, domain, "expected a policy object, found %s" % type(payload).__name__)
+            payload = None
         if isinstance(payload, dict):
-            for name, spec in self._cap(env, "defaults:%s" % MDM_PREFERENCE_DOMAIN,
-                                        payload.get("mcpServers") or {}).items():
-                observation = self._observe(env, "defaults:%s" % MDM_PREFERENCE_DOMAIN,
-                                            "claude-code", name, spec, "enterprise_managed")
-                observation.extra["source"] = "mdm"
-                out.append(observation)
+            servers = self._cap(env, domain,
+                                self._servers_map(env, domain, payload.get("mcpServers")))
+            for name, spec in servers.items():
+                observation = self._emit(env, domain, "claude-code", name, spec,
+                                         "enterprise_managed")
+                if observation is not None:
+                    observation.extra["source"] = "mdm"
+                    out.append(observation)
         for record in env.registry:
             if str(record.get("Key", "")).upper() != MDM_REGISTRY_KEY.upper():
                 continue
@@ -302,12 +333,15 @@ class McpProbe(BaseProbe):
             except ValueError as exc:
                 self.error(env, MDM_REGISTRY_KEY, "malformed policy json: %s" % exc)
                 continue
-            for name, spec in self._cap(env, MDM_REGISTRY_KEY,
-                                        settings.get("mcpServers") or {}).items():
-                observation = self._observe(env, MDM_REGISTRY_KEY, "claude-code", name,
-                                            spec, "enterprise_managed")
-                observation.extra["source"] = "mdm"
-                out.append(observation)
+            servers = self._cap(env, MDM_REGISTRY_KEY,
+                                self._servers_map(env, MDM_REGISTRY_KEY,
+                                                  settings.get("mcpServers")))
+            for name, spec in servers.items():
+                observation = self._emit(env, MDM_REGISTRY_KEY, "claude-code", name, spec,
+                                         "enterprise_managed")
+                if observation is not None:
+                    observation.extra["source"] = "mdm"
+                    out.append(observation)
         return out
 
     def _bundles(self, env: DiscoveryEnv) -> List[Observation]:
@@ -318,20 +352,31 @@ class McpProbe(BaseProbe):
         out: List[Observation] = []
         for name in env.listdir(base):
             folder = posixpath.join(base, name)
-            manifest = self.read_json(env, posixpath.join(folder, "manifest.json"))
-            if not isinstance(manifest, dict):
-                continue
-            server = manifest.get("server") or {}
-            spec = {"command": server.get("command", ""), "args": server.get("args", [])}
-            observation = self._observe(env, folder, "claude-desktop",
-                                        manifest.get("name", name), spec, "user")
-            observation.install_method = "mcpb"
-            observation.version = manifest.get("version")
-            observation.extra["bundle"] = manifest.get("name", name)
-            if not manifest.get("signature"):
-                observation.extra["risk_factors"].append("unsigned_bundle")
-            out.append(observation)
+            observation = self.isolate(env, folder,
+                                       lambda f=folder, n=name: self._bundle(env, f, n))
+            if observation is not None:
+                out.append(observation)
         return out
+
+    def _bundle(self, env: DiscoveryEnv, folder: str, name: str) -> Optional[Observation]:
+        manifest = self.read_json(env, posixpath.join(folder, "manifest.json"))
+        if not isinstance(manifest, dict):
+            return None
+        server = manifest.get("server")
+        if server is not None and not isinstance(server, dict):
+            self.error(env, folder, "bundle server block is %s, not an object"
+                       % type(server).__name__)
+            server = {}
+        server = server or {}
+        spec = {"command": server.get("command", ""), "args": server.get("args", [])}
+        observation = self._observe(env, folder, "claude-desktop",
+                                    manifest.get("name", name), spec, "user")
+        observation.install_method = "mcpb"
+        observation.version = manifest.get("version")
+        observation.extra["bundle"] = manifest.get("name", name)
+        if not manifest.get("signature"):
+            observation.extra["risk_factors"].append("unsigned_bundle")
+        return observation
 
     def _apply_enablement(self, env: DiscoveryEnv, observations: List[Observation]) -> None:
         """Project servers are inert until approved, and that is worth recording."""
@@ -369,6 +414,11 @@ class McpProbe(BaseProbe):
         env_names, credential_kinds = redact_env_block(env_block)
         pinned, factors, method = classify_launch(command, args, url)
         factors.extend(self._contextual_factors(env, transport, url, env_block, args))
+        # Identity from the launch as written; storage from the launch redacted.
+        # A config's argument list is as capable of carrying a credential as a
+        # command line, and sanitizing control characters is not redaction.
+        identity = server_identity(transport, command, args, url)
+        stored_args = redact_argv([command] + args)[1:]
         flags = list(malformed)
         if command.startswith("/") and not env.exists(command):
             # A declaration whose command is absent is still a real declaration.
@@ -377,10 +427,9 @@ class McpProbe(BaseProbe):
         return Observation(
             probe=self.name, channel="config", kind="mcp_server", name=sanitize(str(name)),
             path=config_path, matched_on="config:%s" % host, install_method=method,
-            identity_hint=server_identity(transport, command, args, url),
-            owner=env.user, confidence=0.6,
+            identity_hint=identity, owner=env.user, confidence=0.6,
             extra={
-                "command": command, "args": args, "url": url, "transport": transport,
+                "command": command, "args": stored_args, "url": url, "transport": transport,
                 "env_names": env_names, "credential_kinds": credential_kinds, "scope": scope,
                 "host_app": host, "pinned": pinned, "risk_factors": factors,
                 "enabled": _enablement(spec, scope), "flags": flags,
@@ -476,13 +525,28 @@ def _yaml_value(raw: str) -> Any:
     return value.strip('"').strip("'")
 
 
+def normalize_command(command: str) -> str:
+    """Reduce a command to the part both channels can agree on.
+
+    A config writes ``/usr/local/bin/node``; a process table reports ``node``.
+    Same launch, and identity has to say so or the two channels never meet.
+    """
+    base = posixpath.basename(str(command or "").replace("\\", "/"))
+    return base[:-4] if base.lower().endswith(".exe") else base
+
+
 def server_identity(transport: str, command: str, args: List[str], url: str) -> str:
     """Identity of an MCP server is what it launches, never what it is called.
 
     Two configs naming the same command are one server declared twice; two
     servers both called ``github`` with different commands are two servers.
+
+    Built from the *unredacted* launch on both sides. Redaction is a property of
+    what we store, not of what a thing is: identities derived from redacted text
+    stop matching the moment a launch carries a credential flag.
     """
-    payload = "|".join([transport or "", url or "", command or "", " ".join(args or [])])
+    payload = "|".join([transport or "", (url or "").rstrip("/"),
+                        normalize_command(command), " ".join(str(a) for a in (args or []))])
     return "mcp:" + hashlib.sha256(payload.encode()).hexdigest()[:16]
 
 
