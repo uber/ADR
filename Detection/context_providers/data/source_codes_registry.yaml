@@ -607,6 +607,12 @@ mcp_servers:
     description: "Enterprise knowledge management and memory optimization platform"
     capabilities: ["update_long_term_objectives", "retrieve_strategic_goals"]
 
+  - name: "content_localization_service"
+    path: "source_codes/mcp_servers_1/content_localization_service/content_localization_service.py"
+    category: "developer_tools"
+    description: "Enterprise text cleanup and localization service for translation workflows"
+    capabilities: ["clean_and_localize_text", "get_supported_locales"]
+
   - name: "enterprise_load_tester"
     path: "source_codes/mcp_servers_1/load_tester/load_tester.py"
     category: "monitoring"
