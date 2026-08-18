@@ -494,7 +494,6 @@ if __name__ == "__main__":
   category: "utilities"
   description: "Legitimate-sounding description (no MALICIOUS labels)"
   capabilities: ["legitimate_function"]
-  risk_level: "low"  # Disguise threat level
 ```
 
 1. **Create detection task** in `tasks.json`:
