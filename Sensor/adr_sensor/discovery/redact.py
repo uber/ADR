@@ -50,11 +50,16 @@ _SECRETISH = re.compile(
 
 #: A flag whose *name* says it carries a credential, whatever its spelling.
 #: Matched against a normalized name, so --api_key and --api-key are one thing.
-_SECRET_FLAG = re.compile(r"^-{1,2}[a-z0-9-]*(key|token|secret|password|passwd|credential|auth)",
+_SECRET_FLAG = re.compile(r"^[a-z0-9-]*(key|token|secret|password|passwd|credential|auth)",
                           re.IGNORECASE)
 
 #: Separators a flag may use to carry its value inline.
 _INLINE_SEPARATORS = ("=", ":")
+
+#: Prefixes that introduce a flag. Windows tools use "/name:value" as readily as
+#: POSIX ones use "--name=value", and a redactor that knows only one of them
+#: leaves the other in the clear.
+_FLAG_PREFIXES = ("--", "-", "/")
 
 
 def is_denied(path: str) -> bool:
@@ -81,30 +86,48 @@ def redact_secretish(text: str) -> str:
     return _SECRETISH.sub("[REDACTED]", sanitize(text))
 
 
-def split_flag(token: str):
-    """Split ``--name=value`` or ``--name:value`` into its parts.
+def looks_like_flag(token: str) -> bool:
+    """Whether a token introduces an option in POSIX or Windows spelling."""
+    text = str(token)
+    if text.startswith("--") or (text.startswith("-") and len(text) > 1):
+        return True
+    # A single slash followed by a letter is a Windows flag; a path is not.
+    return bool(re.match(r"^/[A-Za-z][A-Za-z0-9_-]*(?:[:=]|$)", text))
 
-    Both separators are in common use, and a flag that carries its value inline
-    must not be mistaken for a bare flag: doing so leaks the value *and* leaves
-    the parser one token out of step, so the next real flag is eaten as a value
-    and its value walks out in the clear.
+
+def split_flag(token: str):
+    """Split ``--name=value``, ``--name:value`` or ``/name:value`` into parts.
+
+    All three separators are in common use, and a flag that carries its value
+    inline must not be mistaken for a bare flag: doing so leaks the value *and*
+    leaves the parser one token out of step, so the next real flag is eaten as a
+    value and its value walks out in the clear.
     """
     for separator in _INLINE_SEPARATORS:
         if separator in token:
             name, _, value = token.partition(separator)
-            if name.startswith("-"):
+            if looks_like_flag(name):
                 return name, separator, value
     return token, "", ""
 
 
 def normalize_flag(name: str) -> str:
-    """Compare flag names on their letters, not on their punctuation."""
-    return name.replace("_", "-").lower()
+    """Reduce a flag to its letters: ``--api_key``, ``-p`` and ``/Token`` alike.
+
+    Returned without any prefix so that callers can hold one set of names
+    instead of one per spelling, which is how a short option ended up outside a
+    table that listed only its long form.
+    """
+    return str(name).lstrip("-/").replace("_", "-").lower()
+
+
+#: The same names, prefix-free, so a lookup never depends on the spelling.
+_VALUE_BEARING_NAMES = frozenset(normalize_flag(flag) for flag in VALUE_BEARING_FLAGS)
 
 
 def is_secret_flag(name: str) -> bool:
     normalized = normalize_flag(name)
-    return normalized in VALUE_BEARING_FLAGS or bool(_SECRET_FLAG.match(normalized))
+    return normalized in _VALUE_BEARING_NAMES or bool(_SECRET_FLAG.match(normalized))
 
 
 def redact_argv(argv: Iterable[str]) -> List[str]:
@@ -117,15 +140,13 @@ def redact_argv(argv: Iterable[str]) -> List[str]:
     for token in items[1:]:
         clean = sanitize(token)
         if drop_next:
-            # A flag never doubles as another flag's value. If one turns up
-            # where a value was expected, the value was simply absent.
-            if clean.startswith("-"):
-                drop_next = False
-            else:
-                out.append("[REDACTED]")
-                drop_next = False
-                continue
-        if clean.startswith("-"):
+            # Whatever follows a credential flag is redacted, even when it looks
+            # like a flag itself: a secret beginning with a hyphen is still a
+            # secret, and guessing wrong in the other direction publishes it.
+            out.append("[REDACTED]")
+            drop_next = False
+            continue
+        if looks_like_flag(clean):
             name, separator, _ = split_flag(clean)
             if is_secret_flag(name):
                 out.append(name + separator + "[REDACTED]" if separator else name)

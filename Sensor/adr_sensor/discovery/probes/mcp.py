@@ -17,6 +17,7 @@ from ..env import DiscoveryEnv
 from ..net import host_of, matches_any
 from ..paths import is_descendant
 from ..redact import (
+    looks_like_flag,
     normalize_flag,
     redact_argv,
     redact_env_block,
@@ -116,16 +117,28 @@ VCS_PREFIXES = ("github:", "git+", "gitlab:", "bitbucket:")
 #: the image and calls an unpinned launch pinned - a wrong verdict in the
 #: direction that hides risk.
 DOCKER_VALUE_OPTIONS = frozenset({
-    "-v", "--volume", "-p", "--publish", "-e", "--env", "--env-file", "-w", "--workdir",
-    "--name", "--network", "--net", "-u", "--user", "--mount", "--label", "-l", "--add-host",
-    "--entrypoint", "--platform", "--memory", "-m", "--cpus", "--device", "--log-driver",
-    "--restart", "--pull", "--health-cmd", "--tmpfs", "--ulimit", "--security-opt",
+    "volume", "v", "publish", "p", "env", "e", "env-file", "workdir", "w", "name", "network",
+    "net", "user", "u", "mount", "label", "l", "add-host", "entrypoint", "platform",
+    "memory", "m", "cpus", "device", "log-driver", "restart", "pull", "health-cmd",
+    "tmpfs", "ulimit", "security-opt", "annotation", "runtime", "gpus",
+    "cgroupns", "pid", "ipc", "dns", "expose", "stop-signal",
+})
+
+#: Options that stand alone. Everything not listed here is treated as taking a
+#: value, so an option nobody thought of cannot smuggle an image past the parser.
+DOCKER_BOOLEAN_OPTIONS = frozenset({
+    "rm", "detach", "d", "interactive", "i", "tty", "t", "it", "ti", "init", "privileged",
+    "read-only", "no-healthcheck", "quiet", "q", "sig-proxy", "publish-all", "p-all", "help",
 })
 
 LAUNCHER_VALUE_OPTIONS = frozenset({
-    "--registry", "--cache", "--userconfig", "--shell", "--node-arg", "--package", "-p",
-    "--prefix", "--from", "--with", "--python", "--index-url", "--extra-index-url",
-    "--spec", "--pip-args", "--python-version",
+    "registry", "cache", "userconfig", "shell", "node-arg", "package", "prefix", "from",
+    "with", "python", "index-url", "extra-index-url", "spec", "pip-args", "python-version",
+})
+
+LAUNCHER_BOOLEAN_OPTIONS = frozenset({
+    "yes", "y", "no", "no-install", "prefer-online", "prefer-offline", "ignore-existing",
+    "quiet", "q", "silent", "isolated", "no-cache", "refresh", "verbose", "v", "help",
 })
 
 #: Shell shapes that fetch and execute code at launch. Deliberately loose about
@@ -223,52 +236,45 @@ class McpProbe(BaseProbe):
             return None
 
     def _parse_toml(self, env: DiscoveryEnv, logical: str, key: str) -> Optional[Dict[str, Any]]:
-        """Minimal TOML subset: ``[key.name]`` tables of strings and arrays.
+        """Parse TOML with a compliant parser, never with a subset of one.
 
-        Codex ships TOML and the collector targets Python 3.9, which has no
-        ``tomllib``. A full parser is not warranted for one fixed shallow shape.
+        A handwritten reader splits on punctuation, and TOML puts punctuation
+        inside quotes: a table named ``"team.server"`` became two tables, and a
+        comma inside an argument string ended the array. Both mistakes are
+        silent, and both cost the server its command, its identity and its risk
+        verdict.
+        """
+        loader = _toml_loader()
+        if loader is None:
+            self.error(env, logical, "no TOML parser available; install tomli on Python < 3.11")
+            return None
+        result = env.read(logical)
+        if not result:
+            self.error(env, logical, result.error or "unreadable")
+            return None
+        try:
+            data = loader(result.text)
+        except Exception as exc:
+            self.error(env, logical, "malformed toml: %s" % exc)
+            return None
+        servers = data.get(key)
+        return servers if isinstance(servers, dict) else {}
+
+    def _parse_yaml(self, env: DiscoveryEnv, logical: str, key: str) -> Optional[Dict[str, Any]]:
+        """Minimal YAML subset for goose-style ``extensions:`` blocks.
+
+        Deliberately narrow, and it says so: constructs it cannot represent are
+        reported rather than mis-parsed, because a config read wrongly is worse
+        than one read not at all. Replacing this with a real parser is the same
+        move already made for TOML, and is worth making when goose configs in
+        the field turn out to use more of the language.
         """
         result = env.read(logical)
         if not result:
             self.error(env, logical, result.error or "unreadable")
             return None
-        servers: Dict[str, Any] = {}
-        current: Optional[str] = None
-        sub_table: Optional[str] = None
-        for raw_line in result.text.splitlines():
-            line = raw_line.strip()
-            if not line or line.startswith("#"):
-                continue
-            header = re.match(r"^\[%s\.([^\]]+)\]$" % re.escape(key), line)
-            if header:
-                # ``[mcp_servers.name.env]`` is a sub-table of ``name``, not a
-                # second server. Treating it as one invents an asset per section.
-                parts = [piece.strip('"') for piece in header.group(1).split(".")]
-                current = parts[0]
-                servers.setdefault(current, {})
-                sub_table = parts[1] if len(parts) > 1 else None
-                if sub_table:
-                    servers[current].setdefault(sub_table, {})
-                continue
-            if line.startswith("["):
-                current = sub_table = None
-                continue
-            if current is None or "=" not in line:
-                continue
-            field, _, value = line.partition("=")
-            target = servers[current][sub_table] if sub_table else servers[current]
-            target[field.strip()] = _toml_value(value.strip())
-        return servers
-
-    def _parse_yaml(self, env: DiscoveryEnv, logical: str, key: str) -> Optional[Dict[str, Any]]:
-        """Minimal YAML subset for goose-style ``extensions:`` blocks.
-
-        Reported as an error rather than skipped when it does not parse: a
-        silently ignored config is indistinguishable from an empty one.
-        """
-        result = env.read(logical)
-        if not result:
-            self.error(env, logical, result.error or "unreadable")
+        if any(marker in result.text for marker in ("&", "*", "<<:", "|-", ">-")):
+            self.error(env, logical, "yaml uses constructs beyond the supported subset")
             return None
         servers: Dict[str, Any] = {}
         in_block = False
@@ -555,14 +561,20 @@ def _as_env(value: Any, malformed: List[str]) -> Optional[Dict[str, Any]]:
     return {}
 
 
-def _toml_value(raw: str) -> Any:
-    value = raw.split(" #", 1)[0].strip()
-    if value.startswith("[") and value.endswith("]"):
-        inner = value[1:-1].strip()
-        if not inner:
-            return []
-        return [piece.strip().strip('"').strip("'") for piece in inner.split(",") if piece.strip()]
-    return value.strip('"').strip("'")
+def _toml_loader():
+    """The best TOML parser available: stdlib on 3.11+, tomli before that."""
+    try:
+        import tomllib
+
+        return lambda text: tomllib.loads(text)
+    except ImportError:
+        pass
+    try:
+        import tomli
+
+        return lambda text: tomli.loads(text)
+    except ImportError:
+        return None
 
 
 def _yaml_value(raw: str) -> Any:
@@ -596,19 +608,25 @@ def server_identity(transport: str, command: str, args: List[str], url: str) -> 
     Two configs naming the same command are one server declared twice; two
     servers both called ``github`` with different commands are two servers.
 
-    Built from the *unredacted* launch on both sides. Redaction is a property of
-    what we store, not of what a thing is: identities derived from redacted text
-    stop matching the moment a launch carries a credential flag.
+    Credential values are replaced with a fixed placeholder before hashing, and
+    the redaction happens *here* rather than at each call site, so the two
+    channels cannot disagree about it. Two consequences matter: rotating a token
+    no longer reads as an uninstall followed by a fresh install, and the asset id
+    stops being a hash derived from secret material.
     """
+    stable = redact_argv([str(command or "")] + [str(a) for a in (args or [])])[1:]
     payload = "|".join([transport or "", (url or "").rstrip("/"),
-                        normalize_command(command), " ".join(str(a) for a in (args or []))])
+                        normalize_command(command), " ".join(stable)])
     return "mcp:" + hashlib.sha256(payload.encode()).hexdigest()[:16]
 
 
 def classify_launch(command: str, args: List[str], url: str) -> Tuple[bool, List[str], str]:
     """Decide whether a launch is version-pinned, and why it might not be."""
     factors: List[str] = []
-    base = posixpath.basename(command or "")
+    # The same normalization identity uses: a Windows launcher spelled
+    # DOCKER.EXE or C:\Tools\npx.exe is the same launcher, and falling through
+    # to the default branch reports an unpinned launch as pinned.
+    base = normalize_command(command)
     args = list(args or [])
     joined = " ".join([command or ""] + args)
     if REMOTE_EXEC.search(joined):
@@ -621,7 +639,8 @@ def classify_launch(command: str, args: List[str], url: str) -> Tuple[bool, List
             factors.append("plaintext_remote")
         return True, factors, "remote"
     if base == "docker":
-        image = first_operand(args, DOCKER_VALUE_OPTIONS, skip={"run", "exec", "create"})
+        image = first_operand(args, DOCKER_VALUE_OPTIONS, DOCKER_BOOLEAN_OPTIONS,
+                              skip={"run", "exec", "create"})
         tag = image.rsplit("/", 1)[-1]
         if not image or image.endswith(":latest") or ":" not in tag:
             factors.append("unpinned_supply_chain")
@@ -629,27 +648,66 @@ def classify_launch(command: str, args: List[str], url: str) -> Tuple[bool, List
         return True, factors, "container"
     if base in EPHEMERAL_LAUNCHERS:
         method = "pypi-ephemeral" if base in PYPI_LAUNCHERS else "npm-ephemeral"
-        package = first_operand(args, LAUNCHER_VALUE_OPTIONS, skip={"run", "dlx", "exec"})
+        package = first_operand(args, LAUNCHER_VALUE_OPTIONS, LAUNCHER_BOOLEAN_OPTIONS,
+                                skip={"run", "dlx", "exec"})
         if any(package.startswith(prefix) for prefix in VCS_PREFIXES):
             factors.extend(["unpinned_supply_chain", "vcs_source"])
             return False, factors, method
-        if any(marker in package for marker in FLOATING_SPECIFIERS):
-            # A range resolves to something new whenever upstream publishes.
-            factors.append("floating_range")
-            return False, factors, method
-        pinned = bool(package) and "@" in package.lstrip("@")
+        pinned, reason = specification_is_pinned(package)
         if not pinned:
-            factors.append("unpinned_supply_chain")
+            factors.append(reason)
         return pinned, factors, method
     return True, factors, "unknown"
 
 
-def first_operand(args: List[str], value_options: frozenset, skip: set) -> str:
+#: An exact, immutable version. Anything else - a range, a tag, an alias, a
+#: wildcard - resolves to whatever the registry holds at launch.
+_EXACT_VERSION = re.compile(r"^v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
+_COMMIT_SHA = re.compile(r"^[0-9a-f]{7,40}$")
+
+
+def split_package_spec(package: str):
+    """Split ``name@spec``, respecting a leading scope."""
+    text = str(package or "")
+    if not text:
+        return "", ""
+    body = text[1:] if text.startswith("@") else text
+    if "@" not in body:
+        return text, ""
+    name, _, spec = body.rpartition("@")
+    return ("@" + name) if text.startswith("@") else name, spec
+
+
+def specification_is_pinned(package: str):
+    """Whether a package specification names one immutable artifact.
+
+    A version is not a pin because it contains a digit: ``1.x``, ``1.2.*``,
+    ``beta``, ``npm:other`` and ``workspace:*`` all resolve to something that can
+    change underneath the fleet.
+    """
+    if not package:
+        return False, "unpinned_supply_chain"
+    _, spec = split_package_spec(package)
+    if not spec:
+        return False, "unpinned_supply_chain"
+    if _EXACT_VERSION.match(spec) or _COMMIT_SHA.match(spec):
+        return True, ""
+    if ":" in spec:
+        # An alias or a protocol: npm:other, workspace:*, github:user/repo.
+        return False, "aliased_specification"
+    return False, "floating_range"
+
+
+def first_operand(args: List[str], value_options: frozenset, boolean_options: frozenset,
+                  skip: set) -> str:
     """The first argument that is the thing being run, not an option's value.
 
-    Ambiguity resolves toward unpinned: returning "" makes the caller treat the
-    launch as unpinned, which is the safe direction for a verdict whose whole
-    purpose is to catch a package resolved at run time.
+    Options are recognized by exclusion rather than by enumeration: a known
+    boolean stands alone, and *anything else* is assumed to take a value. A
+    finite table of value-bearing options can only ever be as complete as the
+    day it was written, and every option it misses hands an attacker a way to
+    make a floating launch look pinned. Ambiguity therefore resolves toward
+    unpinned, which is the direction that fails safe.
     """
     expect_value = False
     for token in list(args or []):
@@ -657,10 +715,11 @@ def first_operand(args: List[str], value_options: frozenset, skip: set) -> str:
         if expect_value:
             expect_value = False
             continue
-        if text.startswith("-"):
+        if looks_like_flag(text):
             name, separator, _ = split_flag(text)
-            if not separator and normalize_flag(name) in value_options:
-                expect_value = True
+            normalized = normalize_flag(name)
+            if not separator and normalized not in boolean_options:
+                expect_value = normalized in value_options or True
             continue
         if text in skip:
             continue

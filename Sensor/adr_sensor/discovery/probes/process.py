@@ -13,7 +13,13 @@ from ..base_probe import BaseProbe, Observation
 from ..env import DiscoveryEnv, ProcessInfo
 from ..paths import install_method, install_root
 from ..redact import redact_argv
-from .mcp import DOCKER_VALUE_OPTIONS, classify_launch, first_operand, server_identity
+from .mcp import (
+    DOCKER_BOOLEAN_OPTIONS,
+    DOCKER_VALUE_OPTIONS,
+    classify_launch,
+    first_operand,
+    server_identity,
+)
 
 #: Interpreters that say nothing on their own - the payload is in argv.
 INTERPRETERS = frozenset({"node", "python", "python3", "bun", "deno", "ruby", "sh", "bash"})
@@ -33,6 +39,13 @@ SERVER_MARKERS = ("mcp", "modelcontextprotocol")
 
 #: ``npm run x`` executes a package script, whatever the script is called.
 TASK_RUNNERS = frozenset({"npm", "yarn", "pnpm", "bun", "just", "make"})
+
+#: A shell is never an MCP server. Its argv is arbitrary user text - a command
+#: that merely mentions a path containing "mcp" is not a server, and treating it
+#: as one puts a security finding on whatever the developer happened to type.
+#: A shell that a config genuinely declares is recovered by correlation instead.
+SHELLS = frozenset({"sh", "bash", "zsh", "dash", "fish", "ksh", "csh", "tcsh",
+                    "powershell", "pwsh", "cmd", "cmd.exe"})
 
 
 class ProcessProbe(BaseProbe):
@@ -65,7 +78,7 @@ class ProcessProbe(BaseProbe):
         """An agent inside a container is invisible to a host-path scan."""
         if posixpath.basename(process.exe) != "docker" or "run" not in process.argv:
             return None
-        image = first_operand(process.argv[1:], DOCKER_VALUE_OPTIONS,
+        image = first_operand(process.argv[1:], DOCKER_VALUE_OPTIONS, DOCKER_BOOLEAN_OPTIONS,
                               skip={"run", "exec", "create"})
         entry = None
         for candidate in self.catalog.entries:
@@ -212,7 +225,9 @@ def looks_like_server(argv: List[str]) -> bool:
     """
     if not argv:
         return False
-    launcher = posixpath.basename(argv[0]).lower()
+    launcher = posixpath.basename(str(argv[0])).lower()
+    if launcher in SHELLS:
+        return False
     if launcher in TASK_RUNNERS and len(argv) > 1 and argv[1] in ("run", "run-script", "exec"):
         return False
     for token in argv:

@@ -354,7 +354,13 @@ def r20():
     from adr_sensor.discovery.probes.process import looks_like_server
     ordinary = [["npx", "eslint", "."], ["npx", "vite", "--host"], ["npm", "run", "mcp-docs"],
                 ["python", "my-server-test.py"], ["bash", "-c", "echo server-status"],
-                ["node", "build.js"], ["yarn", "run", "start-server"]]
+                ["node", "build.js"], ["yarn", "run", "start-server"],
+                # A shell's argv is arbitrary user text. Observed on a real
+                # endpoint: a snapshot wrapper whose command line happened to
+                # mention a path containing "mcp" became a high-severity finding.
+                ["/bin/zsh", "-c", "source ~/.claude/shell-snapshots/snap.sh && "
+                 "ruff check adr_sensor/discovery/probes/mcp.py"],
+                ["bash", "-lc", "python -m pytest tests/test_mcp.py"]]
     servers = [["npx", "-y", "mcp-server-github"], ["node", "/tmp/mcp-rogue.js"],
                ["npx", "-y", "@modelcontextprotocol/server-git"],
                ["docker", "run", "ghcr.io/x/mcp:latest"]]
@@ -735,3 +741,121 @@ def r39():
                has("and are marked malformed",
                    lambda s: all("malformed_manifest" in a.flags
                                  for a in assets(s, kind="mcp_bundle")))]
+
+
+@case("R-40")
+def r40():
+    """Rotating a credential is not an uninstall followed by an install."""
+    from adr_sensor.discovery import diff_snapshots
+    from adr_sensor.discovery.probes.mcp import server_identity
+
+    def world_with(token):
+        world = World()
+        world.json("~/.claude.json", {"mcpServers": {"srv": {
+            "command": "node", "args": ["srv.js", "--token", token]}}})
+        return world
+
+    first, second = world_with("credential-one"), world_with("credential-two")
+    before, after = first.scan(), second.scan()
+    changes = diff_snapshots(before, after)
+    first.cleanup()
+    second.cleanup()
+    w = World()
+    return w, [has("the asset id survives rotation",
+                   lambda s: before.assets[0].asset_id == after.assets[0].asset_id),
+               has("the delta is empty, not a reinstall", lambda s: changes == []),
+               has("identity material carries no secret",
+                   lambda s: server_identity("stdio", "node", ["--token", "aaa"], "")
+                   == server_identity("stdio", "node", ["--token", "bbb"], ""))]
+
+
+@case("R-41")
+def r41():
+    """TOML is a grammar, not a punctuation convention."""
+    w = World().file("~/.codex/config.toml", '''
+[mcp_servers."team.server"]
+command = "node"
+args = ["server.js", "--header", "x,y"]
+
+[mcp_servers.plain]
+command = "uvx"
+args = ["mcp-server-git"]
+''')
+    return w, [has("a quoted dotted key is one server, named in full",
+                   lambda s: "team.server" in {a.name for a in assets(s, kind="mcp_server")}),
+               has("its command and arguments survive",
+                   lambda s: [a for a in assets(s, kind="mcp_server")
+                              if a.name == "team.server"][0].risk["command"] == "node"),
+               has("a comma inside a string does not split the array",
+                   lambda s: "x,y" in " ".join(
+                       [a for a in assets(s, kind="mcp_server")
+                        if a.name == "team.server"][0].risk["args"])
+                   or "[REDACTED]" in [a for a in assets(s, kind="mcp_server")
+                                       if a.name == "team.server"][0].risk["args"]),
+               has("both servers are found",
+                   lambda s: len(assets(s, kind="mcp_server")) == 2)]
+
+
+@case("R-42")
+def r42():
+    """A version is not a pin because it contains a digit."""
+    from adr_sensor.discovery.probes.mcp import classify_launch
+    floating = ["pkg@1.x", "pkg@1.2.*", "pkg@beta", "pkg@npm:other", "pkg@github:user/repo",
+                "pkg@>=1.0.0", "pkg@workspace:*", "pkg@^1.2.3", "pkg@~1.2.3", "pkg@latest"]
+    exact = ["pkg@1.2.3", "pkg@1.2.3-rc.1", "@scope/pkg@1.2.3", "pkg@0.0.1+build.5"]
+    w = World()
+    return w, [has("every mutable specification is unpinned",
+                   lambda s: not [p for p in floating if classify_launch("npx", ["-y", p], "")[0]]),
+               has("every exact version is pinned",
+                   lambda s: all(classify_launch("npx", ["-y", p], "")[0] for p in exact)),
+               has("an alias is named as such",
+                   lambda s: "aliased_specification" in
+                   classify_launch("npx", ["-y", "pkg@npm:other"], "")[1])]
+
+
+@case("R-43")
+def r43():
+    """An option nobody listed must not smuggle an image past the parser."""
+    from adr_sensor.discovery.probes.mcp import classify_launch
+    unpinned = [["run", "--annotation", "owner:team", "vendor/server:latest"],
+                ["run", "--runtime", "runc:custom", "vendor/server:latest"],
+                ["run", "--some-future-option", "a:b", "vendor/server:latest"]]
+    pinned = [["run", "--rm", "-it", "ghcr.io/x/mcp:1.4.2"],
+              ["run", "--runtime", "runc:custom", "vendor/server:1.2.3"]]
+    w = World()
+    return w, [has("unknown options resolve toward unpinned",
+                   lambda s: not [a for a in unpinned if classify_launch("docker", a, "")[0]]),
+               has("known booleans still leave the image visible",
+                   lambda s: all(classify_launch("docker", a, "")[0] for a in pinned))]
+
+
+@case("R-44")
+def r44():
+    """Credentials in the argument forms that are easy to forget."""
+    from adr_sensor.discovery.redact import redact_argv
+    out = redact_argv(["srv", "--token", "-ordinary-secret", "/token:shortsecret",
+                       "/api-key", "slashvalue", "--port", "8080"])
+    w = World()
+    return w, [has("a value beginning with a hyphen is still a value",
+                   lambda s: "-ordinary-secret" not in out),
+               has("windows slash flags are parsed, not swallowed whole",
+                   lambda s: "/token:[REDACTED]" in out and "/api-key" in out),
+               has("their values do not survive",
+                   lambda s: not [t for t in out if "secret" in t or t == "slashvalue"]),
+               has("benign options are untouched",
+                   lambda s: "--port" in out and "8080" in out)]
+
+
+@case("R-45")
+def r45():
+    """One command normalization for identity, correlation and classification."""
+    from adr_sensor.discovery.probes.mcp import classify_launch
+    windows = ["NPX.EXE", "C:\\Tools\\npx.exe", "DOCKER.EXE",
+               "C:\\Program Files\\Docker\\docker.exe"]
+    w = World()
+    return w, [has("windows launchers reach their own branch",
+                   lambda s: all(classify_launch(c, ["run", "-y", "unversioned"], "")[2]
+                                 in ("npm-ephemeral", "container") for c in windows)),
+               has("and are judged unpinned like their posix spellings",
+                   lambda s: not [c for c in windows
+                                  if classify_launch(c, ["run", "-y", "unversioned"], "")[0]])]
