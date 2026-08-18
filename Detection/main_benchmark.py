@@ -402,7 +402,9 @@ class SessionManager:
             if message_data["role"] == "user":
                 message_data["message_type"] = "user_prompt" if line_num == 1 else "tool_result"
                 content = msg.get("content", "")
-                message_data["content"] = self._truncate_content(content)
+                extracted = self._extract_text_from_content(content, raw_message.get("toolUseResult"))
+                message_data["content"] = self._truncate_content(extracted)
+                message_data["failed_tool_use_ids"] = self._extract_failed_tool_ids(content)
 
             elif message_data["role"] == "assistant":
                 content = msg.get("content", [])
@@ -416,6 +418,71 @@ class SessionManager:
             message_data["content"] = f"System message: {raw_message.get('cwd', 'unknown')}"
 
         return message_data
+
+    def _extract_text_from_content(self, content: Any, tool_use_result: Any = None) -> str:
+        """Extract plain text from Claude Code message content (str, or a list
+        of content blocks e.g. tool_result/text), mirroring the proven pattern
+        in Sensor/adr_sensor/parsers/claude_parser.py's _normalize_result_content.
+
+        Falls back to str() only for genuinely unexpected shapes, so real text
+        (including any embedded Unicode) survives instead of being silently
+        replaced by a Python repr() of the raw list/dict structure - repr()
+        escapes non-printable Unicode (e.g. Tag Block "ASCII smuggling"
+        characters) into literal backslash text, irreversibly losing the
+        original codepoints before this is ever written to disk.
+        """
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            tool_result_items = [item for item in content if isinstance(item, dict) and item.get("type") == "tool_result"]
+            # Only apply the single root-level toolUseResult override when
+            # there's exactly one tool_result block. With more than one (e.g.
+            # parallel tool calls), applying one shared override to every
+            # block would incorrectly overwrite each block's own distinct
+            # content with the same value.
+            apply_override = isinstance(tool_use_result, dict) and len(tool_result_items) == 1
+
+            parts = []
+            for item in content:
+                if not isinstance(item, dict):
+                    continue
+                if item.get("type") == "tool_result":
+                    inner = item.get("content", "")
+                    if apply_override:
+                        # Only override with a non-empty result - an explicitly
+                        # falsy toolUseResult['result'] (e.g. "" or None) should
+                        # not discard real content already present on the block.
+                        override = tool_use_result.get("result")
+                        if override:
+                            inner = override
+                    parts.append(self._extract_text_from_content(inner))
+                elif item.get("type") == "text":
+                    parts.append(item.get("text", ""))
+            return "\n".join(p for p in parts if p)
+        if isinstance(content, dict):
+            # json.dumps preserves Unicode correctly (unlike str()/repr(),
+            # which would escape it into literal, unrecoverable backslash text).
+            return json.dumps(content, ensure_ascii=False)
+        return str(content) if content else ""
+
+    def _extract_failed_tool_ids(self, content: Any) -> List[str]:
+        """Collect tool_use_ids of tool_result blocks marked is_error=True.
+
+        Reads the block's own structured `is_error` field directly, rather
+        than string-matching for repr artifacts (e.g. "'is_error': True") in
+        already-extracted text - that pattern only ever matched because the
+        old extractor stored a Python repr() of the raw block list; it can
+        never match real extracted text, which is exactly why it broke once
+        that repr() bug was fixed (see issue #46).
+        """
+        failed_ids = []
+        if isinstance(content, list):
+            for item in content:
+                if isinstance(item, dict) and item.get("type") == "tool_result" and item.get("is_error"):
+                    tool_use_id = item.get("tool_use_id")
+                    if tool_use_id:
+                        failed_ids.append(tool_use_id)
+        return failed_ids
 
     def _truncate_content(self, content: str, max_length: int = 10000) -> str:
         """Truncate content to specified length."""
@@ -454,12 +521,18 @@ class ToolAnalyzer:
         failed_tool_ids = set()
         for msg in structured_messages:
             if msg.get("message_type") == "tool_result":
+                # Primary path: the block's own structured is_error field,
+                # populated by SessionManager._parse_message. Reliable
+                # regardless of how the content text itself was extracted.
+                failed_tool_ids.update(msg.get("failed_tool_use_ids", []))
+
+                # Secondary, text-based fallback for a tool-not-found error
+                # that isn't represented as an is_error tool_result block.
                 content = msg.get("content", "")
-                if ("Error:" in content and "No such tool available:" in content) or "'is_error': True" in content:
-                    if "'tool_use_id':" in content:
-                        match = re.search(r"'tool_use_id': '([^']+)'", content)
-                        if match:
-                            failed_tool_ids.add(match.group(1))
+                if "Error:" in content and "No such tool available:" in content:
+                    match = re.search(r"'tool_use_id': '([^']+)'", content)
+                    if match:
+                        failed_tool_ids.add(match.group(1))
 
         for msg in structured_messages:
             if msg.get("tool_calls"):
