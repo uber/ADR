@@ -12,7 +12,7 @@ def load():
     cases = OrderedDict()
     from tests.discovery import cases_tools
     cases.update(cases_tools.CASES)
-    for module_name in ("cases_mcp", "cases_skills", "cases_agents"):
+    for module_name in ("cases_mcp", "cases_skills", "cases_agents", "cases_hardening"):
         try:
             module = __import__("tests.discovery.%s" % module_name, fromlist=["CASES"])
         except ImportError:

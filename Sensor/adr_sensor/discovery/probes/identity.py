@@ -12,6 +12,7 @@ from typing import List, Optional
 
 from ..base_probe import BaseProbe, Observation
 from ..env import DiscoveryEnv
+from ..net import matches_any
 
 #: (catalog id, credential file). Presence and shape only - never the value.
 CREDENTIAL_FILES = (
@@ -84,8 +85,7 @@ class IdentityProbe(BaseProbe):
         """No corporate domain in the account means it is somebody's own login."""
         if not account or "@" not in account:
             return bool(corporate)
-        domain = account.split("@", 1)[1].lower()
-        return not any(domain.endswith(entry) for entry in corporate)
+        return not matches_any(account.split("@", 1)[1], corporate)
 
     def _api_keys(self, env: DiscoveryEnv) -> List[Observation]:
         """A raw key in a shell profile pays for spend nobody can attribute."""

@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from ..base_probe import BaseProbe, Observation
 from ..env import DiscoveryEnv
+from ..net import host_of, matches_any
 from ..redact import redact_env_block, redact_url, sanitize
 
 #: (path, host application, config key, scope). The key differs per host on
@@ -102,8 +103,14 @@ FLOATING_SPECIFIERS = ("@latest", "@next", "@^", "@~", "@*", "@>", "@<")
 #: Sources that resolve to whatever a branch happens to hold.
 VCS_PREFIXES = ("github:", "git+", "gitlab:", "bitbucket:")
 
-#: Shell shapes that fetch and execute code at launch.
-REMOTE_EXEC = re.compile(r"(curl|wget)[^|;]*\|\s*(sh|bash|zsh|python)")
+#: Shell shapes that fetch and execute code at launch. Deliberately loose about
+#: what sits between the download and the interpreter: an ``env`` prefix, an
+#: absolute path, a flag, or PowerShell's own spelling all describe one thing.
+DOWNLOADERS = r"curl|wget|iwr|invoke-webrequest|fetch|httpie|http"
+INTERPRETERS_RE = r"sh|bash|zsh|dash|fish|ksh|python[0-9.]*|node|perl|ruby|iex|invoke-expression"
+REMOTE_EXEC = re.compile(
+    r"\b(?:%s)\b[^|;&]*\|[^|]*?\b(?:%s)\b" % (DOWNLOADERS, INTERPRETERS_RE),
+    re.IGNORECASE)
 
 MAX_SERVERS_PER_CONFIG = 500
 
@@ -135,6 +142,8 @@ class McpProbe(BaseProbe):
             return servers
         self.error(env, logical, "server list capped at %d of %d"
                    % (MAX_SERVERS_PER_CONFIG, len(servers)))
+        env.coverage.setdefault("capped", []).append(
+            {"path": logical, "kept": MAX_SERVERS_PER_CONFIG, "declared": len(servers)})
         return dict(list(servers.items())[:MAX_SERVERS_PER_CONFIG])
 
     # -- parsing ----------------------------------------------------------
@@ -247,8 +256,8 @@ class McpProbe(BaseProbe):
                 for suffix, host, key in PROJECT_CONFIGS:
                     if not logical.endswith("/" + suffix):
                         continue
-                    servers = self._parse(env, logical, key)
-                    for name, spec in (servers or {}).items():
+                    servers = self._cap(env, logical, self._parse(env, logical, key) or {})
+                    for name, spec in servers.items():
                         out.append(self._observe(env, logical, host, name, spec, "project"))
         return out
 
@@ -262,7 +271,8 @@ class McpProbe(BaseProbe):
             logical = posixpath.join(base, plugin, ".mcp.json")
             if not env.exists(logical):
                 continue
-            for name, spec in (self._parse(env, logical, "mcpServers") or {}).items():
+            for name, spec in self._cap(env, logical,
+                                        self._parse(env, logical, "mcpServers") or {}).items():
                 observation = self._observe(env, logical, "claude-code", name, spec, "plugin")
                 observation.extra["plugin"] = plugin
                 out.append(observation)
@@ -273,7 +283,8 @@ class McpProbe(BaseProbe):
         out: List[Observation] = []
         payload = env.preferences.get(MDM_PREFERENCE_DOMAIN)
         if isinstance(payload, dict):
-            for name, spec in (payload.get("mcpServers") or {}).items():
+            for name, spec in self._cap(env, "defaults:%s" % MDM_PREFERENCE_DOMAIN,
+                                        payload.get("mcpServers") or {}).items():
                 observation = self._observe(env, "defaults:%s" % MDM_PREFERENCE_DOMAIN,
                                             "claude-code", name, spec, "enterprise_managed")
                 observation.extra["source"] = "mdm"
@@ -286,7 +297,8 @@ class McpProbe(BaseProbe):
             except ValueError as exc:
                 self.error(env, MDM_REGISTRY_KEY, "malformed policy json: %s" % exc)
                 continue
-            for name, spec in (settings.get("mcpServers") or {}).items():
+            for name, spec in self._cap(env, MDM_REGISTRY_KEY,
+                                        settings.get("mcpServers") or {}).items():
                 observation = self._observe(env, MDM_REGISTRY_KEY, "claude-code", name,
                                             spec, "enterprise_managed")
                 observation.extra["source"] = "mdm"
@@ -379,8 +391,7 @@ class McpProbe(BaseProbe):
             factors.append("deprecated_transport")
         if url:
             corporate = env.policy.get("corporate_domains") or []
-            host = url.split("://", 1)[-1].split("/", 1)[0].lower()
-            if corporate and not any(host.endswith(domain.lower()) for domain in corporate):
+            if corporate and not matches_any(host_of(url), corporate):
                 factors.append("third_party_remote")
         if env_block is None and not url:
             # No env block does not mean no credentials. It means all of them.

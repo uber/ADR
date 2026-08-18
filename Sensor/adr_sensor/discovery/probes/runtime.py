@@ -19,8 +19,10 @@ MODEL_ENDPOINTS = ("/v1/models", "/api/tags")
 #: rest, often tens of gigabytes, frequently without any runtime installed.
 WEIGHT_SUFFIXES = (".gguf", ".safetensors", ".bin", ".pth", ".mlmodelc")
 
+#: Personal-content roots are deliberately absent: they are denied centrally,
+#: and listing one here only produces a refusal record on every scan.
 WEIGHT_DIRS = ("~/models", "~/.cache/huggingface/hub", "~/.cache/torch/hub",
-               "~/Documents/models")
+               "~/.local/share/models")
 
 MIN_WEIGHT_BYTES = 50_000_000
 
@@ -96,11 +98,20 @@ class RuntimeProbe(BaseProbe):
         return out
 
     def _listeners(self, env: DiscoveryEnv) -> List[Observation]:
+        """Identify every listener, probing them at the same time.
+
+        A serial sweep costs one timeout per port that is not an inference
+        server, which on an ordinary developer machine is most of them.
+        """
+        from concurrent.futures import ThreadPoolExecutor
+
+        listeners = [socket for socket in env.sockets if socket.state == "LISTEN"]
+        if not listeners:
+            return []
+        with ThreadPoolExecutor(max_workers=min(16, len(listeners))) as pool:
+            identified = list(pool.map(lambda item: self._identify(env, item.port), listeners))
         out: List[Observation] = []
-        for socket in env.sockets:
-            if socket.state != "LISTEN":
-                continue
-            payload, endpoint = self._identify(env, socket.port)
+        for socket, (payload, endpoint) in zip(listeners, identified):
             if payload is None:
                 continue
             entry = self.catalog.match_port(socket.port)

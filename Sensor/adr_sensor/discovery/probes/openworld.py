@@ -12,6 +12,7 @@ from typing import Any, Dict, List
 
 from ..base_probe import BaseProbe, Observation
 from ..env import DiscoveryEnv
+from ..net import domain_matches, host_of
 from ..redact import is_denied
 
 #: Hosts only an LLM client talks to. Matched exactly: a wildcard grant such as
@@ -109,7 +110,7 @@ class OpenWorldProbe(BaseProbe):
             if not name.startswith("."):
                 continue
             path = posixpath.join(env.home, name)
-            if "~/" + name in known or not env.is_dir(path) or is_denied(path):
+            if "~/" + name in known or is_denied(path) or not env.is_dir(path):
                 continue
             yield path, name.lstrip(".")
 
@@ -177,10 +178,28 @@ class OpenWorldProbe(BaseProbe):
         result = env.read(logical, limit=MAX_STRINGS_BYTES)
         if not result:
             return False
+        # Substring matching is correct here and only here: this is a scan of
+        # opaque bytes for a literal, not a comparison of structured hosts.
         return any(host in result.text for host in PROVIDER_HOSTS)
 
     def _is_provider_target(self, pattern: Any) -> bool:
+        """Compare parsed hosts, never substrings.
+
+        ``api.openai.com.evil.test`` contains a provider host and is not one,
+        and a path segment that happens to spell one is not a host at all.
+        """
         text = str(pattern)
         if "<all_urls>" in text or text in ("*://*/*", "http://*/*", "https://*/*"):
             return False
-        return any(host in text for host in PROVIDER_HOSTS)
+        host = host_of(text)
+        if not host:
+            return False
+        for provider in PROVIDER_HOSTS:
+            if "." in provider:
+                if domain_matches(host, provider):
+                    return True
+            elif provider in host:
+                # A service name rather than a host, such as a Bedrock endpoint
+                # whose region prefix varies.
+                return True
+        return False

@@ -23,14 +23,34 @@ DENY_PATH_PARTS = (
 )
 
 _CONTROL = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]|[\x00-\x1f\x7f]")
+#: Shapes that are secret wherever they appear. Vendor prefixes are the easy
+#: half; the second half catches credentials that carry no vendor marking at
+#: all - a JWT, a bearer header, a PEM block - which is what a probe added
+#: tomorrow is most likely to let through.
 _SECRETISH = re.compile(
     r"(sk-[A-Za-z0-9\-_]{8,}"
+    r"|sk_live_[A-Za-z0-9]{8,}"
     r"|ghp_[A-Za-z0-9]{8,}"
     r"|gho_[A-Za-z0-9]{8,}"
+    r"|ghs_[A-Za-z0-9]{8,}"
+    r"|github_pat_[A-Za-z0-9_]{16,}"
+    r"|glpat-[A-Za-z0-9\-_]{8,}"
+    r"|npm_[A-Za-z0-9]{16,}"
     r"|xox[baprs]-[A-Za-z0-9\-]{8,}"
     r"|AKIA[0-9A-Z]{12,}"
-    r"|AIza[A-Za-z0-9\-_]{20,})"
+    r"|ASIA[0-9A-Z]{12,}"
+    r"|AIza[A-Za-z0-9\-_]{20,}"
+    r"|ya29\.[A-Za-z0-9\-_]{16,}"
+    r"|eyJ[A-Za-z0-9\-_]{8,}\.[A-Za-z0-9\-_]{8,}\.[A-Za-z0-9\-_]{8,}"
+    r"|-----BEGIN [A-Z ]*PRIVATE KEY-----"
+    r"|(?i:bearer)\s+[A-Za-z0-9\-._~+/]{16,}=*"
+    r"|(?i:(?:api[_-]?key|token|secret|password|passwd|pwd)\s*[:=]\s*)"
+    r"[\"\']?[A-Za-z0-9\-._~+/]{12,}=*)"
 )
+
+#: A flag whose *name* says it carries a credential, whatever its spelling.
+_SECRET_FLAG = re.compile(r"^--?[A-Za-z0-9-]*(key|token|secret|password|passwd|credential|auth)",
+                          re.IGNORECASE)
 
 
 def is_denied(path: str) -> bool:
@@ -72,7 +92,10 @@ def redact_argv(argv: Iterable[str]) -> List[str]:
         clean = sanitize(token)
         if clean.startswith("-"):
             name, separator, _ = clean.partition("=")
-            if name in VALUE_BEARING_FLAGS:
+            # Match on what the flag is called as well as on a fixed list: a
+            # tool nobody catalogued still spells its credential flag in a way
+            # that says so.
+            if name in VALUE_BEARING_FLAGS or _SECRET_FLAG.match(name):
                 out.append(name + "=[REDACTED]" if separator else name)
                 drop_next = not separator
             else:

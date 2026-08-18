@@ -51,6 +51,35 @@ def merge_keys(observation: Observation) -> List[str]:
     return keys
 
 
+#: Identity fields that may hold at most one distinct value per asset. ``owner``
+#: tolerates "system" alongside a person: a user's shim pointing at a
+#: machine-wide install is one asset, two people's installs are two.
+IDENTITY_FIELDS = ("catalog_id", "pkg_identity", "owner")
+
+
+def _identity_sets(observation: Observation) -> Dict[str, set]:
+    sets: Dict[str, set] = {}
+    for field in IDENTITY_FIELDS:
+        value = getattr(observation, field, None)
+        sets[field] = {value} if value else set()
+    return sets
+
+
+def _merge_identity(left: Dict[str, set], right: Dict[str, set]) -> Optional[Dict[str, set]]:
+    """Union two groups' identities, or None when that would name two things."""
+    merged: Dict[str, set] = {}
+    for field in IDENTITY_FIELDS:
+        values = left.get(field, set()) | right.get(field, set())
+        if field == "owner":
+            values_to_count = {value for value in values if value != "system"}
+        else:
+            values_to_count = values
+        if len(values_to_count) > 1:
+            return None
+        merged[field] = values
+    return merged
+
+
 def conflicts(left: Observation, right: Observation) -> bool:
     """Two observations that name different things may never merge.
 
@@ -85,25 +114,24 @@ def resolve(observations: List[Observation],
     for index, observation in enumerate(primary):
         for key in merge_keys(observation):
             buckets.setdefault(key, []).append(index)
-    # Conflict has to be checked against the whole merged group, not pairwise:
-    # two users' agents both merge happily with one system-wide binary, and
-    # transitivity would then quietly unite the two users.
-    owners: Dict[int, set] = {}
+    # Conflict is a property of the merged group, never of a pair. A bridging
+    # observation shares a key with two unrelated tools, and pairwise checks
+    # wave it through in both directions; transitivity then unites the tools and
+    # one of them disappears from the inventory.
+    identity: Dict[int, Dict[str, set]] = {}
     for index, observation in enumerate(primary):
-        owners[index] = {observation.owner} if observation.owner else set()
+        identity[index] = _identity_sets(observation)
     for members in buckets.values():
         anchor = members[0]
         for other in members[1:]:
             left, right = union.find(anchor), union.find(other)
             if left == right:
                 continue
-            if conflicts(primary[anchor], primary[other]):
-                continue
-            merged = owners.get(left, set()) | owners.get(right, set())
-            if len({owner for owner in merged if owner and owner != "system"}) > 1:
+            merged = _merge_identity(identity.get(left, {}), identity.get(right, {}))
+            if merged is None:
                 continue
             union.union(anchor, other)
-            owners[union.find(anchor)] = merged
+            identity[union.find(anchor)] = merged
 
     groups: Dict[int, List[Observation]] = {}
     for index, observation in enumerate(primary):

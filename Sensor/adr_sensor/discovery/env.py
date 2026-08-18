@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
+from .redact import is_denied
+
 #: Ceiling on any single file read, so a hostile or merely enormous config
 #: cannot exhaust memory on an employee laptop.
 MAX_READ_BYTES = 1_000_000
@@ -132,6 +134,8 @@ class DiscoveryEnv:
         self.errors: List[Dict[str, str]] = []
         #: Subprocess calls that had to be killed, for robustness assertions.
         self.killed: List[List[str]] = []
+        #: What the scan could not see, so a partial inventory is legible as one.
+        self.coverage: Dict[str, Any] = {}
 
     # -- path plumbing ----------------------------------------------------
 
@@ -139,6 +143,47 @@ class DiscoveryEnv:
         """Map a logical absolute path to its location beneath ``root``."""
         text = self.expand(logical)
         return self.root / text.lstrip("/\\").replace("\\", "/")
+
+    def resolve_target(self, logical: str) -> Tuple[Optional[Path], Optional[str]]:
+        """Canonicalize a path and decide whether we are allowed to touch it.
+
+        Two checks, and both have to run against the *resolved* target rather
+        than the path we were handed. A permitted path can be a symlink into a
+        denied one, and a relative segment inside a config can climb out of the
+        tree we were pointed at - in both cases the name we started from looks
+        entirely innocent.
+        """
+        candidate = self.real(logical)
+        try:
+            resolved = Path(os.path.realpath(str(candidate)))
+        except (OSError, ValueError):
+            return None, "unresolvable path"
+        if not self._within_root(resolved):
+            return None, "outside discovery root"
+        requested = self.expand(logical)
+        if is_denied(requested):
+            # Asked for outright. Refused quietly: enumerating a home directory
+            # meets these constantly and each one is expected, not an event.
+            return None, "denied path"
+        if is_denied(self.logical(resolved)):
+            # Permitted on the way in, denied on the way out. That is the shape
+            # of a deliberate bypass, and it is worth saying out loud.
+            self.errors.append({"probe": "env", "path": requested,
+                                "message": "refused: resolves into a denied path"})
+            self.coverage.setdefault("denied", []).append(requested)
+            return None, "denied path"
+        return candidate, None
+
+    def _within_root(self, resolved: Path) -> bool:
+        """True when a canonical path is still inside the tree we may read."""
+        root = Path(os.path.realpath(str(self.root)))
+        if str(root) == os.sep:
+            return True
+        try:
+            resolved.relative_to(root)
+            return True
+        except ValueError:
+            return False
 
     def logical(self, real: Path) -> str:
         """Map a path beneath ``root`` back to its logical form.
@@ -165,21 +210,30 @@ class DiscoveryEnv:
         return text
 
     def exists(self, logical: str) -> bool:
+        target, refusal = self.resolve_target(logical)
+        if refusal:
+            return False
         try:
-            return self.real(logical).exists()
+            return target.exists()
         except OSError:
             return False
 
     def is_dir(self, logical: str) -> bool:
+        target, refusal = self.resolve_target(logical)
+        if refusal:
+            return False
         try:
-            return self.real(logical).is_dir()
+            return target.is_dir()
         except OSError:
             return False
 
     def listdir(self, logical: str) -> List[str]:
         """List a directory, tolerating anything that goes wrong."""
+        target, refusal = self.resolve_target(logical)
+        if refusal:
+            return []
         try:
-            return sorted(entry.name for entry in self.real(logical).iterdir())
+            return sorted(entry.name for entry in target.iterdir())
         except OSError:
             return []
 
@@ -213,13 +267,22 @@ class DiscoveryEnv:
             if following == current:
                 break
             current = following
-        resolved = self.logical(current)
+        if not self._within_root(Path(os.path.realpath(str(current)))):
+            # A link out of the tree resolves to nothing we may describe, so the
+            # path we were given is the most we can honestly report.
+            resolved = self.expand(logical)
+        else:
+            resolved = self.logical(current)
         return resolved.lower() if self.case_insensitive else resolved
 
     def walk(self, logical: str, max_depth: int = 3):
-        """Depth- and count-bounded walk that never follows symlinked directories."""
-        base = self.real(logical)
-        if not base.is_dir():
+        """Depth- and count-bounded walk that never follows symlinked directories.
+
+        A ceiling that fires is recorded. Silent truncation is indistinguishable
+        from an empty directory, and reads as coverage nobody actually has.
+        """
+        base, refusal = self.resolve_target(logical)
+        if refusal or base is None or not base.is_dir():
             return
         stack = [(base, 0)]
         visited = set()
@@ -240,6 +303,10 @@ class DiscoveryEnv:
             for entry in entries:
                 yielded += 1
                 if yielded > MAX_WALK_ENTRIES:
+                    self.errors.append({
+                        "probe": "env", "path": self.expand(logical),
+                        "message": "walk truncated at %d entries" % MAX_WALK_ENTRIES})
+                    self.coverage.setdefault("truncated_walks", []).append(self.expand(logical))
                     return
                 yield self.logical(entry), entry
                 if depth + 1 < min(max_depth, MAX_DEPTH):
@@ -257,7 +324,9 @@ class DiscoveryEnv:
         Named pipes, devices and sockets are rejected outright: a probe that
         opens a FIFO on a developer's machine hangs the entire scan.
         """
-        path = self.real(logical)
+        path, refusal = self.resolve_target(logical)
+        if refusal:
+            return ReadResult(error=refusal)
         try:
             info = os.lstat(str(path))
         except OSError as exc:
@@ -278,18 +347,21 @@ class DiscoveryEnv:
         try:
             chunks = []
             total = 0
-            while total < limit:
-                block = os.read(handle, min(65536, limit - total))
+            # Read one byte past the ceiling so a file sitting exactly on it is
+            # reported whole rather than as truncated.
+            ceiling = limit + 1
+            while total < ceiling:
+                block = os.read(handle, min(65536, ceiling - total))
                 if not block:
                     break
                 chunks.append(block)
                 total += len(block)
-            truncated = total >= limit
+            truncated = total > limit
         except OSError as exc:
             return ReadResult(error="read: %s" % (exc.strerror or exc))
         finally:
             os.close(handle)
-        return ReadResult(b"".join(chunks), truncated)
+        return ReadResult(b"".join(chunks)[:limit], truncated)
 
     # -- injected services ------------------------------------------------
 

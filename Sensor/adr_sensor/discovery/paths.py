@@ -5,6 +5,7 @@ install root that changes on every upgrade would destroy the diff that is the
 module's actual output.
 """
 
+import re
 from typing import Optional
 
 from .env import DiscoveryEnv
@@ -44,7 +45,11 @@ def install_root(path: Optional[str]) -> Optional[str]:
         return None
     parts = [part for part in str(path).split("/") if part]
     if len(parts) >= 3 and parts[0] == "nix" and parts[1] == "store":
-        return "nix:" + parts[2].split("-", 1)[-1]
+        # A store path is <hash>-<name>-<version>. Both the hash and the version
+        # change on upgrade, and letting either into the identity turns every
+        # upgrade into an uninstall followed by a fresh install.
+        name = parts[2].split("-", 1)[-1]
+        return "nix:" + re.sub(r"-\d[\w.+]*$", "", name)
     for marker in ROOT_MARKERS:
         if marker in parts:
             index = parts.index(marker)

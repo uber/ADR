@@ -1,5 +1,6 @@
 """Stage orchestration: enumerate, fingerprint, infer, resolve, rank, report."""
 
+import os
 import platform as platform_mod
 import socket as socket_mod
 import time
@@ -55,7 +56,7 @@ def discover(env: DiscoveryEnv, catalog: Optional[Catalog] = None,
         stats={"probes": per_probe, "catalog_version": catalog.version,
                "wall_ms": round((time.time() - started) * 1000, 1),
                "asset_count": len(assets), "review_queue_count": len(review_queue),
-               "error_count": len(env.errors)},
+               "error_count": len(env.errors), "coverage": dict(env.coverage)},
     )
     return scrub(snapshot)
 
@@ -66,7 +67,6 @@ def live_env(**overrides) -> DiscoveryEnv:
     Deliberately the only place in the package that touches the live host, so
     everything downstream of it stays testable.
     """
-    import os
     from pathlib import Path
 
     system = platform_mod.system()
@@ -81,38 +81,72 @@ def live_env(**overrides) -> DiscoveryEnv:
         "runner": _subprocess_runner,
         "http": _localhost_probe,
         "processes": _live_processes(),
-        "sockets": (),
+        "sockets": _live_sockets(),
     }
     defaults.update(overrides)
     return DiscoveryEnv(**defaults)
 
 
-def _subprocess_runner(argv, timeout):
-    """Run a command under a hard timeout, killing the child if it overruns.
+#: Ceiling on what one child process may hand back. A timeout bounds how long a
+#: command runs; without this a command that returns promptly and prints forever
+#: is still unbounded.
+MAX_SUBPROCESS_BYTES = 1_000_000
 
-    The kill matters: a binary that never returns from ``--version`` would
-    otherwise leak a process for every scan.
+
+def _subprocess_runner(argv, timeout):
+    """Run a command under a hard timeout and a hard output ceiling.
+
+    The kill matters twice over: a binary that never returns from ``--version``
+    would otherwise leak a process for every scan, and one that floods stdout
+    would otherwise be read into memory in full.
     """
     import subprocess
+    import threading
 
     process = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                stdin=subprocess.DEVNULL)
-    try:
-        out, _ = process.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired:
+    collected = bytearray()
+    truncated = [False]
+
+    def drain():
+        while True:
+            block = process.stdout.read(65536)
+            if not block:
+                return
+            if len(collected) < MAX_SUBPROCESS_BYTES:
+                collected.extend(block[:MAX_SUBPROCESS_BYTES - len(collected)])
+            else:
+                truncated[0] = True
+                process.kill()
+                return
+
+    reader = threading.Thread(target=drain, daemon=True)
+    reader.start()
+    reader.join(timeout)
+    if reader.is_alive():
         process.kill()
-        process.communicate()
+        reader.join(1.0)
         raise TimeoutError("timed out after %ss" % timeout)
-    return process.returncode, (out or b"").decode("utf-8", "replace")
+    process.wait(timeout=1.0)
+    text = bytes(collected).decode("utf-8", "replace")
+    if truncated[0]:
+        text += "\n[output truncated at %d bytes]" % MAX_SUBPROCESS_BYTES
+    return process.returncode, text
 
 
 def _localhost_probe(port, path):
     """GET a loopback endpoint with a short timeout. Loopback only, by design."""
     import json as json_mod
+    import socket as socket_lib
     import urllib.request
 
+    # A port that is listening but not speaking HTTP must cost a fraction of a
+    # second, not a full timeout: most listeners on a developer machine are not
+    # inference servers.
+    with socket_lib.create_connection(("127.0.0.1", port), timeout=0.3):
+        pass
     request = urllib.request.Request("http://127.0.0.1:%d%s" % (port, path))
-    with urllib.request.urlopen(request, timeout=1.0) as response:
+    with urllib.request.urlopen(request, timeout=0.5) as response:
         return json_mod.loads(response.read(2_000_000).decode("utf-8", "replace"))
 
 
@@ -120,26 +154,82 @@ def _live_processes():
     """Own-UID process table via ``ps``.
 
     Own-UID is sufficient for endpoint discovery - the agents run as the user -
-    and it keeps the collector unprivileged.
+    and it keeps the collector unprivileged. The filter is applied twice: ``ps``
+    is asked for one user, and rows are checked again after parsing, because
+    collecting another person's command lines is both a privacy problem and an
+    attribution error.
     """
+    import getpass
     import subprocess
 
     from .env import ProcessInfo
 
     try:
-        raw = subprocess.run(["ps", "-axo", "pid=,ppid=,user=,comm=,args="],
-                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        user = getpass.getuser()
+    except Exception:
+        user = os.environ.get("USER") or os.environ.get("USERNAME") or ""
+    fields = "pid=,ppid=,user=,comm=,args="
+    for argv in (["ps", "-u", user, "-o", fields], ["ps", "-xo", fields]):
+        try:
+            raw = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                 timeout=5).stdout.decode("utf-8", "replace")
+        except Exception:
+            continue
+        processes = []
+        for line in raw.splitlines():
+            parts = line.split(None, 4)
+            if len(parts) < 5 or not parts[0].isdigit():
+                continue
+            pid, ppid, owner, comm, args = parts
+            if user and owner != user:
+                continue
+            processes.append(ProcessInfo(int(pid), int(ppid), comm, args.split(), user=owner))
+        if processes:
+            return tuple(processes)
+    return ()
+
+
+def _live_sockets():
+    """Listening TCP sockets owned by this user.
+
+    Without this the runtime probe is fully tested and entirely inert in
+    production: every port-based detection passes on fixtures and finds nothing
+    on a real endpoint.
+    """
+    import getpass
+    import re as re_mod
+    import subprocess
+
+    from .env import SocketInfo
+
+    if platform_mod.system() == "Windows":
+        argv = ["netstat", "-ano", "-p", "TCP"]
+    else:
+        try:
+            user = getpass.getuser()
+        except Exception:
+            user = ""
+        argv = ["lsof", "-nP", "-iTCP", "-sTCP:LISTEN"] + (["-u", user] if user else [])
+    try:
+        raw = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                              timeout=5).stdout.decode("utf-8", "replace")
     except Exception:
         return ()
-    processes = []
+    sockets = {}
     for line in raw.splitlines():
-        fields = line.split(None, 4)
-        if len(fields) < 5 or not fields[0].isdigit():
+        if platform_mod.system() == "Windows":
+            match = re_mod.match(r"\s*TCP\s+\S+:(\d+)\s+\S+\s+LISTENING\s+(\d+)", line)
+            if match:
+                sockets[int(match.group(1))] = SocketInfo(int(match.group(2)),
+                                                          int(match.group(1)))
             continue
-        pid, ppid, user, comm, args = fields
-        processes.append(ProcessInfo(int(pid), int(ppid), comm, args.split(), user=user))
-    return tuple(processes)
+        parts = line.split()
+        if len(parts) < 9 or not parts[1].isdigit():
+            continue
+        match = re_mod.search(r":(\d+)$", parts[8])
+        if match:
+            sockets[int(match.group(1))] = SocketInfo(int(parts[1]), int(match.group(1)))
+    return tuple(sockets.values())
 
 
 #: Which declaration wins when one name exists at several scopes. Enterprise
