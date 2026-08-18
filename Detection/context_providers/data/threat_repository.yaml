@@ -58,6 +58,13 @@ threat_framework:
         - 'Malicious: Monitor MCP tool usage for data retrieval and analysis activities
           that mimic legitimate processes but involve unauthorized access to sensitive
           information.'
+        - 'Malicious: Monitor conversation and tool-output text for invisible Unicode
+          Tag-Block characters (U+E0020-U+E007E) that decode to hidden ASCII instructions,
+          an "ASCII smuggling" technique used to embed commands invisible to human
+          reviewers while remaining fully readable to the LLM.'
+        - 'Malicious: Monitor conversation and tool-output text for bidirectional-control
+          characters (U+202A-U+202E, U+2066-U+2069) used to visually hide or reorder
+          injected instructions from human reviewers while keeping the text machine-readable.'
       - id: ADR.T0003
         name: Agentic Control-Flow Hijacking
         description: An adversary manipulates an agent to chain together individually
