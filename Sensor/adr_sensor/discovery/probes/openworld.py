@@ -80,14 +80,21 @@ class OpenWorldProbe(BaseProbe):
             if path in seen:
                 continue
             seen.add(path)
-            queue.append(self._entry(name, path, "cli_agent", self._signals_for_directory(env, path)))
-        return [item for item in queue if item["score"] >= THRESHOLD]
+            signals, sessions = self._signals_for_directory(env, path)
+            queue.append(self._entry(name, path, "cli_agent", signals, sessions))
+        return sorted([item for item in queue if item["score"] >= THRESHOLD],
+                      key=lambda item: -item["priority"])
 
-    def _entry(self, name: str, path: str, kind: str, signals: Dict[str, bool]) -> Dict[str, Any]:
+    def _entry(self, name: str, path: str, kind: str, signals: Dict[str, bool],
+               sessions: int = 0) -> Dict[str, Any]:
         fired = sorted(key for key, value in signals.items() if value)
+        score = round(min(1.0, sum(WEIGHTS[key] for key in fired)), 3)
+        # An unknown tool somebody uses daily is a more urgent triage item than
+        # an unknown tool nobody has opened. Usage is what orders the queue.
+        priority = round(min(2.0, score + min(0.5, sessions / 100.0)), 3)
         return {"name": name, "path": path, "kind": kind,
                 "state": "probable_ai_unclassified", "signals": fired,
-                "score": round(min(1.0, sum(WEIGHTS[key] for key in fired)), 3),
+                "score": score, "sessions": sessions, "priority": priority,
                 "threshold": THRESHOLD}
 
     def _directory_candidates(self, env: DiscoveryEnv):
@@ -119,9 +126,11 @@ class OpenWorldProbe(BaseProbe):
             signals["network_intent"] = self._executable_mentions_provider(env, observation)
         return signals
 
-    def _signals_for_directory(self, env: DiscoveryEnv, path: str) -> Dict[str, bool]:
+    def _signals_for_directory(self, env: DiscoveryEnv, path: str):
+        """Signals for a directory, plus how many chat-shaped sessions it holds."""
         signals = {key: False for key in WEIGHTS}
-        for logical, _ in env.walk(path, max_depth=2):
+        sessions = 0
+        for logical, _ in env.walk(path, max_depth=3):
             base = posixpath.basename(logical)
             if base in (".env", ".envrc"):
                 result = env.read(logical, limit=64_000)
@@ -129,9 +138,10 @@ class OpenWorldProbe(BaseProbe):
                     signals["credential_affinity"] = True
             elif base in (".mcp.json", "mcp.json"):
                 signals["mcp_participation"] = True
-            elif base.endswith(".jsonl") and not signals["state_shape"]:
-                signals["state_shape"] = self._looks_like_chat(env, logical)
-        return signals
+            elif base.endswith(".jsonl") and self._looks_like_chat(env, logical):
+                signals["state_shape"] = True
+                sessions += 1
+        return signals, sessions
 
     def _looks_like_chat(self, env: DiscoveryEnv, logical: str) -> bool:
         """A state file shaped like a conversation, whatever product wrote it."""

@@ -6,7 +6,7 @@ appears in no config is close to a working definition of unsanctioned.
 """
 
 import posixpath
-from typing import List
+from typing import Dict, List, Optional
 
 from ..base_probe import BaseProbe, Observation
 from ..env import DiscoveryEnv, ProcessInfo
@@ -34,17 +34,50 @@ class ProcessProbe(BaseProbe):
     def collect(self, env: DiscoveryEnv) -> List[Observation]:
         out: List[Observation] = []
         by_pid = {process.pid: process for process in env.processes}
+        agents: Dict[tuple, List[ProcessInfo]] = {}
         for process in env.processes:
             entry = self.catalog.match("binaries", posixpath.basename(process.exe))
             if entry:
-                out.append(self._agent(env, process, entry))
+                key = (entry["id"], process.user or env.user, self._resolve_exe(env, process.exe))
+                agents.setdefault(key, []).append(process)
+                continue
+            containerized = self._containerized(env, process)
+            if containerized is not None:
+                out.append(containerized)
                 continue
             parent = by_pid.get(process.ppid)
             if parent is None or not self.catalog.match("binaries", posixpath.basename(parent.exe)):
                 continue
             if looks_like_server(process.argv):
                 out.append(self._child_server(env, process, parent))
+        for (catalog_id, _, _), processes in sorted(agents.items()):
+            out.append(self._agent(env, processes, self.catalog.get(catalog_id)))
         return out
+
+    def _containerized(self, env: DiscoveryEnv, process: ProcessInfo) -> Optional[Observation]:
+        """An agent inside a container is invisible to a host-path scan."""
+        if posixpath.basename(process.exe) != "docker" or "run" not in process.argv:
+            return None
+        image = _docker_image(process.argv)
+        entry = None
+        for candidate in self.catalog.entries:
+            names = candidate.get("binaries", []) + [candidate["id"]]
+            if any(name and name in image for name in names):
+                entry = candidate
+                break
+        if entry is None:
+            return None
+        mounts = [token for index, token in enumerate(process.argv)
+                  if index and process.argv[index - 1] in ("-v", "--volume")]
+        return Observation(
+            probe=self.name, channel="runtime", kind=entry.get("kind", "cli_agent"),
+            name=entry["name"], path=image, matched_on="container_image",
+            catalog_id=entry["id"], vendor=entry.get("vendor"), install_method="container",
+            owner=process.user or env.user, identity_hint="attr:%s" % entry["id"],
+            extra={"flags": ["containerized"], "image": image, "mounts": mounts,
+                   "running": True, "location": "container"},
+            confidence=0.55,
+        )
 
     def _resolve_exe(self, env: DiscoveryEnv, exe: str) -> str:
         """Turn a bare command name from ``ps`` into a path, when we can."""
@@ -58,24 +91,84 @@ class ProcessProbe(BaseProbe):
                 return candidate
         return exe
 
-    def _agent(self, env: DiscoveryEnv, process: ProcessInfo, entry) -> Observation:
-        exe = self._resolve_exe(env, process.exe)
+    def _agent(self, env: DiscoveryEnv, processes: List[ProcessInfo], entry) -> Observation:
+        """One asset per agent per user, carrying how many sessions are running.
+
+        Six concurrent sessions are one agent used six times, not six agents.
+        """
+        first = processes[0]
+        exe = self._resolve_exe(env, first.exe)
         realpath = env.realpath(exe)
         # An executable deleted after launch still ran. Dropping it for failing a
         # stat would lose the most interesting process on the box.
         flags = [] if env.exists(exe) else ["exe_missing"]
+        factors: List[str] = []
+        for process in processes:
+            for token in process.argv:
+                if token in ("-p", "--print") and "unattended_run" not in factors:
+                    factors.append("unattended_run")
+                if token == "--dangerously-skip-permissions" and "permission_bypass" not in factors:
+                    factors.append("permission_bypass")
+        repositories, worktrees = self._repositories(env, processes)
+        sensitive = [path for path in repositories
+                     if path in (env.policy.get("sensitive_repos") or [])]
+        if sensitive:
+            factors.append("sensitive_repository")
+        location = self._location_of(env, exe)
+        if location:
+            flags.append("remote_location")
         return Observation(
             probe=self.name, channel="runtime", kind=entry.get("kind", "cli_agent"),
             name=entry["name"], path=exe,
             matched_on="process:%s" % posixpath.basename(exe),
             catalog_id=entry["id"], vendor=entry.get("vendor"),
-            realpath=exe if flags else realpath,
-            install_root=install_root(realpath), install_method=install_method(realpath),
-            owner=process.user or env.user,
-            extra={"pid": process.pid, "argv": redact_argv(process.argv), "cwd": process.cwd,
-                   "running": True, "flags": flags},
+            realpath=exe if "exe_missing" in flags else realpath,
+            install_root=install_root(realpath), install_method=install_method(realpath, env.home),
+            owner=first.user or env.user,
+            extra={"pid": first.pid, "argv": redact_argv(first.argv), "cwd": first.cwd,
+                   "running": True, "flags": flags, "session_count": len(processes),
+                   "risk_factors": factors, "repositories": sorted(set(repositories)),
+                   "worktrees": sorted(set(worktrees)), "location": location,
+                   "mode": self._mode(processes)},
             confidence=0.65,
         )
+
+    def _mode(self, processes: List[ProcessInfo]) -> Optional[str]:
+        """Sandboxed and permission-bypassed are different facts, not one."""
+        for process in processes:
+            for index, token in enumerate(process.argv):
+                if token == "--permission-mode" and index + 1 < len(process.argv):
+                    return process.argv[index + 1]
+                if token in ("--sandbox", "--sandboxed"):
+                    return "sandbox"
+                if token == "--dangerously-skip-permissions":
+                    return "bypassPermissions"
+        return None
+
+    def _repositories(self, env: DiscoveryEnv, processes: List[ProcessInfo]):
+        """Resolve each working directory to its repository, worktrees included."""
+        repositories, worktrees = [], []
+        for process in processes:
+            if not process.cwd:
+                continue
+            marker = posixpath.join(process.cwd, ".git")
+            result = env.read(marker, limit=4096)
+            if result and result.text.startswith("gitdir:"):
+                # A worktree's .git is a file pointing back at the main repo, so
+                # three worktrees are three sessions in one repository.
+                pointer = result.text.split(":", 1)[1].strip()
+                repositories.append(pointer.split("/.git/")[0])
+                worktrees.append(process.cwd)
+            else:
+                repositories.append(process.cwd)
+        return repositories, worktrees
+
+    def _location_of(self, env: DiscoveryEnv, exe: str) -> Optional[str]:
+        for location in env.locations:
+            root = location.get("root", "").rstrip("/")
+            if root and exe.startswith(root + "/"):
+                return "%s:%s" % (location.get("kind", "location"), location.get("name", "unnamed"))
+        return None
 
     def _child_server(self, env: DiscoveryEnv, process: ProcessInfo, parent: ProcessInfo) -> Observation:
         """A child of an agent process is an MCP server until shown otherwise."""
@@ -111,6 +204,27 @@ def looks_like_server(argv: List[str]) -> bool:
         return True
     joined = " ".join(argv).lower()
     return any(hint in joined for hint in SERVER_HINTS)
+
+
+#: docker flags whose next argument is a value, not the image.
+DOCKER_VALUE_FLAGS = frozenset({"-v", "--volume", "-e", "--env", "-w", "--workdir",
+                                "--name", "--network", "-p", "--publish", "-u", "--user"})
+
+
+def _docker_image(argv: List[str]) -> str:
+    """The image is the first bare token after ``run`` that is not a flag value."""
+    skip = False
+    for token in argv[1:]:
+        if skip:
+            skip = False
+            continue
+        if token in DOCKER_VALUE_FLAGS:
+            skip = True
+            continue
+        if token.startswith("-") or token == "run":
+            continue
+        return token
+    return ""
 
 
 def _server_name(argv: List[str]) -> str:

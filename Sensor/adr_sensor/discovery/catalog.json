@@ -2,36 +2,585 @@
   "version": "2026.08.18",
   "note": "Fingerprints ship as data so a newly released tool is a catalog update, not a client release. sha256 lists are seeded centrally from observed installs and are empty here by design.",
   "entries": [
-    {"id": "claude-code", "name": "Claude Code", "vendor": "Anthropic", "kind": "cli_agent",
-     "binaries": ["claude"], "npm_packages": ["@anthropic-ai/claude-code"],
-     "state_dirs": ["~/.claude"], "sha256": []},
-    {"id": "claude-desktop", "name": "Claude Desktop", "vendor": "Anthropic", "kind": "app",
-     "bundle_ids": ["com.anthropic.claudefordesktop"], "registry_names": ["Claude"],
-     "desktop_ids": ["claude.desktop"]},
-    {"id": "cursor", "name": "Cursor", "vendor": "Anysphere", "kind": "app",
-     "binaries": ["cursor-agent"], "state_dirs": ["~/.cursor"],
-     "bundle_ids": ["com.todesktop.230313mzl4w4u92"], "registry_names": ["Cursor"],
-     "desktop_ids": ["cursor.desktop"]},
-    {"id": "codex", "name": "OpenAI Codex CLI", "vendor": "OpenAI", "kind": "cli_agent",
-     "binaries": ["codex"], "npm_packages": ["@openai/codex"], "state_dirs": ["~/.codex"]},
-    {"id": "opencode", "name": "opencode", "vendor": "SST", "kind": "cli_agent",
-     "binaries": ["opencode"], "npm_packages": ["opencode-ai"],
-     "state_dirs": ["~/.local/share/opencode"]},
-    {"id": "cline", "name": "Cline", "vendor": "Cline", "kind": "extension",
-     "extension_ids": ["saoudrizwan.claude-dev"]},
-    {"id": "continue", "name": "Continue", "vendor": "Continue", "kind": "extension",
-     "extension_ids": ["continue.continue"]},
-    {"id": "warp", "name": "Warp", "vendor": "Warp", "kind": "app",
-     "bundle_ids": ["dev.warp.Warp-Stable"], "registry_names": ["Warp"]},
-    {"id": "ollama", "name": "Ollama", "vendor": "Ollama", "kind": "model_runtime",
-     "binaries": ["ollama"], "state_dirs": ["~/.ollama"],
-     "bundle_ids": ["com.electron.ollama"], "ports": [11434]},
-    {"id": "lm-studio", "name": "LM Studio", "vendor": "Element Labs", "kind": "model_runtime",
-     "binaries": ["lms"], "state_dirs": ["~/.lmstudio"],
-     "bundle_ids": ["ai.elementlabs.lmstudio"], "ports": [1234]},
-    {"id": "aider", "name": "aider", "vendor": "Aider AI", "kind": "cli_agent",
-     "binaries": ["aider"], "pypi_packages": ["aider-chat"], "state_dirs": ["~/.aider"]},
-    {"id": "goose", "name": "goose", "vendor": "Block", "kind": "cli_agent",
-     "binaries": ["goose"], "npm_packages": ["@block/goose-cli"], "state_dirs": ["~/.config/goose"]}
+    {
+      "id": "claude-code",
+      "name": "Claude Code",
+      "vendor": "Anthropic",
+      "kind": "cli_agent",
+      "binaries": [
+        "claude"
+      ],
+      "npm_packages": [
+        "@anthropic-ai/claude-code"
+      ],
+      "state_dirs": [
+        "~/.claude"
+      ],
+      "sha256": []
+    },
+    {
+      "id": "codex",
+      "name": "OpenAI Codex CLI",
+      "vendor": "OpenAI",
+      "kind": "cli_agent",
+      "binaries": [
+        "codex"
+      ],
+      "npm_packages": [
+        "@openai/codex"
+      ],
+      "state_dirs": [
+        "~/.codex"
+      ]
+    },
+    {
+      "id": "gemini-cli",
+      "name": "Gemini CLI",
+      "vendor": "Google",
+      "kind": "cli_agent",
+      "binaries": [
+        "gemini"
+      ],
+      "npm_packages": [
+        "@google/gemini-cli"
+      ],
+      "state_dirs": [
+        "~/.gemini"
+      ]
+    },
+    {
+      "id": "opencode",
+      "name": "opencode",
+      "vendor": "SST",
+      "kind": "cli_agent",
+      "binaries": [
+        "opencode"
+      ],
+      "npm_packages": [
+        "opencode-ai"
+      ],
+      "state_dirs": [
+        "~/.local/share/opencode"
+      ]
+    },
+    {
+      "id": "amp",
+      "name": "Amp",
+      "vendor": "Sourcegraph",
+      "kind": "cli_agent",
+      "binaries": [
+        "amp"
+      ],
+      "npm_packages": [
+        "@sourcegraph/amp"
+      ],
+      "state_dirs": [
+        "~/.config/amp"
+      ]
+    },
+    {
+      "id": "crush",
+      "name": "Crush",
+      "vendor": "Charm",
+      "kind": "cli_agent",
+      "binaries": [
+        "crush"
+      ],
+      "state_dirs": [
+        "~/.config/crush"
+      ]
+    },
+    {
+      "id": "aider",
+      "name": "aider",
+      "vendor": "Aider AI",
+      "kind": "cli_agent",
+      "binaries": [
+        "aider"
+      ],
+      "pypi_packages": [
+        "aider-chat"
+      ],
+      "state_dirs": [
+        "~/.aider"
+      ]
+    },
+    {
+      "id": "goose",
+      "name": "goose",
+      "vendor": "Block",
+      "kind": "cli_agent",
+      "binaries": [
+        "goose"
+      ],
+      "npm_packages": [
+        "@block/goose-cli"
+      ],
+      "state_dirs": [
+        "~/.config/goose"
+      ]
+    },
+    {
+      "id": "kilo-cli",
+      "name": "Kilo CLI",
+      "vendor": "Kilo",
+      "kind": "cli_agent",
+      "binaries": [
+        "kilo"
+      ],
+      "npm_packages": [
+        "@kilocode/cli"
+      ],
+      "state_dirs": [
+        "~/.kilo"
+      ]
+    },
+    {
+      "id": "qwen-code",
+      "name": "Qwen Code",
+      "vendor": "Alibaba",
+      "kind": "cli_agent",
+      "binaries": [
+        "qwen"
+      ],
+      "npm_packages": [
+        "@qwen-code/qwen-code"
+      ],
+      "state_dirs": [
+        "~/.qwen"
+      ]
+    },
+    {
+      "id": "copilot-cli",
+      "name": "GitHub Copilot CLI",
+      "vendor": "GitHub",
+      "kind": "cli_agent",
+      "binaries": [
+        "copilot"
+      ],
+      "npm_packages": [
+        "@github/copilot"
+      ],
+      "state_dirs": [
+        "~/.copilot"
+      ]
+    },
+    {
+      "id": "grok-cli",
+      "name": "Grok CLI",
+      "vendor": "xAI",
+      "kind": "cli_agent",
+      "binaries": [
+        "grok"
+      ],
+      "state_dirs": [
+        "~/.grok"
+      ]
+    },
+    {
+      "id": "claude-desktop",
+      "name": "Claude Desktop",
+      "vendor": "Anthropic",
+      "kind": "app",
+      "bundle_ids": [
+        "com.anthropic.claudefordesktop"
+      ],
+      "registry_names": [
+        "Claude"
+      ],
+      "desktop_ids": [
+        "claude.desktop"
+      ]
+    },
+    {
+      "id": "cursor",
+      "name": "Cursor",
+      "vendor": "Anysphere",
+      "kind": "app",
+      "binaries": [
+        "cursor-agent"
+      ],
+      "state_dirs": [
+        "~/.cursor"
+      ],
+      "bundle_ids": [
+        "com.todesktop.230313mzl4w4u92"
+      ],
+      "registry_names": [
+        "Cursor"
+      ],
+      "desktop_ids": [
+        "cursor.desktop"
+      ]
+    },
+    {
+      "id": "windsurf",
+      "name": "Windsurf",
+      "vendor": "Codeium",
+      "kind": "app",
+      "bundle_ids": [
+        "com.exafunction.windsurf"
+      ],
+      "registry_names": [
+        "Windsurf"
+      ],
+      "state_dirs": [
+        "~/.codeium/windsurf"
+      ],
+      "desktop_ids": [
+        "windsurf.desktop"
+      ]
+    },
+    {
+      "id": "zed",
+      "name": "Zed",
+      "vendor": "Zed Industries",
+      "kind": "app",
+      "binaries": [
+        "zed"
+      ],
+      "bundle_ids": [
+        "dev.zed.Zed"
+      ],
+      "registry_names": [
+        "Zed"
+      ]
+    },
+    {
+      "id": "vscode",
+      "name": "Visual Studio Code",
+      "vendor": "Microsoft",
+      "kind": "app",
+      "bundle_ids": [
+        "com.microsoft.VSCode"
+      ],
+      "registry_names": [
+        "Microsoft Visual Studio Code"
+      ]
+    },
+    {
+      "id": "jetbrains-ai",
+      "name": "JetBrains IDE",
+      "vendor": "JetBrains",
+      "kind": "app",
+      "bundle_ids": [
+        "com.jetbrains.intellij",
+        "com.jetbrains.pycharm",
+        "com.jetbrains.WebStorm"
+      ],
+      "registry_names": [
+        "IntelliJ IDEA",
+        "PyCharm"
+      ]
+    },
+    {
+      "id": "trae",
+      "name": "Trae",
+      "vendor": "ByteDance",
+      "kind": "app",
+      "bundle_ids": [
+        "com.trae.app"
+      ],
+      "state_dirs": [
+        "~/.trae"
+      ]
+    },
+    {
+      "id": "warp",
+      "name": "Warp",
+      "vendor": "Warp",
+      "kind": "app",
+      "bundle_ids": [
+        "dev.warp.Warp-Stable"
+      ],
+      "registry_names": [
+        "Warp"
+      ]
+    },
+    {
+      "id": "chatgpt-desktop",
+      "name": "ChatGPT",
+      "vendor": "OpenAI",
+      "kind": "app",
+      "bundle_ids": [
+        "com.openai.chat"
+      ],
+      "registry_names": [
+        "ChatGPT"
+      ]
+    },
+    {
+      "id": "perplexity",
+      "name": "Perplexity",
+      "vendor": "Perplexity AI",
+      "kind": "app",
+      "bundle_ids": [
+        "ai.perplexity.mac"
+      ],
+      "registry_names": [
+        "Perplexity"
+      ],
+      "risk_factors": [
+        "local_file_access"
+      ]
+    },
+    {
+      "id": "gemini-desktop",
+      "name": "Gemini",
+      "vendor": "Google",
+      "kind": "app",
+      "bundle_ids": [
+        "com.google.gemini"
+      ],
+      "registry_names": [
+        "Gemini"
+      ]
+    },
+    {
+      "id": "copilot-desktop",
+      "name": "Microsoft Copilot",
+      "vendor": "Microsoft",
+      "kind": "app",
+      "bundle_ids": [
+        "com.microsoft.copilot"
+      ],
+      "registry_names": [
+        "Microsoft Copilot"
+      ]
+    },
+    {
+      "id": "raycast",
+      "name": "Raycast",
+      "vendor": "Raycast",
+      "kind": "app",
+      "bundle_ids": [
+        "com.raycast.macos"
+      ],
+      "ai_optional": true,
+      "ai_config": [
+        "~/Library/Application Support/com.raycast.macos/ai.json"
+      ]
+    },
+    {
+      "id": "comet",
+      "name": "Comet",
+      "vendor": "Perplexity AI",
+      "kind": "ai_browser",
+      "bundle_ids": [
+        "ai.perplexity.comet"
+      ],
+      "registry_names": [
+        "Comet"
+      ],
+      "risk_factors": [
+        "browses_on_behalf_of_user"
+      ]
+    },
+    {
+      "id": "dia",
+      "name": "Dia",
+      "vendor": "The Browser Company",
+      "kind": "ai_browser",
+      "bundle_ids": [
+        "company.thebrowser.dia"
+      ],
+      "risk_factors": [
+        "browses_on_behalf_of_user"
+      ]
+    },
+    {
+      "id": "atlas",
+      "name": "ChatGPT Atlas",
+      "vendor": "OpenAI",
+      "kind": "ai_browser",
+      "bundle_ids": [
+        "com.openai.atlas"
+      ],
+      "risk_factors": [
+        "browses_on_behalf_of_user"
+      ]
+    },
+    {
+      "id": "ollama",
+      "name": "Ollama",
+      "vendor": "Ollama",
+      "kind": "model_runtime",
+      "binaries": [
+        "ollama"
+      ],
+      "state_dirs": [
+        "~/.ollama"
+      ],
+      "bundle_ids": [
+        "com.electron.ollama"
+      ],
+      "ports": [
+        11434
+      ],
+      "model_dirs": [
+        "~/.ollama/models/manifests"
+      ]
+    },
+    {
+      "id": "lm-studio",
+      "name": "LM Studio",
+      "vendor": "Element Labs",
+      "kind": "model_runtime",
+      "binaries": [
+        "lms"
+      ],
+      "state_dirs": [
+        "~/.lmstudio"
+      ],
+      "bundle_ids": [
+        "ai.elementlabs.lmstudio"
+      ],
+      "ports": [
+        1234
+      ],
+      "model_dirs": [
+        "~/.cache/lm-studio/models"
+      ]
+    },
+    {
+      "id": "llama.cpp",
+      "name": "llama.cpp server",
+      "vendor": "ggml",
+      "kind": "model_runtime",
+      "binaries": [
+        "llama-server"
+      ],
+      "ports": [
+        8080
+      ]
+    },
+    {
+      "id": "vllm",
+      "name": "vLLM",
+      "vendor": "vLLM",
+      "kind": "model_runtime",
+      "binaries": [
+        "vllm"
+      ],
+      "ports": [
+        8000
+      ]
+    },
+    {
+      "id": "gpt4all",
+      "name": "GPT4All",
+      "vendor": "Nomic AI",
+      "kind": "model_runtime",
+      "binaries": [
+        "gpt4all"
+      ],
+      "bundle_ids": [
+        "ai.nomic.gpt4all"
+      ],
+      "model_dirs": [
+        "%LOCALAPPDATA%/nomic.ai/GPT4All",
+        "~/Library/Application Support/nomic.ai/GPT4All"
+      ]
+    },
+    {
+      "id": "jan",
+      "name": "Jan",
+      "vendor": "Menlo Research",
+      "kind": "model_runtime",
+      "bundle_ids": [
+        "jan.ai.app"
+      ],
+      "state_dirs": [
+        "~/.jan"
+      ],
+      "model_dirs": [
+        "~/.jan/models"
+      ],
+      "ports": [
+        1337
+      ]
+    },
+    {
+      "id": "localai",
+      "name": "LocalAI",
+      "vendor": "LocalAI",
+      "kind": "model_runtime",
+      "binaries": [
+        "local-ai"
+      ],
+      "ports": [
+        8081
+      ]
+    },
+    {
+      "id": "open-webui",
+      "name": "Open WebUI",
+      "vendor": "Open WebUI",
+      "kind": "ai_frontend",
+      "ports": [
+        3000
+      ],
+      "binaries": [
+        "open-webui"
+      ]
+    },
+    {
+      "id": "cline",
+      "name": "Cline",
+      "vendor": "Cline",
+      "kind": "extension",
+      "extension_ids": [
+        "saoudrizwan.claude-dev"
+      ]
+    },
+    {
+      "id": "continue",
+      "name": "Continue",
+      "vendor": "Continue",
+      "kind": "extension",
+      "extension_ids": [
+        "continue.continue"
+      ]
+    },
+    {
+      "id": "roo-code",
+      "name": "Roo Code",
+      "vendor": "Roo Veterinary",
+      "kind": "extension",
+      "extension_ids": [
+        "rooveterinaryinc.roo-cline"
+      ]
+    },
+    {
+      "id": "kilo-code",
+      "name": "Kilo Code",
+      "vendor": "Kilo",
+      "kind": "extension",
+      "extension_ids": [
+        "kilocode.kilo-code"
+      ]
+    },
+    {
+      "id": "copilot-ext",
+      "name": "GitHub Copilot",
+      "vendor": "GitHub",
+      "kind": "extension",
+      "extension_ids": [
+        "github.copilot",
+        "github.copilot-chat"
+      ]
+    },
+    {
+      "id": "openhands",
+      "name": "OpenHands",
+      "vendor": "All Hands AI",
+      "kind": "agent_platform",
+      "binaries": [
+        "openhands"
+      ],
+      "ports": [
+        3001
+      ]
+    }
   ]
 }

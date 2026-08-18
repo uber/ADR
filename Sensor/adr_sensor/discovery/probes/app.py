@@ -29,15 +29,28 @@ class AppProbe(BaseProbe):
         out: List[Observation] = []
         for directory in MAC_APP_DIRS:
             base = env.expand(directory)
-            for name in env.listdir(base):
-                if not name.endswith(".app"):
-                    continue
-                bundle = posixpath.join(base, name)
+            for bundle, name in self._bundles(env, base):
                 info = self._plist(env, posixpath.join(bundle, "Contents/Info.plist"))
                 if info is None:
                     continue
                 out.extend(self._bundle_observations(env, bundle, name, info))
         return out
+
+    def _bundles(self, env: DiscoveryEnv, base: str):
+        """Bundles directly in a directory, and one folder deeper.
+
+        Managed fleets routinely group apps into folders, and a top-level-only
+        scan silently misses everything an admin tidied away.
+        """
+        for name in env.listdir(base):
+            path = posixpath.join(base, name)
+            if name.endswith(".app"):
+                yield path, name
+                continue
+            if env.is_dir(path):
+                for child in env.listdir(path):
+                    if child.endswith(".app"):
+                        yield posixpath.join(path, child), child
 
     def _bundle_observations(self, env, bundle, name, info) -> List[Observation]:
         bundle_id = str(info.get("CFBundleIdentifier", ""))
@@ -53,9 +66,12 @@ class AppProbe(BaseProbe):
             vendor=(entry or {}).get("vendor"), realpath=realpath,
             install_root=install_root(realpath), install_method="dmg",
             signature=signature, owner=owner_of(bundle, env),
-            extra={"bundle_id": bundle_id, "executable": str(info.get("CFBundleExecutable", ""))},
+            extra={"bundle_id": bundle_id, "executable": str(info.get("CFBundleExecutable", "")),
+                   "risk_factors": self._risk_factors(env, entry), "version_source": "plist"},
             confidence=0.55,
         )
+        if entry and entry.get("ai_optional"):
+            base.extra["ai_enabled"] = self._is_ai_enabled(env, entry)
         out = [base]
         if signature.get("team_id"):
             out.append(Observation(
@@ -65,6 +81,23 @@ class AppProbe(BaseProbe):
                 signature=signature, owner=base.owner, confidence=0.5,
             ))
         return out
+
+    def _risk_factors(self, env: DiscoveryEnv, entry) -> List[str]:
+        """Factors the catalog attaches to a product, plus optional-AI gating.
+
+        Some products are only an AI tool once AI is configured. Reporting a
+        launcher with the feature switched off as an AI tool is a phantom.
+        """
+        if not entry:
+            return []
+        if entry.get("ai_optional") and not any(env.exists(path) for path in entry.get("ai_config", [])):
+            return []
+        return list(entry.get("risk_factors", []))
+
+    def _is_ai_enabled(self, env: DiscoveryEnv, entry) -> bool:
+        if not entry or not entry.get("ai_optional"):
+            return True
+        return any(env.exists(path) for path in entry.get("ai_config", []))
 
     def _plist(self, env: DiscoveryEnv, logical: str) -> Optional[Dict[str, Any]]:
         result = env.read(logical)
@@ -93,6 +126,7 @@ class AppProbe(BaseProbe):
         out: List[Observation] = []
         for record in env.registry:
             display = str(record.get("DisplayName", ""))
+            source = str(record.get("Source", "")).lower()
             entry = self.catalog.match("registry_names", display)
             location = str(record.get("InstallLocation", ""))
             publisher = record.get("Publisher")
@@ -104,9 +138,11 @@ class AppProbe(BaseProbe):
                 version=record.get("DisplayVersion"),
                 vendor=(entry or {}).get("vendor") or publisher,
                 realpath=env.realpath(location) if location else None,
-                install_root=install_root(location), install_method="msi",
+                install_root=install_root(location),
+                install_method="appx" if source == "appx" else "msi",
                 pkg_identity="registry:%s" % display, owner=env.user,
                 signature={"signed": bool(publisher), "publisher": publisher},
+                extra={"risk_factors": self._risk_factors(env, entry), "version_source": "registry"},
                 confidence=0.6,
             ))
         programs = env.expand("%LOCALAPPDATA%/Programs")

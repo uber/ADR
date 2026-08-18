@@ -47,6 +47,9 @@ class DiscoveredAsset:
     network: Dict[str, Any] = field(default_factory=dict)
     config_scope: Optional[str] = None
     liveness: str = "installed"
+    #: Where the asset lives when that is not this OS's own tree: a WSL
+    #: distribution, a devcontainer, a remote host. None means local.
+    location: Optional[str] = None
     transport: Optional[str] = None
     parent_agent: Optional[str] = None
     models: List[str] = field(default_factory=list)

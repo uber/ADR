@@ -13,11 +13,23 @@ from .env import DiscoveryEnv
 ROOT_MARKERS = ("Cellar", "node_modules", "pipx", "Programs", "venvs")
 
 
+#: Path roots that belong to the machine rather than to a person.
+SYSTEM_PREFIXES = ("/usr/", "/opt/", "/bin/", "/sbin/", "/Applications/", "/Library/",
+                   "/var/", "/etc/", "/nix/", "/snap/", "/Program Files")
+
+
 def owner_of(path: str, env: DiscoveryEnv) -> str:
-    """Attribute a path to a user, so two profiles never merge into one asset."""
-    parts = [part for part in str(path).replace("\\", "/").split("/") if part]
+    """Attribute a path to a user, so two profiles never merge into one asset.
+
+    A system-wide install belongs to nobody in particular; attributing it to
+    whoever happened to run the scan invents an owner and splits the fleet view.
+    """
+    text = str(path).replace("\\", "/")
+    parts = [part for part in text.split("/") if part]
     if len(parts) >= 2 and parts[0] in ("Users", "home"):
         return parts[1]
+    if any(text.startswith(prefix) for prefix in SYSTEM_PREFIXES):
+        return "system"
     return env.user
 
 
@@ -40,18 +52,42 @@ def install_root(path: Optional[str]) -> Optional[str]:
     return "/" + "/".join(parts[:-1]) if len(parts) > 1 else "/"
 
 
-def install_method(path: Optional[str]) -> str:
+#: Path markers that identify how something was installed, most specific first.
+#: Order matters: a uv tool lives under ~/.local, and a pipx venv under it too,
+#: so the generic "native installer" rule has to come last.
+METHOD_MARKERS = (
+    ("/nix/store/", "nix"),
+    ("/cellar/", "brew"),
+    ("/homebrew/", "brew"),
+    ("/node_modules/", "npm"),
+    ("/pipx/", "pipx"),
+    ("/uv/tools/", "uv"),
+    ("/go/bin/", "go"),
+    ("/go/pkg/", "go"),
+    ("/.cargo/bin/", "cargo"),
+    ("/mise/installs/", "mise"),
+    ("/.asdf/installs/", "asdf"),
+    ("/applications/", "dmg"),
+    ("/programs/", "msi"),
+)
+
+
+def install_method(path: Optional[str], home: Optional[str] = None) -> str:
+    """Infer the install channel from where something lives.
+
+    Channel drives remediation - a wrong answer sends the fix to the wrong
+    package manager - so the ordering above is part of the contract.
+    """
     if not path:
         return "unknown"
     lowered = str(path).lower()
-    if "/nix/store/" in lowered:
-        return "nix"
-    if "cellar" in lowered or "/homebrew/" in lowered:
-        return "brew"
-    if "node_modules" in lowered:
-        return "npm"
-    if "pipx" in lowered:
-        return "pipx"
     if lowered.endswith(".appimage"):
         return "appimage"
+    for marker, method in METHOD_MARKERS:
+        if marker in lowered:
+            return method
+    if home:
+        prefix = home.lower().rstrip("/")
+        if lowered.startswith(prefix + "/.local/bin/") or lowered.startswith(prefix + "/.local/share/"):
+            return "native"
     return "unknown"

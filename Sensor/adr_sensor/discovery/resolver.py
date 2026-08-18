@@ -62,7 +62,10 @@ def conflicts(left: Observation, right: Observation) -> bool:
         return True
     if left.pkg_identity and right.pkg_identity and left.pkg_identity != right.pkg_identity:
         return True
-    if left.owner and right.owner and left.owner != right.owner:
+    if (left.owner and right.owner and left.owner != right.owner
+            and "system" not in (left.owner, right.owner)):
+        # Two people's installs are two assets. A user's shim pointing at a
+        # machine-wide install is still one asset.
         return True
     return False
 
@@ -71,26 +74,43 @@ def resolve(observations: List[Observation],
             telemetry: Optional[Dict[str, str]] = None) -> List[DiscoveredAsset]:
     """Union-find over identity keys, then one asset per group."""
     telemetry = telemetry or {}
-    state_dirs = [o for o in observations if (o.identity_hint or "").startswith("state:")]
-    primary = [o for o in observations if not (o.identity_hint or "").startswith("state:")]
+    # Attributes of an install rather than installs in their own right: a state
+    # directory, a model store, a listening port. They bind to the install they
+    # belong to, and only stand alone when there is nothing to bind to.
+    attributes = [o for o in observations if (o.identity_hint or "").startswith("attr:")]
+    primary = [o for o in observations if not (o.identity_hint or "").startswith("attr:")]
 
     union = _UnionFind(len(primary))
     buckets: Dict[str, List[int]] = {}
     for index, observation in enumerate(primary):
         for key in merge_keys(observation):
             buckets.setdefault(key, []).append(index)
+    # Conflict has to be checked against the whole merged group, not pairwise:
+    # two users' agents both merge happily with one system-wide binary, and
+    # transitivity would then quietly unite the two users.
+    owners: Dict[int, set] = {}
+    for index, observation in enumerate(primary):
+        owners[index] = {observation.owner} if observation.owner else set()
     for members in buckets.values():
         anchor = members[0]
         for other in members[1:]:
-            if not conflicts(primary[anchor], primary[other]):
-                union.union(anchor, other)
+            left, right = union.find(anchor), union.find(other)
+            if left == right:
+                continue
+            if conflicts(primary[anchor], primary[other]):
+                continue
+            merged = owners.get(left, set()) | owners.get(right, set())
+            if len({owner for owner in merged if owner and owner != "system"}) > 1:
+                continue
+            union.union(anchor, other)
+            owners[union.find(anchor)] = merged
 
     groups: Dict[int, List[Observation]] = {}
     for index, observation in enumerate(primary):
         groups.setdefault(union.find(index), []).append(observation)
 
     assets = [_build(group) for group in groups.values()]
-    _attach_state_dirs(assets, state_dirs)
+    _attach_attributes(assets, attributes)
     for asset in assets:
         _apply_telemetry(asset, telemetry)
         _finalize_liveness(asset)
@@ -117,11 +137,28 @@ def _build(group: List[Observation]) -> DiscoveredAsset:
     return asset
 
 
+#: Observation metadata carried onto the asset as-is. These are descriptive
+#: facts a probe learned - a hook's event, a skill's description, an
+#: instruction file's format - rather than fields the resolver reasons about.
+PASSTHROUGH_KEYS = (
+    "scope", "host_app", "plugin", "description", "line_count", "helpers", "network_hosts",
+    "event", "matcher", "handler", "target", "destination", "server", "format", "imports",
+    "globs", "author", "source", "tools", "model", "event_known", "bundle", "project",
+    "host", "extension_id", "schedule", "trigger", "repository", "image", "account_type",
+    "auth_method", "session_count", "worktrees", "repositories", "mode", "mounts",
+    "secrets", "session", "sessions", "enabled_by",
+)
+
+#: Version sources, most authoritative first. A self-updating CLI leaves stale
+#: package metadata behind, so what the binary reports wins.
+VERSION_PRECEDENCE = ("runtime", "plist", "registry", "package", "unknown")
+
+
 def _absorb(asset: DiscoveredAsset, observation: Observation) -> None:
     """Fold one observation's facts into the asset, first writer wins."""
     extra = observation.extra or {}
-    if observation.version and not asset.version:
-        asset.version = observation.version
+    if observation.version:
+        _absorb_version(asset, observation.version, extra.get("version_source", "unknown"))
     if observation.install_root and not asset.install_root:
         asset.install_root = observation.install_root
     if observation.install_method != "unknown" and asset.install_method == "unknown":
@@ -133,6 +170,8 @@ def _absorb(asset: DiscoveredAsset, observation: Observation) -> None:
     for flag in extra.get("flags", []):
         if flag not in asset.flags:
             asset.flags.append(flag)
+    if extra.get("bytes"):
+        asset.risk["bytes"] = extra["bytes"]
     if extra.get("models"):
         asset.models = sorted(set(asset.models) | set(extra["models"]))
     if extra.get("port"):
@@ -145,7 +184,21 @@ def _absorb(asset: DiscoveredAsset, observation: Observation) -> None:
     if extra.get("scope"):
         asset.config_scope = extra["scope"]
     if extra.get("parent_agent"):
-        asset.parent_agent = extra["parent_agent"]
+        asset.parent_agent = asset.parent_agent or extra["parent_agent"]
+        parents = set(asset.risk.get("parent_agents", [])) | {extra["parent_agent"]}
+        asset.risk["parent_agents"] = sorted(parents)
+    if "enabled" in extra:
+        # A server enabled anywhere it is declared is live. Disabled in one
+        # place and enabled in another is enabled.
+        asset.risk["enabled"] = bool(asset.risk.get("enabled")) or bool(extra["enabled"])
+    if extra.get("stored_credential"):
+        asset.risk["stored_credential"] = True
+    if extra.get("source"):
+        asset.risk["source"] = extra["source"]
+    if extra.get("location") and not asset.location:
+        asset.location = extra["location"]
+    if extra.get("ai_enabled") is not None:
+        asset.risk["ai_enabled"] = extra["ai_enabled"]
     if extra.get("argv") and "argv" not in asset.risk:
         # Flag *names* are kept because they carry the risk signal - permission
         # bypass, unpinned launch, remote target. Their values were dropped in
@@ -167,6 +220,20 @@ def _absorb(asset: DiscoveredAsset, observation: Observation) -> None:
         asset.risk["credential_kinds"] = extra["credential_kinds"]
     if extra.get("running"):
         asset.liveness = "running"
+    for key in PASSTHROUGH_KEYS:
+        if key in extra and extra[key] is not None and key not in asset.risk:
+            asset.risk[key] = extra[key]
+
+
+def _absorb_version(asset: DiscoveredAsset, version: str, source: str) -> None:
+    """Take the most authoritative version, and say so when sources disagree."""
+    rank = VERSION_PRECEDENCE.index(source) if source in VERSION_PRECEDENCE else 99
+    current = asset.risk.get("version_rank", 99)
+    if asset.version and asset.version != version and "version_conflict" not in asset.flags:
+        asset.flags.append("version_conflict")
+    if asset.version is None or rank < current:
+        asset.version = version
+        asset.risk["version_rank"] = rank
 
 
 def _identity(anchor: Observation, group: List[Observation]) -> str:
@@ -180,29 +247,50 @@ def _identity(anchor: Observation, group: List[Observation]) -> str:
     return "unknown:" + anchor.path
 
 
-def _attach_state_dirs(assets: List[DiscoveredAsset], state_dirs: List[Observation]) -> None:
-    """Bind a state directory to its install, or let it stand alone, quietly.
+def _attach_attributes(assets: List[DiscoveredAsset], attributes: List[Observation]) -> None:
+    """Bind an attribute observation to its install, or let it stand alone.
 
     A leftover state directory must not resurrect an uninstalled tool at full
-    confidence, so an unbound one becomes its own ``state_only`` asset.
+    confidence, so an unbound one becomes its own ``state_only`` asset. A model
+    store or a listening port with no install behind it is reported the same way
+    - present, but not pretending to be a full install record.
     """
-    for observation in state_dirs:
+    orphans: Dict[tuple, DiscoveredAsset] = {}
+    for observation in attributes:
         catalog_id = observation.identity_hint.split(":", 1)[1]
+        # Prefer an install owned by the same user; fall back to a system-wide
+        # one, since a machine-wide app with per-user state is the normal shape.
         candidates = [asset for asset in assets
-                      if asset.catalog_id == catalog_id and asset.owner == observation.owner
-                      and "state_only" not in asset.flags]
+                      if asset.catalog_id == catalog_id and "state_only" not in asset.flags
+                      and asset.owner in (observation.owner, "system", "")]
         if candidates:
-            target = sorted(candidates, key=lambda a: (-len(a.channels), a.install_path or ""))[0]
+            target = sorted(candidates,
+                            key=lambda a: (a.owner != observation.owner, -len(a.channels),
+                                           a.install_path or ""))[0]
             target.evidence.append(Evidence(observation.probe, observation.channel,
                                             observation.path, observation.matched_on,
                                             observation.confidence))
+            _absorb(target, observation)
+            continue
+        existing = orphans.get((catalog_id, observation.owner))
+        if existing is not None:
+            # Several attributes of one absent install - a state directory and a
+            # model store, say - are one record, not one record each.
+            existing.evidence.append(Evidence(observation.probe, observation.channel,
+                                              observation.path, observation.matched_on,
+                                              observation.confidence))
+            _absorb(existing, observation)
             continue
         orphan = DiscoveredAsset(kind=observation.kind, name=observation.name, identity=catalog_id,
                                  owner=observation.owner, vendor=observation.vendor,
                                  catalog_id=catalog_id, install_path=observation.path,
-                                 install_root=observation.path, flags=["state_only"])
+                                 install_root=observation.path)
+        if observation.matched_on == "state_dir":
+            orphan.flags.append("state_only")
         orphan.evidence.append(Evidence(observation.probe, observation.channel, observation.path,
                                         observation.matched_on, observation.confidence))
+        _absorb(orphan, observation)
+        orphans[(catalog_id, observation.owner)] = orphan
         assets.append(orphan)
 
 
@@ -216,8 +304,24 @@ def _apply_telemetry(asset: DiscoveredAsset, telemetry: Dict[str, str]) -> None:
                                    "session_events", 0.7))
 
 
+#: Kinds that describe something arranged to run rather than something running.
+DECLARATIVE_KINDS = ("agent_definition", "scheduled_agent", "ci_agent", "cloud_agent",
+                     "skill", "command", "hook", "output_style", "rules", "instructions",
+                     "plugin")
+
+
 def _finalize_liveness(asset: DiscoveredAsset) -> None:
     if asset.liveness == "running":
+        return
+    if asset.kind in DECLARATIVE_KINDS:
+        # A definition is not an installation. It is arranged to run, and until
+        # telemetry or a process says otherwise that is all we know.
+        asset.liveness = "declared_only"
+        return
+    if "state_only" in asset.flags:
+        # A leftover state directory is residue. Calling it installed invites
+        # somebody to go looking for a binary that is not there.
+        asset.liveness = "declared_only"
         return
     if asset.channels == ["config"]:
         # Declared but never seen running and never used: a cleanup candidate,

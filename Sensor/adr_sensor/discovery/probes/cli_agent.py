@@ -14,7 +14,20 @@ from ..paths import install_method, install_root, owner_of
 EXTRA_BIN_DIRS = ("~/.local/bin", "/usr/local/bin", "/opt/homebrew/bin", "~/bin", "~/.npm-global/bin")
 
 NODE_MODULE_ROOTS = ("/opt/homebrew/lib/node_modules", "/usr/local/lib/node_modules",
-                     "~/.npm-global/lib/node_modules")
+                     "~/.npm-global/lib/node_modules", "~/.local/share/pnpm/global/5/node_modules")
+
+#: Version managers keep a node install per version, each with its own global
+#: package root. A fleet on nvm is invisible to a probe that checks the system
+#: root alone.
+VERSIONED_NODE_ROOTS = ("~/.nvm/versions/node", "~/.local/share/mise/installs/node",
+                        "~/.asdf/installs/nodejs")
+
+#: Binaries that are dispatchers rather than the tool itself. Resolving a shim
+#: leads to the version manager, not to the agent, so the real install has to be
+#: recovered from the manager's own layout.
+SHIM_BINARIES = frozenset({"mise", "asdf", "rtx"})
+
+VERSION_MANAGER_INSTALL_ROOTS = ("~/.local/share/mise/installs", "~/.asdf/installs")
 
 #: Tier 2 escalation budget: hashing is only worth it for binaries in
 #: non-standard locations, and only when the catalog carries hashes at all.
@@ -30,13 +43,40 @@ class CliAgentProbe(BaseProbe):
         found.extend(self._from_bin_dirs(env))
         found.extend(self._from_node_modules(env))
         found.extend(self._from_state_dirs(env))
+        found.extend(self._from_locations(env))
         return found
+
+    def _from_locations(self, env: DiscoveryEnv) -> List[Observation]:
+        """Agents installed in a WSL distribution or a mounted image.
+
+        A Windows-only scan reports a developer laptop as agent-free while the
+        whole toolchain lives one filesystem boundary away.
+        """
+        out: List[Observation] = []
+        for location in env.locations:
+            root = location.get("root", "").rstrip("/")
+            location_home = location.get("home", "/root")
+            for suffix in ("/usr/local/bin", "/usr/bin", location_home + "/.local/bin",
+                           location_home + "/bin"):
+                directory = root + suffix
+                for name in env.listdir(directory):
+                    entry = self.catalog.match("binaries", name)
+                    if not entry:
+                        continue
+                    out.extend(self._binary_observations(
+                        env, entry, posixpath.join(directory, name), "binary:%s" % name,
+                        location="%s:%s" % (location.get("kind", "location"),
+                                            location.get("name", "unnamed"))))
+        return out
 
     # -- Stage 0/1: binaries on PATH and in conventional bin dirs ---------
 
     def _bin_dirs(self, env: DiscoveryEnv) -> List[str]:
         directories = [d for d in env.env_vars.get("PATH", "").split(":") if d]
         directories.extend(env.expand(d) for d in EXTRA_BIN_DIRS)
+        directories.extend(env.expand(d) for d in
+                           ("~/go/bin", "~/.cargo/bin", "~/.local/share/mise/shims",
+                            "~/.asdf/shims", "/usr/bin", "/bin"))
         for user in [env.user] + list(env.extra_users):
             directories.append("/Users/%s/.local/bin" % user)
             directories.append("/home/%s/.local/bin" % user)
@@ -71,16 +111,17 @@ class CliAgentProbe(BaseProbe):
         entry = self.catalog.match("sha256", digest)
         return entry, ("sha256:%s" % digest[:12] if entry else "")
 
-    def _binary_observations(self, env, entry, logical, matched_on) -> List[Observation]:
-        realpath = env.realpath(logical)
+    def _binary_observations(self, env, entry, logical, matched_on, location=None) -> List[Observation]:
+        realpath = self._resolve_shim(env, entry, env.realpath(logical))
         signature = self._signature(env, realpath)
         base = Observation(
             probe=self.name, channel="filesystem", kind=entry.get("kind", "cli_agent"),
             name=entry["name"], path=logical, matched_on=matched_on,
             catalog_id=entry["id"], version=self._version(env, logical),
             vendor=entry.get("vendor"), realpath=realpath, install_root=install_root(realpath),
-            install_method=install_method(realpath), signature=signature,
+            install_method=install_method(realpath, env.home), signature=signature,
             owner=owner_of(logical, env), confidence=0.5,
+            extra=dict({"location": location} if location else {}, version_source="runtime"),
         )
         out = [base]
         if signature.get("team_id"):
@@ -91,6 +132,19 @@ class CliAgentProbe(BaseProbe):
                 signature=signature, owner=base.owner, confidence=0.5,
             ))
         return out
+
+    def _resolve_shim(self, env: DiscoveryEnv, entry, realpath: str) -> str:
+        """Follow a version-manager shim to the install it dispatches to."""
+        if posixpath.basename(realpath) not in SHIM_BINARIES:
+            return realpath
+        for name in entry.get("binaries", []):
+            for root in VERSION_MANAGER_INSTALL_ROOTS:
+                base = posixpath.join(env.expand(root), name)
+                for version in env.listdir(base):
+                    candidate = posixpath.join(base, version, "bin", name)
+                    if env.exists(candidate):
+                        return candidate
+        return realpath
 
     def _version(self, env: DiscoveryEnv, logical: str) -> Optional[str]:
         out = env.run([logical, "--version"], timeout=2.0)
@@ -113,9 +167,17 @@ class CliAgentProbe(BaseProbe):
 
     # -- Stage 1: package-manager provenance ------------------------------
 
+    def _node_roots(self, env: DiscoveryEnv) -> List[str]:
+        roots = list(NODE_MODULE_ROOTS)
+        for versioned in VERSIONED_NODE_ROOTS:
+            base = env.expand(versioned)
+            for version in env.listdir(base):
+                roots.append(posixpath.join(base, version, "lib/node_modules"))
+        return roots
+
     def _from_node_modules(self, env: DiscoveryEnv) -> List[Observation]:
         out: List[Observation] = []
-        for root in NODE_MODULE_ROOTS:
+        for root in self._node_roots(env):
             base = env.expand(root)
             for name in env.listdir(base):
                 if name.startswith("@"):
@@ -151,7 +213,7 @@ class CliAgentProbe(BaseProbe):
             catalog_id=entry["id"], version=manifest.get("version"), vendor=entry.get("vendor"),
             realpath=target, install_root=install_root(package_dir), install_method="npm",
             pkg_identity="npm:%s" % manifest.get("name"), owner=owner_of(package_dir, env),
-            confidence=0.6,
+            extra={"version_source": "package"}, confidence=0.6,
         )
 
     # -- Stage 1: state directories, the strongest presence signal --------
@@ -168,7 +230,7 @@ class CliAgentProbe(BaseProbe):
                         probe=self.name, channel="filesystem", kind=entry.get("kind", "cli_agent"),
                         name=entry["name"], path=logical, matched_on="state_dir",
                         catalog_id=entry["id"], vendor=entry.get("vendor"),
-                        identity_hint="state:%s" % entry["id"], owner=user, confidence=0.45,
+                        identity_hint="attr:%s" % entry["id"], owner=user, confidence=0.45,
                     ))
         return out
 

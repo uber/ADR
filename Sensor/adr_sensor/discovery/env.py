@@ -95,6 +95,10 @@ class DiscoveryEnv:
         case_insensitive: bool = False,
         telemetry: Optional[Dict[str, str]] = None,
         extra_users: Sequence[str] = (),
+        locations: Sequence[Dict[str, str]] = (),
+        scheduled_tasks: Sequence[Dict[str, Any]] = (),
+        preferences: Optional[Dict[str, Any]] = None,
+        policy: Optional[Dict[str, Any]] = None,
     ):
         self.root = Path(root)
         self.platform = platform
@@ -108,6 +112,20 @@ class DiscoveryEnv:
         #: catalog id -> ISO timestamp of the most recent session, from Sensor.
         self.telemetry = dict(telemetry or {})
         self.extra_users = list(extra_users)
+        #: Filesystem roots that are on this machine but not of this OS - WSL
+        #: distributions, mounted container images. Each is
+        #: ``{"kind": "wsl", "name": "Ubuntu", "root": "/wsl/Ubuntu", "home": "/home/alice"}``.
+        #: A tool installed in one of these is present on the endpoint even
+        #: though no host path contains it.
+        self.locations = [dict(item) for item in locations]
+        #: Windows Task Scheduler entries, as the platform reports them.
+        self.scheduled_tasks = [dict(item) for item in scheduled_tasks]
+        #: macOS managed-preference domains, as delivered by MDM. A file-only
+        #: probe reports an MDM-managed fleet as having no policy at all.
+        self.preferences = dict(preferences or {})
+        #: Tenant configuration: corporate domains, sensitive repositories.
+        #: Never hardcoded - one tenant's internal host is another's third party.
+        self.policy = dict(policy or {})
         self._http = http
         self._runner = runner
         #: Probes append error records here rather than raising.
@@ -123,15 +141,19 @@ class DiscoveryEnv:
         return self.root / text.lstrip("/\\").replace("\\", "/")
 
     def logical(self, real: Path) -> str:
-        """Map a path beneath ``root`` back to its logical form."""
-        try:
-            relative = Path(real).relative_to(self.root)
-        except ValueError:
-            try:
-                relative = Path(os.path.realpath(str(real))).relative_to(self.root.resolve())
-            except ValueError:
-                return str(real)
-        return "/" + str(relative)
+        """Map a path beneath ``root`` back to its logical form.
+
+        Tolerant of symlinked prefixes - on macOS ``/var`` is a link to
+        ``/private/var``, so the same directory has two spellings and a naive
+        prefix strip leaks the fixture root into every install path.
+        """
+        for base in (self.root, Path(os.path.realpath(str(self.root)))):
+            for candidate in (Path(real), Path(os.path.realpath(str(real)))):
+                try:
+                    return "/" + str(candidate.relative_to(base))
+                except ValueError:
+                    continue
+        return str(real)
 
     def expand(self, logical: str) -> str:
         """Expand ``~`` and ``%VAR%`` / ``$VAR`` using the injected environment."""
@@ -175,7 +197,15 @@ class DiscoveryEnv:
                 target = os.readlink(str(current))
             except OSError:
                 break
-            following = self.real(target) if os.path.isabs(target) else current.parent / target
+            if os.path.isabs(target):
+                # An absolute link target is a real path when it already lives
+                # under the root, and a logical one otherwise. In production the
+                # root is "/" and the two are the same thing.
+                candidate = Path(target)
+                inside = str(candidate).startswith(str(self.root))
+                following = candidate if inside else self.real(target)
+            else:
+                following = current.parent / target
             try:
                 following = Path(os.path.normpath(str(following)))
             except (OSError, ValueError):

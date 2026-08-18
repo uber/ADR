@@ -40,6 +40,7 @@ def discover(env: DiscoveryEnv, catalog: Optional[Catalog] = None,
 
     review_queue = OpenWorldProbe(catalog).score_candidates(env, observations)
     assets = resolve(observations, telemetry=env.telemetry)
+    mark_effective_scope(assets)
     findings = derive_findings(assets)
 
     snapshot = DiscoverySnapshot(
@@ -139,6 +140,31 @@ def _live_processes():
         pid, ppid, user, comm, args = fields
         processes.append(ProcessInfo(int(pid), int(ppid), comm, args.split(), user=user))
     return tuple(processes)
+
+
+#: Which declaration wins when one name exists at several scopes. Enterprise
+#: policy cannot be overridden by a user; a project skill overrides a personal
+#: one, because it travels with the repository the agent is working in.
+SCOPE_PRECEDENCE = {
+    "mcp_server": ("enterprise_managed", "project", "user", "plugin"),
+    "skill": ("project", "personal", "plugin"),
+    "command": ("project", "personal", "plugin"),
+    "agent_definition": ("project", "personal", "plugin"),
+}
+
+
+def mark_effective_scope(assets: List[DiscoveredAsset]) -> None:
+    """Say which of several same-named declarations is the one that runs."""
+    groups: Dict[tuple, List[DiscoveredAsset]] = {}
+    for asset in assets:
+        if asset.kind in SCOPE_PRECEDENCE:
+            groups.setdefault((asset.kind, asset.name, asset.owner), []).append(asset)
+    for (kind, _, _), members in groups.items():
+        order = SCOPE_PRECEDENCE[kind]
+        winner = min(members, key=lambda a: order.index(a.config_scope)
+                     if a.config_scope in order else 99)
+        for asset in members:
+            asset.risk["effective"] = asset is winner
 
 
 def derive_findings(assets: List[DiscoveredAsset]) -> List[Dict[str, Any]]:
