@@ -11,22 +11,36 @@ from .schema import DiscoveredAsset, DiscoverySnapshot
 
 
 def config_fingerprint(asset: DiscoveredAsset) -> str:
-    """What a config change means for an asset, reduced to twelve characters."""
+    """What a config change means for an asset, reduced to twelve characters.
+
+    Every field is normalized rather than assumed: a null endpoint is a normal
+    thing for a stdio server to have, and it must not be able to take down the
+    comparison that produces the whole delta.
+    """
     risk = asset.risk or {}
-    payload = "|".join([asset.transport or "", str(risk.get("command", "")),
-                        str(risk.get("args", "")), str(risk.get("pinned", "")),
-                        asset.network.get("endpoint", "")])
+    network = asset.network or {}
+    payload = "|".join(str(value if value is not None else "")
+                       for value in (asset.transport, risk.get("command"), risk.get("args"),
+                                     risk.get("pinned"), network.get("endpoint")))
     return hashlib.sha256(payload.encode()).hexdigest()[:12]
 
 
-def diff_snapshots(previous: DiscoverySnapshot, current: DiscoverySnapshot) -> List[Dict[str, Any]]:
+def diff_snapshots(previous: DiscoverySnapshot, current: DiscoverySnapshot,
+                   allow_cross_host: bool = False) -> List[Dict[str, Any]]:
     """Deltas between two snapshots of one endpoint.
 
     Order-stable by construction: ``diff(a, b)`` is the exact inverse of
     ``diff(b, a)``, so a skewed clock cannot change what the delta says.
+
+    Both inputs are validated first. Comparing two machines produces a delta
+    that looks authoritative and means nothing, and once these come from a fleet
+    store rather than from one host that is a single bad query away.
     """
-    before = {asset.asset_id: asset for asset in previous.assets}
-    after = {asset.asset_id: asset for asset in current.assets}
+    if not allow_cross_host and previous.hostname != current.hostname:
+        raise ValueError("refusing to diff snapshots from different hosts: %s vs %s"
+                         % (previous.hostname, current.hostname))
+    before = _index(previous)
+    after = _index(current)
     changes: List[Dict[str, Any]] = []
 
     for asset_id in sorted(set(before) & set(after)):
@@ -46,6 +60,17 @@ def diff_snapshots(previous: DiscoverySnapshot, current: DiscoverySnapshot) -> L
     arrived = [after[key] for key in sorted(set(after) - set(before))]
     changes.extend(_pair_reinstalls(gone, arrived))
     return changes
+
+
+def _index(snapshot: DiscoverySnapshot) -> Dict[str, DiscoveredAsset]:
+    """Index a snapshot by asset id, refusing an ambiguous one."""
+    indexed: Dict[str, DiscoveredAsset] = {}
+    for asset in snapshot.assets:
+        if asset.asset_id in indexed:
+            raise ValueError("snapshot %s has duplicate asset_id %s"
+                             % (snapshot.hostname, asset.asset_id))
+        indexed[asset.asset_id] = asset
+    return indexed
 
 
 def _pair_reinstalls(gone: List[DiscoveredAsset], arrived: List[DiscoveredAsset]) -> List[Dict[str, Any]]:

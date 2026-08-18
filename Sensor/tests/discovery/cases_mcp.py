@@ -270,8 +270,11 @@ def m19():
     return w, [n_servers(3),
                has("channels per server",
                    lambda s: sorted((a.name, tuple(a.channels)) for a in servers(s))
-                   == [("declared", ("config",)), ("mcp-rogue", ("runtime",)),
-                       ("server-both", ("config", "runtime"))]),
+                   # The declared name wins over one derived from argv: a
+                   # config says what a server is called, a command line only
+                   # says what it launches.
+                   == [("both", ("config", "runtime")), ("declared", ("config",)),
+                       ("mcp-rogue", ("runtime",))]),
                finding_count("undeclared_mcp_server", 1)]
 
 

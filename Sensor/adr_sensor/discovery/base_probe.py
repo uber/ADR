@@ -74,6 +74,23 @@ class BaseProbe:
     def error(self, env: DiscoveryEnv, path: str, message: str) -> None:
         env.errors.append({"probe": self.name, "path": sanitize(path), "message": sanitize(message)})
 
+    def isolate(self, env: DiscoveryEnv, label: str, work, default=None):
+        """Run one record's worth of work, surviving anything it does.
+
+        The probe-level boundary is too coarse to keep the promise the module
+        makes. A failure happens per record, so isolating per probe means one
+        malformed - or deliberately malformed - entry erases every valid sibling
+        beside it, which is a denial of inventory an attacker can arrange.
+        """
+        try:
+            return work()
+        except Exception as exc:
+            env.errors.append({"probe": self.name, "path": sanitize(str(label)),
+                               "stage": "record",
+                               "error_type": exc.__class__.__name__,
+                               "message": sanitize(str(exc))})
+            return default
+
     def read_json(self, env: DiscoveryEnv, logical: str) -> Optional[Any]:
         """Bounded read plus tolerant parse. Malformed input is one error record.
 

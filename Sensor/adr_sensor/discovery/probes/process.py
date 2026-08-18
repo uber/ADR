@@ -6,13 +6,14 @@ appears in no config is close to a working definition of unsanctioned.
 """
 
 import posixpath
+import re
 from typing import Dict, List, Optional
 
 from ..base_probe import BaseProbe, Observation
 from ..env import DiscoveryEnv, ProcessInfo
 from ..paths import install_method, install_root
 from ..redact import redact_argv
-from .mcp import EPHEMERAL_LAUNCHERS, classify_launch, server_identity
+from .mcp import classify_launch, server_identity
 
 #: Interpreters that say nothing on their own - the payload is in argv.
 INTERPRETERS = frozenset({"node", "python", "python3", "bun", "deno", "ruby", "sh", "bash"})
@@ -23,9 +24,15 @@ INTERPRETERS = frozenset({"node", "python", "python3", "bun", "deno", "ruby", "s
 PATH_FALLBACK_DIRS = ("/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin")
 
 #: A child of an agent is only a *candidate* MCP server. An agent also spawns
-#: shells, ripgrep and build tools, and calling all of them servers manufactures
-#: undeclared-server findings on every developer laptop. Require a positive hint.
-SERVER_HINTS = ("mcp", "-server", "server-")
+#: shells, linters, bundlers and build tools, and calling those servers
+#: manufactures high-severity findings out of ordinary development. The
+#: evidence has to be MCP-specific: the word "mcp" as a component of a token,
+#: or the protocol's own package scope. "server" is not evidence - a file named
+#: my-server-test.py is a test.
+SERVER_MARKERS = ("mcp", "modelcontextprotocol")
+
+#: ``npm run x`` executes a package script, whatever the script is called.
+TASK_RUNNERS = frozenset({"npm", "yarn", "pnpm", "bun", "just", "make"})
 
 
 class ProcessProbe(BaseProbe):
@@ -193,17 +200,25 @@ class ProcessProbe(BaseProbe):
 def looks_like_server(argv: List[str]) -> bool:
     """Whether a child process is plausibly an MCP server rather than a tool call.
 
-    Deliberately conservative. Missing a server that names itself nothing costs
-    one false negative; calling every ``bash -c`` a server costs the operator
-    their trust in the whole findings list.
+    Deliberately conservative, and deliberately not satisfied by the launcher
+    alone: ``npx`` runs eslint far more often than it runs a server. Anything
+    this misses that a config declares is recovered by correlation in the
+    runner, so the cost of being strict here is close to nothing, while the cost
+    of being loose is a security finding on every ``npx vite``.
     """
     if not argv:
         return False
-    launcher = posixpath.basename(argv[0])
-    if launcher in EPHEMERAL_LAUNCHERS or launcher == "docker":
-        return True
-    joined = " ".join(argv).lower()
-    return any(hint in joined for hint in SERVER_HINTS)
+    launcher = posixpath.basename(argv[0]).lower()
+    if launcher in TASK_RUNNERS and len(argv) > 1 and argv[1] in ("run", "run-script", "exec"):
+        return False
+    for token in argv:
+        lowered = str(token).lower()
+        if "modelcontextprotocol" in lowered:
+            return True
+        components = re.split(r"[^a-z0-9]+", lowered)
+        if "mcp" in components:
+            return True
+    return False
 
 
 #: docker flags whose next argument is a value, not the image.

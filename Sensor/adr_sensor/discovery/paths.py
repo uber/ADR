@@ -5,6 +5,7 @@ install root that changes on every upgrade would destroy the diff that is the
 module's actual output.
 """
 
+import posixpath
 import re
 from typing import Optional
 
@@ -17,6 +18,20 @@ ROOT_MARKERS = ("Cellar", "node_modules", "pipx", "Programs", "venvs")
 #: Path roots that belong to the machine rather than to a person.
 SYSTEM_PREFIXES = ("/usr/", "/opt/", "/bin/", "/sbin/", "/Applications/", "/Library/",
                    "/var/", "/etc/", "/nix/", "/snap/", "/Program Files")
+
+
+def is_descendant(path: str, base: str) -> bool:
+    """True when ``path`` is ``base`` or sits inside it.
+
+    A raw prefix test says /dev/application lives under /dev/app, which quietly
+    extends one project's approvals to another project that merely shares the
+    first few letters of its name.
+    """
+    if not path or not base:
+        return False
+    left = posixpath.normpath(str(path)).rstrip("/")
+    right = posixpath.normpath(str(base)).rstrip("/")
+    return left == right or left.startswith(right + "/")
 
 
 def owner_of(path: str, env: DiscoveryEnv) -> str:

@@ -330,3 +330,172 @@ def r18():
                    lambda s: quiet == [] or quiet),
                has("a permitted path resolving into one is recorded",
                    lambda s: any("denied" in e.get("message", "") for e in env.errors))]
+
+
+@case("R-19")
+def r19():
+    """One malformed record must not erase its valid siblings."""
+    w = World()
+    w.json("~/.claude.json", {"mcpServers": {
+        "good-a": {"command": "node", "args": ["a.js"]},
+        "bad-env": {"command": "node", "args": ["b.js"], "env": ["NOT", "A", "MAP"]},
+        "bad-spec": "a string where an object belongs",
+        "good-b": {"command": "node", "args": ["c.js"]}}})
+    return w, [has("the valid servers survive",
+                   lambda s: {"good-a", "good-b"} <= {a.name for a in assets(s, kind="mcp_server")}),
+               has("the malformed record is reported, not dropped silently",
+                   lambda s: any("malformed_config" in a.flags
+                                 for a in assets(s, kind="mcp_server")))]
+
+
+@case("R-20")
+def r20():
+    """Ordinary agent children are not MCP servers; declared ones still are."""
+    from adr_sensor.discovery.probes.process import looks_like_server
+    ordinary = [["npx", "eslint", "."], ["npx", "vite", "--host"], ["npm", "run", "mcp-docs"],
+                ["python", "my-server-test.py"], ["bash", "-c", "echo server-status"],
+                ["node", "build.js"], ["yarn", "run", "start-server"]]
+    servers = [["npx", "-y", "mcp-server-github"], ["node", "/tmp/mcp-rogue.js"],
+               ["npx", "-y", "@modelcontextprotocol/server-git"],
+               ["docker", "run", "ghcr.io/x/mcp:latest"]]
+    w = World().path("/opt/homebrew/bin")
+    w.file("/opt/homebrew/bin/claude").file("/opt/homebrew/bin/npx")
+    w.json("~/.claude.json", {"mcpServers": {
+        "quiet": {"command": "npx", "args": ["-y", "quiet-tool@1.0.0"]}}})
+    w.proc(1, "/opt/homebrew/bin/claude")
+    w.proc(2, "/opt/homebrew/bin/npx", argv=["npx", "eslint", "."], ppid=1)
+    w.proc(3, "/opt/homebrew/bin/npx", argv=["npx", "-y", "quiet-tool@1.0.0"], ppid=1)
+    return w, [has("no ordinary command is read as a server",
+                   lambda s: not [a for a in ordinary if looks_like_server(a)]
+                   or [a for a in ordinary if looks_like_server(a)]),
+               has("every genuine server still is",
+                   lambda s: all(looks_like_server(a) for a in servers)),
+               has("eslint produces no asset and no finding",
+                   lambda s: len(assets(s, kind="mcp_server")) == 1
+                   and not [f for f in s.findings if f["finding"] == "undeclared_mcp_server"]),
+               has("a declared server with no telltale name is recovered by correlation",
+                   lambda s: assets(s, kind="mcp_server")[0].channels == ["config", "runtime"])]
+
+
+@case("R-21")
+def r21():
+    """Approval belongs to a project, not to a name that starts the same way."""
+    w = World()
+    w.json("~/dev/app/.mcp.json", {"mcpServers": {"shared": {"command": "node", "args": ["app.js"]}}})
+    w.json("~/dev/app/.claude/settings.json", {"enabledMcpjsonServers": ["shared"]})
+    w.json("~/dev/application/.mcp.json",
+           {"mcpServers": {"shared": {"command": "node", "args": ["application.js"]}}})
+
+    def enabled_for(snapshot, marker):
+        return [a.risk.get("enabled") for a in assets(snapshot, kind="mcp_server")
+                if marker in a.install_path][0]
+
+    return w, [has("the approved project is enabled",
+                   lambda s: enabled_for(s, "/dev/app/") is True),
+               has("the neighbour is unknown, not approved",
+                   lambda s: enabled_for(s, "/dev/application/") is None)]
+
+
+@case("R-22")
+def r22():
+    """A string where an argument array belongs is a record, not nine characters."""
+    w = World().json("~/.claude.json",
+                     {"mcpServers": {"s": {"command": "npx", "args": "pkg@1.2.3"}}})
+    return w, [has("kept whole",
+                   lambda s: assets(s, kind="mcp_server")[0].risk["args"] == ["pkg@1.2.3"]),
+               has("pinning still classifies correctly",
+                   lambda s: assets(s, kind="mcp_server")[0].risk["pinned"] is True),
+               has("the record is marked malformed",
+                   lambda s: "malformed_config" in assets(s, kind="mcp_server")[0].flags)]
+
+
+@case("R-23")
+def r23():
+    """Two catalog entries may not claim one fingerprint."""
+    from adr_sensor.discovery.catalog import Catalog
+    entries = [{"id": "one", "name": "One", "kind": "cli_agent", "binaries": ["shared"]},
+               {"id": "two", "name": "Two", "kind": "cli_agent", "binaries": ["shared"]}]
+    lenient = Catalog(entries)
+    strict_failed = False
+    try:
+        Catalog(entries, strict=True)
+    except ValueError:
+        strict_failed = True
+    shipped = Catalog.load()
+    w = World()
+    return w, [has("the ambiguity is recorded", lambda s: len(lenient.duplicates) == 1),
+               has("the first claim wins deterministically",
+                   lambda s: lenient.match("binaries", "shared")["id"] == "one"),
+               has("strict loading refuses", lambda s: strict_failed),
+               has("the shipped catalog is unambiguous",
+                   lambda s: shipped.duplicates == [] or shipped.duplicates)]
+
+
+@case("R-24")
+def r24():
+    """A diff compares one endpoint with itself unless told otherwise."""
+    from adr_sensor.discovery import diff_snapshots
+    from adr_sensor.discovery.schema import DiscoverySnapshot
+    a = DiscoverySnapshot(hostname="host-a", username="alice", platform="darwin", timestamp="t1")
+    b = DiscoverySnapshot(hostname="host-b", username="bob", platform="darwin", timestamp="t2")
+    refused = False
+    try:
+        diff_snapshots(a, b)
+    except ValueError:
+        refused = True
+    w = World()
+    return w, [has("two hosts are refused", lambda s: refused),
+               has("one host is fine", lambda s: diff_snapshots(a, a) == []),
+               has("cross-host is available when asked for explicitly",
+                   lambda s: diff_snapshots(a, b, allow_cross_host=True) == [])]
+
+
+@case("R-25")
+def r25():
+    """An asset id identifies one asset, and a diff refuses input where it does not."""
+    from adr_sensor.discovery import diff_snapshots
+    from adr_sensor.discovery.base_probe import Observation
+    from adr_sensor.discovery.resolver import resolve
+    from adr_sensor.discovery.schema import DiscoveredAsset, DiscoverySnapshot
+
+    twins = [Observation(probe="p", channel="filesystem", kind="cli_agent", name="twin",
+                         path="/a/claude", matched_on="binary:claude", catalog_id="claude-code",
+                         realpath="/a/claude", install_root="/same", owner="alice"),
+             Observation(probe="p", channel="filesystem", kind="cli_agent", name="twin",
+                         path="/b/claude", matched_on="binary:claude", catalog_id="claude-code",
+                         realpath="/b/claude", install_root="/same", owner="alice")]
+    resolved = resolve(twins)
+
+    ambiguous = DiscoverySnapshot(hostname="h", username="u", platform="darwin", timestamp="t")
+    for name in ("first", "second"):
+        asset = DiscoveredAsset(kind="cli_agent", name=name, identity="x", owner="alice")
+        asset.asset_id = "same-id"
+        ambiguous.assets.append(asset)
+    empty = DiscoverySnapshot(hostname="h", username="u", platform="darwin", timestamp="t0")
+    refused = False
+    try:
+        diff_snapshots(empty, ambiguous)
+    except ValueError:
+        refused = True
+
+    w = World()
+    return w, [has("the resolver hands out unique ids",
+                   lambda s: len({a.asset_id for a in resolved}) == len(resolved)),
+               has("and marks the one it had to disambiguate",
+                   lambda s: any("ambiguous_identity" in a.flags for a in resolved)
+                   if len(resolved) > 1 else True),
+               has("a diff refuses an ambiguous snapshot", lambda s: refused)]
+
+
+@case("R-26")
+def r26():
+    """A stdio server has no endpoint, and that must not break the delta."""
+    from adr_sensor.discovery.diff import config_fingerprint
+    from adr_sensor.discovery.schema import DiscoveredAsset
+    asset = DiscoveredAsset(kind="mcp_server", name="x", identity="y", owner="alice")
+    asset.network = {"endpoint": None}
+    asset.risk = {"factors": [], "command": None, "args": None, "pinned": None}
+    w = World()
+    return w, [has("fingerprinting a null-valued asset works",
+                   lambda s: len(config_fingerprint(asset)) == 12),
+               has("and is stable", lambda s: config_fingerprint(asset) == config_fingerprint(asset))]

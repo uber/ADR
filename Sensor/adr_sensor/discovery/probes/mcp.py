@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from ..base_probe import BaseProbe, Observation
 from ..env import DiscoveryEnv
 from ..net import host_of, matches_any
+from ..paths import is_descendant
 from ..redact import redact_env_block, redact_url, sanitize
 
 #: (path, host application, config key, scope). The key differs per host on
@@ -128,7 +129,11 @@ class McpProbe(BaseProbe):
                 continue
             servers = self._cap(env, logical, servers)
             for name, spec in servers.items():
-                out.append(self._observe(env, logical, host, name, spec, scope))
+                observation = self.isolate(env, "%s#%s" % (logical, name),
+                                           lambda n=name, sp=spec: self._observe(
+                                               env, logical, host, n, sp, scope))
+                if observation is not None:
+                    out.append(observation)
         out.extend(self._project_scoped(env))
         out.extend(self._plugin_servers(env))
         out.extend(self._managed_policy(env))
@@ -344,7 +349,7 @@ class McpProbe(BaseProbe):
                 continue
             project = posixpath.dirname(observation.path)
             for candidate, names in approved.items():
-                if project.startswith(candidate):
+                if is_descendant(project, candidate):
                     observation.extra["enabled"] = observation.name in names
                     break
 
@@ -353,17 +358,18 @@ class McpProbe(BaseProbe):
     def _observe(self, env: DiscoveryEnv, config_path: str, host: str,
                  name: str, spec: Any, scope: str) -> Observation:
         spec = spec if isinstance(spec, dict) else {}
+        malformed: List[str] = []
         command = sanitize(str(spec.get("command", "")))
-        args = [sanitize(str(arg)) for arg in (spec.get("args") or [])]
+        args = _as_args(spec.get("args"), malformed)
+        env_block = _as_env(spec.get("env"), malformed)
         raw_url = spec.get("url") or spec.get("uri") or ""
         url = redact_url(str(raw_url)) if raw_url else ""
         transport = spec.get("type") or spec.get("transport") or (
             "http" if url.startswith("http") else "stdio")
-        env_block = spec.get("env")
         env_names, credential_kinds = redact_env_block(env_block)
         pinned, factors, method = classify_launch(command, args, url)
         factors.extend(self._contextual_factors(env, transport, url, env_block, args))
-        flags = []
+        flags = list(malformed)
         if command.startswith("/") and not env.exists(command):
             # A declaration whose command is absent is still a real declaration.
             flags.append("command_missing")
@@ -377,7 +383,7 @@ class McpProbe(BaseProbe):
                 "command": command, "args": args, "url": url, "transport": transport,
                 "env_names": env_names, "credential_kinds": credential_kinds, "scope": scope,
                 "host_app": host, "pinned": pinned, "risk_factors": factors,
-                "enabled": spec.get("disabled") is not True, "flags": flags,
+                "enabled": _enablement(spec, scope), "flags": flags,
                 "stored_credential": credential,
             },
         )
@@ -401,6 +407,53 @@ class McpProbe(BaseProbe):
         if any("gateway" in arg or "mcp-gateway" in arg for arg in args):
             factors.append("aggregator")
         return factors
+
+
+def _enablement(spec: Dict[str, Any], scope: str) -> Optional[bool]:
+    """Whether a declaration is live, or None when the host has not said.
+
+    A project server is inert until the project's settings approve it, so
+    "declared here, approval unknown" is a third state and not a synonym for
+    enabled. Collapsing it into True is what let one project's approval appear
+    to cover a neighbouring one.
+    """
+    if spec.get("disabled") is True:
+        return False
+    return None if scope == "project" else True
+
+
+def _as_args(value: Any, malformed: List[str]) -> List[str]:
+    """Arguments are an array of scalars, whatever a config actually contains.
+
+    A bare string is the common mistake, and iterating it yields one argument
+    per character - which changes both the server's identity and its pinning
+    verdict. Treated as a single argument, and the record is marked.
+    """
+    if value is None:
+        return []
+    if isinstance(value, str):
+        malformed.append("malformed_config")
+        return [sanitize(value)]
+    if not isinstance(value, (list, tuple)):
+        malformed.append("malformed_config")
+        return [sanitize(str(value))]
+    out = []
+    for item in value:
+        if isinstance(item, (dict, list, tuple)):
+            malformed.append("malformed_config")
+            continue
+        out.append(sanitize(str(item)))
+    return out
+
+
+def _as_env(value: Any, malformed: List[str]) -> Optional[Dict[str, Any]]:
+    """An env block is a mapping. Anything else is reported, never fatal."""
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return value
+    malformed.append("malformed_config")
+    return {}
 
 
 def _toml_value(raw: str) -> Any:

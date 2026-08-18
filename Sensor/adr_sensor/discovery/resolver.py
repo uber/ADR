@@ -6,6 +6,7 @@ collapses two tools and silently hides one. Real-path resolution prevents the
 first, conflicting identity prevents the second.
 """
 
+import hashlib
 from typing import Dict, List, Optional
 
 from .base_probe import Observation
@@ -143,7 +144,28 @@ def resolve(observations: List[Observation],
         _apply_telemetry(asset, telemetry)
         _finalize_liveness(asset)
         asset.compute_id()
+    _ensure_unique_ids(assets)
     return sorted(assets, key=lambda a: (a.kind, a.name.lower(), a.install_path or ""))
+
+
+def _ensure_unique_ids(assets: List[DiscoveredAsset]) -> None:
+    """Guarantee one id per asset before anything downstream indexes by it.
+
+    Two assets sharing an id are indistinguishable to every consumer: a diff
+    keyed on it silently keeps whichever came last, so one of them stops
+    existing without anything reporting a loss.
+    """
+    seen: Dict[str, DiscoveredAsset] = {}
+    for asset in assets:
+        if asset.asset_id not in seen:
+            seen[asset.asset_id] = asset
+            continue
+        discriminator = hashlib.sha256(
+            ("%s|%s" % (asset.install_path or "", len(seen))).encode()).hexdigest()[:6]
+        asset.asset_id = "%s-%s" % (asset.asset_id[:9], discriminator)
+        if "ambiguous_identity" not in asset.flags:
+            asset.flags.append("ambiguous_identity")
+        seen[asset.asset_id] = asset
 
 
 def _build(group: List[Observation]) -> DiscoveredAsset:
@@ -215,9 +237,10 @@ def _absorb(asset: DiscoveredAsset, observation: Observation) -> None:
         asset.parent_agent = asset.parent_agent or extra["parent_agent"]
         parents = set(asset.risk.get("parent_agents", [])) | {extra["parent_agent"]}
         asset.risk["parent_agents"] = sorted(parents)
-    if "enabled" in extra:
+    if extra.get("enabled") is not None:
         # A server enabled anywhere it is declared is live. Disabled in one
-        # place and enabled in another is enabled.
+        # place and enabled in another is enabled. An unknown approval state is
+        # left unknown rather than promoted to either answer.
         asset.risk["enabled"] = bool(asset.risk.get("enabled")) or bool(extra["enabled"])
     if extra.get("stored_credential"):
         asset.risk["stored_credential"] = True

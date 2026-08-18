@@ -26,6 +26,11 @@ def discover(env: DiscoveryEnv, catalog: Optional[Catalog] = None,
     """
     catalog = catalog or Catalog.load()
     started = time.time()
+    for duplicate in catalog.duplicates:
+        env.errors.append({"probe": "catalog", "path": "catalog.json",
+                           "message": "ambiguous fingerprint %s=%s claimed by %s"
+                                      % (duplicate["field"], duplicate["value"],
+                                         duplicate["entries"])})
     observations = []
     per_probe: Dict[str, Any] = {}
 
@@ -39,6 +44,7 @@ def discover(env: DiscoveryEnv, catalog: Optional[Catalog] = None,
                                  "ms": round((time.time() - probe_started) * 1000, 1)}
         observations.extend(found)
 
+    observations.extend(correlate_declared_servers(env, observations, catalog))
     review_queue = OpenWorldProbe(catalog).score_candidates(env, observations)
     assets = resolve(observations, telemetry=env.telemetry)
     mark_effective_scope(assets)
@@ -230,6 +236,56 @@ def _live_sockets():
         if match:
             sockets[int(match.group(1))] = SocketInfo(int(parts[1]), int(match.group(1)))
     return tuple(sockets.values())
+
+
+def correlate_declared_servers(env, observations, catalog):
+    """Match running child processes against servers a config already declares.
+
+    Runtime identification alone has to be strict, or ordinary development
+    becomes a stream of findings. Correlation is where the strictness is paid
+    back: a server that names itself nothing recognizable is still recognized
+    the moment a config on this host declares the very command that is running.
+    """
+    import posixpath
+
+    from .base_probe import Observation
+    from .probes.mcp import server_identity
+    from .redact import redact_argv
+
+    declared = {}
+    for observation in observations:
+        if observation.kind == "mcp_server" and observation.channel == "config":
+            declared[observation.identity_hint] = observation
+    seen_runtime = {o.identity_hint for o in observations
+                    if o.kind == "mcp_server" and o.channel == "runtime"}
+    if not declared:
+        return []
+
+    by_pid = {process.pid: process for process in env.processes}
+    recovered = []
+    for process in env.processes:
+        parent = by_pid.get(process.ppid)
+        if parent is None:
+            continue
+        parent_entry = catalog.match("binaries", posixpath.basename(parent.exe))
+        if not parent_entry:
+            continue
+        argv = redact_argv(process.argv)
+        identity = server_identity("stdio", posixpath.basename(process.exe), argv[1:], "")
+        if identity not in declared or identity in seen_runtime:
+            continue
+        seen_runtime.add(identity)
+        source = declared[identity]
+        recovered.append(Observation(
+            probe="correlation", channel="runtime", kind="mcp_server", name=source.name,
+            path=process.exe, matched_on="declared_and_running",
+            install_method=source.install_method, identity_hint=identity,
+            owner=process.user or env.user,
+            extra={"pid": process.pid, "ppid": parent.pid, "argv": argv,
+                   "parent_agent": parent_entry["id"], "transport": "stdio", "running": True},
+            confidence=0.6,
+        ))
+    return recovered
 
 
 #: Which declaration wins when one name exists at several scopes. Enterprise
