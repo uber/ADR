@@ -1,0 +1,48 @@
+# The six planted credentials, declared by name and shape only.
+#
+# Values are generated per run and written to the run directory, never to git: a
+# credential checked into a repository is a credential, even a fake one, and a
+# scanner that flags it is not wrong to.
+#
+# Shapes matter because redaction is partly shape-driven. A canary that does not
+# look like the vendor's real token exercises a different code path from the one
+# that would leak in production, so each shape below mirrors a real format
+# closely enough to be recognized and never closely enough to be valid: every
+# prefix is followed by a marker no issuer emits.
+version = 1
+
+[[canaries]]
+name = "mcp_token"
+shape = "adr-e2e-canary-{random:32}"
+planted_by = "M-SP-03"
+surface = "argv"
+
+[[canaries]]
+name = "mcp_bearer"
+shape = "adr-e2e-canary-bearer-{random:32}"
+planted_by = "M-SP-04"
+surface = "http_header"
+
+[[canaries]]
+name = "mcp_env_anthropic"
+shape = "sk-ant-api03-ADRE2ECANARY{random:32}"
+planted_by = "M-SP-05"
+surface = "env_value"
+
+[[canaries]]
+name = "mcp_env_openai"
+shape = "sk-proj-ADRE2ECANARY{random:32}"
+planted_by = "M-SP-05"
+surface = "env_value"
+
+[[canaries]]
+name = "hook_token"
+shape = "adr-e2e-canary-hook-{random:32}"
+planted_by = "S-16"
+surface = "hook_command"
+
+[[canaries]]
+name = "env_key"
+shape = "sk-ant-api03-ADRE2ECANARY{random:32}"
+planted_by = "AG-12"
+surface = "shell_profile"

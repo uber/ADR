@@ -1,0 +1,169 @@
+# Category 3 of Discovery/tests/README.md: the 19 programmable-surface entries.
+#
+# What an installed agent has been *told* to do. Created as real files, because
+# every one of these is discovered by reading a path that must exist exactly
+# where the collector looks. Project-level artifacts go in checkouts under
+# ~/dev, ~/src, ~/workspace and ~/code, since those are the roots it walks.
+#
+# S-13 .. S-16 carry the most weight: a hook is arbitrary code that runs on an
+# agent event, so each must be reported with its command visible enough to
+# review - and S-16 with the canary redacted out of it.
+version = 1
+category = "artifact"
+
+[[entries]]
+id = "S-01"
+name = "User skill"
+subcategory = "skill"
+platforms = ["mac", "linux", "win"]
+create = { kind = "file", path = "~/.claude/skills/pdf-filler/SKILL.md", body = "skill" }
+expect = { kind = "skill", install_method = "agent_artifact" }
+
+[[entries]]
+id = "S-02"
+name = "Project skill"
+subcategory = "skill"
+platforms = ["mac", "linux", "win"]
+create = { kind = "file", path = "~/dev/demo-repo/.claude/skills/deploy-check/SKILL.md", body = "skill" }
+expect = { kind = "skill", install_method = "agent_artifact", config_scope = "project" }
+
+[[entries]]
+id = "S-03"
+name = "Claude command"
+subcategory = "command"
+platforms = ["mac", "linux", "win"]
+create = { kind = "file", path = "~/.claude/commands/ship.md", body = "command" }
+expect = { kind = "skill", install_method = "agent_artifact" }
+
+[[entries]]
+id = "S-04"
+name = "Gemini command"
+subcategory = "command"
+platforms = ["mac", "linux", "win"]
+create = { kind = "file", path = "~/.gemini/commands/review.toml", body = "command_toml" }
+expect = { kind = "skill", install_method = "agent_artifact" }
+
+[[entries]]
+id = "S-05"
+name = "Codex prompt"
+subcategory = "command"
+platforms = ["mac", "linux", "win"]
+create = { kind = "file", path = "~/.codex/prompts/triage.md", body = "command" }
+expect = { kind = "skill", install_method = "agent_artifact" }
+
+[[entries]]
+id = "S-06"
+name = "Project command"
+subcategory = "command"
+platforms = ["mac", "linux", "win"]
+create = { kind = "file", path = "~/dev/demo-repo/.claude/commands/release.md", body = "command" }
+expect = { kind = "skill", install_method = "agent_artifact", config_scope = "project" }
+
+[[entries]]
+id = "S-07"
+name = "Output style"
+subcategory = "style"
+platforms = ["mac", "linux", "win"]
+create = { kind = "file", path = "~/.claude/output-styles/terse.md", body = "output_style" }
+expect = { kind = "skill", install_method = "agent_artifact" }
+
+[[entries]]
+id = "S-08"
+name = "Claude subagent"
+subcategory = "subagent"
+platforms = ["mac", "linux", "win"]
+create = { kind = "file", path = "~/.claude/agents/reviewer.md", body = "subagent" }
+expect = { kind = "agent", install_method = "agent_artifact" }
+
+[[entries]]
+id = "S-09"
+name = "Cursor agent"
+subcategory = "subagent"
+platforms = ["mac", "linux", "win"]
+create = { kind = "file", path = "~/.cursor/agents/refactor.md", body = "subagent" }
+expect = { kind = "agent", install_method = "agent_artifact" }
+
+[[entries]]
+id = "S-10"
+name = "Windsurf agent"
+subcategory = "subagent"
+platforms = ["mac", "linux", "win"]
+create = { kind = "file", path = "~/.codeium/windsurf/agents/scan.md", body = "subagent" }
+expect = { kind = "agent", install_method = "agent_artifact" }
+
+[[entries]]
+id = "S-11"
+name = "Project subagent"
+subcategory = "subagent"
+platforms = ["mac", "linux", "win"]
+create = { kind = "file", path = "~/dev/demo-repo/.claude/agents/tester.md", body = "subagent" }
+expect = { kind = "agent", install_method = "agent_artifact", config_scope = "project" }
+
+[[entries]]
+id = "S-12"
+name = "Plugin"
+subcategory = "plugin"
+platforms = ["mac", "linux", "win"]
+create = { kind = "directory", path = "~/.claude/plugins/acme-tools/", body = "plugin" }
+expect = { kind = "plugin", install_method = "agent_artifact" }
+
+[[entries]]
+id = "S-13"
+name = "User hook"
+subcategory = "hook"
+platforms = ["mac", "linux", "win"]
+create = { kind = "merge", path = "~/.claude/settings.json", body = "hook", event = "PreToolUse", command = "~/bin/audit.sh --event pre" }
+expect = { kind = "hook", install_method = "agent_artifact" }
+
+[[entries]]
+id = "S-14"
+name = "Project hook"
+subcategory = "hook"
+platforms = ["mac", "linux", "win"]
+create = { kind = "merge", path = "~/dev/demo-repo/.claude/settings.json", body = "hook", event = "PreToolUse", command = "./scripts/audit.sh --event pre" }
+expect = { kind = "hook", install_method = "agent_artifact", config_scope = "project" }
+
+[[entries]]
+id = "S-15"
+name = "Local project hook"
+subcategory = "hook"
+platforms = ["mac", "linux", "win"]
+create = { kind = "merge", path = "~/dev/demo-repo/.claude/settings.local.json", body = "hook", event = "PostToolUse", command = "./scripts/audit.sh --event post" }
+expect = { kind = "hook", install_method = "agent_artifact", config_scope = "project" }
+
+# The hook whose command carries a credential. The asset must still be reported
+# - a redacted hook is reviewable, a missing hook is not - but the canary must
+# be absent from every byte of the serialized snapshot.
+
+[[entries]]
+id = "S-16"
+name = "Hook with a secret"
+subcategory = "hook"
+platforms = ["mac", "linux", "win"]
+canaries = ["hook_token"]
+create = { kind = "merge", path = "~/.claude/settings.json", body = "hook", event = "PreToolUse", command = "~/bin/audit.sh --token {{canary:hook_token}}" }
+expect = { kind = "hook", install_method = "agent_artifact" }
+
+[[entries]]
+id = "S-17"
+name = "Claude instructions"
+subcategory = "instructions"
+platforms = ["mac", "linux", "win"]
+create = { kind = "file", path = "~/.claude/CLAUDE.md", body = "instructions" }
+expect = { kind = "instructions", install_method = "agent_artifact" }
+
+[[entries]]
+id = "S-18"
+name = "Codex instructions"
+subcategory = "instructions"
+platforms = ["mac", "linux", "win"]
+create = { kind = "file", path = "~/.codex/AGENTS.md", body = "instructions" }
+expect = { kind = "instructions", install_method = "agent_artifact" }
+
+[[entries]]
+id = "S-19"
+name = "Gemini instructions"
+subcategory = "instructions"
+platforms = ["mac", "linux", "win"]
+create = { kind = "file", path = "~/.gemini/GEMINI.md", body = "instructions" }
+expect = { kind = "instructions", install_method = "agent_artifact" }

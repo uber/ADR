@@ -1,0 +1,454 @@
+# Category 2 of Discovery/tests/README.md: the 29 MCP entries.
+#
+# MCP is the only purely *declared* surface - a server exists because a config
+# file says so, whether or not it has ever run. These entries need no installer
+# at all, which is why they are the first family the harness builds.
+#
+# Every M-SITE row declares the same trivial stdio server, so the only variable
+# is the site: a missed site shows up as a specific miss rather than as a lower
+# total. Every M-PIN row declares in ~/.claude.json, so the only variable is the
+# launch line. The repetition of `command`/`args` across the M-SITE rows is
+# therefore deliberate and must not be factored out.
+version = 1
+category = "mcp_server"
+
+# -- 2a. Declaration sites -- M-SITE-01 .. M-SITE-14 -------------------
+
+[[entries]]
+id = "M-SITE-01"
+name = "MCP server in Claude Code"
+subcategory = "mcp_site"
+platforms = ["mac", "linux", "win"]
+expect = { kind = "mcp_server", transport = "stdio", config_scope = "user" }
+[entries.declare]
+site = "claude-code"
+scope = "user"
+server_name = "adr-probe-cc"
+command = "node"
+args = ["~/dev/tools/adr-probe-server.js"]
+path = { mac = "~/.claude.json", linux = "~/.claude.json", win = "%USERPROFILE%/.claude.json" }
+
+[[entries]]
+id = "M-SITE-02"
+name = "MCP server in Claude Desktop"
+subcategory = "mcp_site"
+platforms = ["mac", "linux", "win"]
+depends_on = ["T-APP-01"]
+expect = { kind = "mcp_server", transport = "stdio", config_scope = "user" }
+[entries.declare]
+site = "claude-desktop"
+scope = "user"
+server_name = "adr-probe-cd"
+command = "node"
+args = ["~/dev/tools/adr-probe-server.js"]
+path = { mac = "~/Library/Application Support/Claude/claude_desktop_config.json", linux = "~/.config/claude-desktop/claude_desktop_config.json", win = "%APPDATA%/Claude/claude_desktop_config.json" }
+
+[[entries]]
+id = "M-SITE-03"
+name = "MCP server in Cursor"
+subcategory = "mcp_site"
+platforms = ["mac", "linux", "win"]
+depends_on = ["T-APP-02"]
+expect = { kind = "mcp_server", transport = "stdio", config_scope = "user" }
+[entries.declare]
+site = "cursor"
+scope = "user"
+server_name = "adr-probe-cursor"
+command = "node"
+args = ["~/dev/tools/adr-probe-server.js"]
+path = { mac = "~/.cursor/mcp.json", linux = "~/.cursor/mcp.json", win = "%USERPROFILE%/.cursor/mcp.json" }
+
+[[entries]]
+id = "M-SITE-04"
+name = "MCP server in Windsurf"
+subcategory = "mcp_site"
+platforms = ["mac", "linux", "win"]
+depends_on = ["T-APP-03"]
+expect = { kind = "mcp_server", transport = "stdio", config_scope = "user" }
+[entries.declare]
+site = "windsurf"
+scope = "user"
+server_name = "adr-probe-windsurf"
+command = "node"
+args = ["~/dev/tools/adr-probe-server.js"]
+path = { mac = "~/.codeium/windsurf/mcp_config.json", linux = "~/.codeium/windsurf/mcp_config.json", win = "%APPDATA%/Codeium/windsurf/mcp_config.json" }
+
+[[entries]]
+id = "M-SITE-05"
+name = "MCP server in VS Code"
+subcategory = "mcp_site"
+platforms = ["mac", "linux", "win"]
+depends_on = ["T-APP-04"]
+expect = { kind = "mcp_server", transport = "stdio", config_scope = "user" }
+[entries.declare]
+site = "vscode"
+scope = "user"
+server_name = "adr-probe-vscode"
+command = "node"
+args = ["~/dev/tools/adr-probe-server.js"]
+path = { mac = "~/Library/Application Support/Code/User/mcp.json", linux = "~/.config/Code/User/mcp.json", win = "%APPDATA%/Code/User/mcp.json" }
+
+[[entries]]
+id = "M-SITE-06"
+name = "MCP server in Cline"
+subcategory = "mcp_site"
+platforms = ["mac", "linux", "win"]
+depends_on = ["T-EXT-01"]
+expect = { kind = "mcp_server", transport = "stdio", config_scope = "user" }
+[entries.declare]
+site = "cline"
+scope = "user"
+server_name = "adr-probe-cline"
+command = "node"
+args = ["~/dev/tools/adr-probe-server.js"]
+path = { mac = "~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json", linux = "~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json", win = "%APPDATA%/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json" }
+
+[[entries]]
+id = "M-SITE-07"
+name = "MCP server in Zed"
+subcategory = "mcp_site"
+platforms = ["mac", "linux", "win"]
+depends_on = ["T-APP-05"]
+expect = { kind = "mcp_server", transport = "stdio", config_scope = "user" }
+[entries.declare]
+site = "zed"
+scope = "user"
+server_name = "adr-probe-zed"
+command = "node"
+args = ["~/dev/tools/adr-probe-server.js"]
+path = { mac = "~/.config/zed/settings.json", linux = "~/.config/zed/settings.json", win = "%APPDATA%/Zed/settings.json" }
+
+[[entries]]
+id = "M-SITE-08"
+name = "MCP server in JetBrains"
+subcategory = "mcp_site"
+platforms = ["mac", "linux", "win"]
+depends_on = ["T-APP-06"]
+expect = { kind = "mcp_server", transport = "stdio", config_scope = "user" }
+[entries.declare]
+site = "jetbrains"
+scope = "user"
+server_name = "adr-probe-jetbrains"
+command = "node"
+args = ["~/dev/tools/adr-probe-server.js"]
+path = { mac = "~/Library/Application Support/JetBrains/options/mcp.json", linux = "~/.config/JetBrains/options/mcp.json", win = "%APPDATA%/JetBrains/options/mcp.json" }
+
+[[entries]]
+id = "M-SITE-09"
+name = "MCP server in opencode"
+subcategory = "mcp_site"
+platforms = ["mac", "linux", "win"]
+depends_on = ["T-CLI-04"]
+expect = { kind = "mcp_server", transport = "stdio", config_scope = "user" }
+[entries.declare]
+site = "opencode"
+scope = "user"
+server_name = "adr-probe-opencode"
+command = "node"
+args = ["~/dev/tools/adr-probe-server.js"]
+path = { mac = "~/.config/opencode/opencode.json", linux = "~/.config/opencode/opencode.json", win = "%APPDATA%/opencode/opencode.json" }
+
+[[entries]]
+id = "M-SITE-10"
+name = "MCP server in Codex"
+subcategory = "mcp_site"
+platforms = ["mac", "linux", "win"]
+depends_on = ["T-CLI-02"]
+expect = { kind = "mcp_server", transport = "stdio", config_scope = "user" }
+[entries.declare]
+site = "codex"
+scope = "user"
+server_name = "adr-probe-codex"
+format = "toml"
+command = "node"
+args = ["~/dev/tools/adr-probe-server.js"]
+path = { mac = "~/.codex/config.toml", linux = "~/.codex/config.toml", win = "%USERPROFILE%/.codex/config.toml" }
+
+[[entries]]
+id = "M-SITE-11"
+name = "MCP server in Goose"
+subcategory = "mcp_site"
+platforms = ["mac", "linux", "win"]
+depends_on = ["T-CLI-09"]
+expect = { kind = "mcp_server", transport = "stdio", config_scope = "user" }
+[entries.declare]
+site = "goose"
+scope = "user"
+server_name = "adr-probe-goose"
+format = "yaml"
+command = "node"
+args = ["~/dev/tools/adr-probe-server.js"]
+path = { mac = "~/.config/goose/config.yaml", linux = "~/.config/goose/config.yaml", win = "%APPDATA%/Block/goose/config/config.yaml" }
+
+# The two managed sites need root to write, and they are the reason the runner
+# keeps a privileged step: a policy file a user could write would not be policy.
+
+[[entries]]
+id = "M-SITE-12"
+name = "MCP server in Managed policy"
+subcategory = "mcp_site"
+platforms = ["mac", "linux", "win"]
+privileged = true
+expect = { kind = "mcp_server", transport = "stdio", config_scope = "enterprise_managed" }
+[entries.declare]
+site = "managed-claude-code"
+scope = "enterprise_managed"
+server_name = "adr-probe-managed"
+command = "node"
+args = ["~/dev/tools/adr-probe-server.js"]
+path = { mac = "/Library/Application Support/ClaudeCode/managed-settings.json", linux = "/etc/claude-code/managed-settings.json", win = "C:/ProgramData/ClaudeCode/managed-settings.json" }
+
+[[entries]]
+id = "M-SITE-13"
+name = "MCP server in ADR policy"
+subcategory = "mcp_site"
+platforms = ["mac", "linux", "win"]
+privileged = true
+expect = { kind = "mcp_server", transport = "stdio", config_scope = "enterprise_managed" }
+[entries.declare]
+site = "managed-adr"
+scope = "enterprise_managed"
+server_name = "adr-probe-adr-policy"
+command = "node"
+args = ["~/dev/tools/adr-probe-server.js"]
+path = { mac = "/Library/Application Support/ADR/managed-mcp.json", linux = "/etc/adr/managed-mcp.json", win = "C:/ProgramData/ADR/managed-mcp.json" }
+
+[[entries]]
+id = "M-SITE-14"
+name = "MCP server in a project checkout"
+subcategory = "mcp_site"
+platforms = ["mac", "linux", "win"]
+expect = { kind = "mcp_server", transport = "stdio", config_scope = "project" }
+[entries.declare]
+site = "project"
+scope = "project"
+server_name = "adr-probe-project"
+command = "node"
+args = ["~/dev/tools/adr-probe-server.js"]
+path = { mac = "~/dev/demo-repo/.mcp.json", linux = "~/dev/demo-repo/.mcp.json", win = "%USERPROFILE%/dev/demo-repo/.mcp.json" }
+
+# -- 2b. Launch forms and the supply-chain verdict -- M-PIN-01 .. 09 ---
+# `pinned` is the field under test here, scored per entry rather than as an
+# aggregate: a collector that gets seven of nine right has a specific bug in
+# the two it misses, and an average would hide which two.
+
+[[entries]]
+id = "M-PIN-01"
+name = "filesystem server"
+subcategory = "mcp_launch"
+platforms = ["mac", "linux", "win"]
+expect = { kind = "mcp_server", transport = "stdio", pinned = true }
+[entries.declare]
+site = "claude-code"
+scope = "user"
+server_name = "filesystem"
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-filesystem@2025.8.21", "~/dev"]
+
+[[entries]]
+id = "M-PIN-02"
+name = "git server"
+subcategory = "mcp_launch"
+platforms = ["mac", "linux", "win"]
+expect = { kind = "mcp_server", transport = "stdio", pinned = false }
+[entries.declare]
+site = "claude-code"
+scope = "user"
+server_name = "git"
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-git"]
+
+[[entries]]
+id = "M-PIN-03"
+name = "github server"
+subcategory = "mcp_launch"
+platforms = ["mac", "linux", "win"]
+expect = { kind = "mcp_server", transport = "stdio", pinned = true }
+[entries.declare]
+site = "claude-code"
+scope = "user"
+server_name = "github"
+command = "docker"
+args = ["run", "-i", "--rm", "ghcr.io/github/github-mcp-server:v0.5.0"]
+
+[[entries]]
+id = "M-PIN-04"
+name = "sqlite server"
+subcategory = "mcp_launch"
+platforms = ["mac", "linux", "win"]
+expect = { kind = "mcp_server", transport = "stdio", pinned = true }
+[entries.declare]
+site = "claude-code"
+scope = "user"
+server_name = "sqlite"
+command = "uvx"
+args = ["mcp-server-sqlite@0.1.0", "--db-path", "~/dev/demo.db"]
+
+[[entries]]
+id = "M-PIN-05"
+name = "fetch server"
+subcategory = "mcp_launch"
+platforms = ["mac", "linux", "win"]
+expect = { kind = "mcp_server", transport = "stdio", pinned = false }
+[entries.declare]
+site = "claude-code"
+scope = "user"
+server_name = "fetch"
+command = "uvx"
+args = ["mcp-server-fetch"]
+
+# `latest` is mutable, so it is a tag and not a version. A collector that reads
+# it as pinned has the most dangerous kind of wrong answer here.
+
+[[entries]]
+id = "M-PIN-06"
+name = "memory server"
+subcategory = "mcp_launch"
+platforms = ["mac", "linux", "win"]
+expect = { kind = "mcp_server", transport = "stdio", pinned = false }
+[entries.declare]
+site = "claude-code"
+scope = "user"
+server_name = "memory"
+command = "docker"
+args = ["run", "-i", "--rm", "mcp/memory:latest"]
+
+[[entries]]
+id = "M-PIN-07"
+name = "playwright server"
+subcategory = "mcp_launch"
+platforms = ["mac", "linux", "win"]
+expect = { kind = "mcp_server", transport = "stdio", pinned = false }
+[entries.declare]
+site = "claude-code"
+scope = "user"
+server_name = "playwright"
+command = "npx"
+args = ["@playwright/mcp@1.x"]
+
+[[entries]]
+id = "M-PIN-08"
+name = "local script server"
+subcategory = "mcp_launch"
+platforms = ["mac", "linux", "win"]
+expect = { kind = "mcp_server", transport = "stdio", pinned = false }
+[entries.declare]
+site = "claude-code"
+scope = "user"
+server_name = "local-script"
+command = "node"
+args = ["~/dev/tools/my-server.js"]
+creates = ["~/dev/tools/my-server.js"]
+
+# Remote servers get no pinning verdict at all - there is no artifact whose
+# version could be pinned - so `pinned` is deliberately absent from `expect`
+# rather than set to either value.
+
+[[entries]]
+id = "M-PIN-09"
+name = "remote server"
+subcategory = "mcp_launch"
+platforms = ["mac", "linux", "win"]
+expect = { kind = "mcp_server", transport = "sse" }
+[entries.declare]
+site = "claude-code"
+scope = "user"
+server_name = "remote-sse"
+transport = "sse"
+url = "https://mcp.example.invalid/sse"
+
+# -- 2c. Special cases -- M-SP-01 .. M-SP-06 --------------------------
+
+# Started by hand, in no config at all. The asset is not the point; the
+# `undeclared_mcp_server` finding is.
+
+[[entries]]
+id = "M-SP-01"
+name = "Undeclared server"
+subcategory = "mcp_special"
+platforms = ["mac", "linux", "win"]
+install = { method = "service", source = "adr-probe-server", port = 39100 }
+expect = { kind = "mcp_server", finding = "undeclared_mcp_server" }
+
+# Same server in the managed site and the user site. Precedence says one asset,
+# scoped enterprise_managed - two assets here is a DUP, and a `user` scope is a
+# field failure that would misreport who controls the server.
+
+[[entries]]
+id = "M-SP-02"
+name = "Scope precedence"
+subcategory = "mcp_special"
+platforms = ["mac", "linux", "win"]
+depends_on = ["M-SITE-12", "M-SITE-01"]
+expect = { kind = "mcp_server", config_scope = "enterprise_managed" }
+[entries.declare]
+site = "both"
+sites = ["managed-claude-code", "claude-code"]
+scope = "enterprise_managed"
+server_name = "adr-probe-precedence"
+command = "node"
+args = ["~/dev/tools/adr-probe-server.js", "--precedence"]
+
+[[entries]]
+id = "M-SP-03"
+name = "Token in argv"
+subcategory = "mcp_special"
+platforms = ["mac", "linux", "win"]
+canaries = ["mcp_token"]
+expect = { kind = "mcp_server", transport = "stdio" }
+[entries.declare]
+site = "claude-code"
+scope = "user"
+server_name = "adr-probe-argv-token"
+command = "node"
+args = ["~/dev/tools/adr-probe-server.js", "--token", "{{canary:mcp_token}}"]
+
+[[entries]]
+id = "M-SP-04"
+name = "Auth header"
+subcategory = "mcp_special"
+platforms = ["mac", "linux", "win"]
+canaries = ["mcp_bearer"]
+expect = { kind = "mcp_server", transport = "sse" }
+[entries.declare]
+site = "claude-code"
+scope = "user"
+server_name = "adr-probe-auth-header"
+transport = "sse"
+url = "https://mcp.example.invalid/authed"
+headers = { Authorization = "Bearer {{canary:mcp_bearer}}" }
+
+# Two vendors' token shapes, because redaction is partly shape-driven and one
+# shape passing proves only that one shape passes.
+
+[[entries]]
+id = "M-SP-05"
+name = "Key in env"
+subcategory = "mcp_special"
+platforms = ["mac", "linux", "win"]
+canaries = ["mcp_env_anthropic", "mcp_env_openai"]
+expect = { kind = "mcp_server", transport = "stdio", env_names = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"] }
+[entries.declare]
+site = "claude-code"
+scope = "user"
+server_name = "adr-probe-env-key"
+command = "node"
+args = ["~/dev/tools/adr-probe-server.js", "--env-mode"]
+env = { ANTHROPIC_API_KEY = "{{canary:mcp_env_anthropic}}", OPENAI_API_KEY = "{{canary:mcp_env_openai}}" }
+
+# A bundle that declares nothing runnable must be recorded as malformed, not as
+# a server. Being confidently wrong and being silent are different failures, so
+# this one is scored as its own pass/fail rather than as a TP.
+
+[[entries]]
+id = "M-SP-06"
+name = "Malformed bundle"
+subcategory = "mcp_special"
+platforms = ["mac", "linux", "win"]
+must_not_be = "mcp_server"
+expect = { kind = "mcp_bundle", flags = ["malformed"] }
+[entries.create]
+kind = "file"
+format = "json"
+body = "malformed_bundle"
+path = { mac = "~/.mcpb/broken-bundle/manifest.json", linux = "~/.mcpb/broken-bundle/manifest.json", win = "%USERPROFILE%/.mcpb/broken-bundle/manifest.json" }

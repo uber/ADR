@@ -1,0 +1,520 @@
+# Category 1 of Discovery/tests/README.md: the 50 AI-tool entries.
+#
+# Versions are pinned because an unpinned install makes the expected `version`
+# unscoreable - the correct answer becomes whatever the registry served that
+# morning. The pins below are the reviewed set for the current golden images;
+# bumping one is a manifest change like any other. `pins_confirmed` stays false
+# until somebody has checked each against the registry it installs from, and
+# `adr-e2e check` reports that state rather than assuming it.
+version = 1
+category = "ai_tool"
+# npm pins below were confirmed against registry.npmjs.org on 2026-08-22 and
+# proved by a live install; the pipx and vscode-ext pins have not been.
+pins_confirmed = false
+
+# -- 1a. CLI coding agents -- T-CLI-01 .. T-CLI-12 ----------------------
+# Installed globally so their binaries land on PATH. One asset each, with a
+# correct version, a real install_path, and the channel they arrived through.
+
+[[entries]]
+id = "T-CLI-01"
+name = "Claude Code"
+subcategory = "cli_agent"
+catalog_id = "claude-code"
+platforms = ["mac", "linux", "win"]
+verify = "claude --version"
+install = { method = "npm-global", package = "@anthropic-ai/claude-code", version = "2.1.235", binary = "claude" }
+expect = { kind = "cli_agent", install_method = "npm", liveness = "installed" }
+
+[[entries]]
+id = "T-CLI-02"
+name = "Codex CLI"
+subcategory = "cli_agent"
+catalog_id = "codex"
+platforms = ["mac", "linux", "win"]
+verify = "codex --version"
+install = { method = "npm-global", package = "@openai/codex", version = "0.58.0", binary = "codex" }
+expect = { kind = "cli_agent", install_method = "npm", liveness = "installed" }
+
+[[entries]]
+id = "T-CLI-03"
+name = "Gemini CLI"
+subcategory = "cli_agent"
+catalog_id = "gemini-cli"
+platforms = ["mac", "linux", "win"]
+verify = "gemini --version"
+install = { method = "npm-global", package = "@google/gemini-cli", version = "0.12.0", binary = "gemini" }
+expect = { kind = "cli_agent", install_method = "npm", liveness = "installed" }
+
+[[entries]]
+id = "T-CLI-04"
+name = "opencode"
+subcategory = "cli_agent"
+catalog_id = "opencode"
+platforms = ["mac", "linux", "win"]
+verify = "opencode --version"
+install = { method = "npm-global", package = "opencode-ai", version = "0.5.29", binary = "opencode" }
+expect = { kind = "cli_agent", install_method = "npm", liveness = "installed" }
+
+[[entries]]
+id = "T-CLI-05"
+name = "Amp"
+subcategory = "cli_agent"
+catalog_id = "amp"
+platforms = ["mac", "linux", "win"]
+verify = "amp --version"
+install = { method = "npm-global", package = "@sourcegraph/amp", version = "0.0.1787428878-gebb20a", binary = "amp" }
+expect = { kind = "cli_agent", install_method = "npm", liveness = "installed" }
+
+[[entries]]
+id = "T-CLI-06"
+name = "Kilo CLI"
+subcategory = "cli_agent"
+catalog_id = "kilo-cli"
+platforms = ["mac", "linux", "win"]
+verify = "kilo --version"
+install = { method = "npm-global", package = "@kilocode/cli", version = "7.4.23", binary = "kilo" }
+expect = { kind = "cli_agent", install_method = "npm", liveness = "installed" }
+
+[[entries]]
+id = "T-CLI-07"
+name = "Qwen Code"
+subcategory = "cli_agent"
+catalog_id = "qwen-code"
+platforms = ["mac", "linux", "win"]
+verify = "qwen --version"
+install = { method = "npm-global", package = "@qwen-code/qwen-code", version = "0.22.0", binary = "qwen" }
+expect = { kind = "cli_agent", install_method = "npm", liveness = "installed" }
+
+[[entries]]
+id = "T-CLI-08"
+name = "Copilot CLI"
+subcategory = "cli_agent"
+catalog_id = "copilot-cli"
+platforms = ["mac", "linux", "win"]
+verify = "copilot --version"
+install = { method = "npm-global", package = "@github/copilot", version = "1.0.80", binary = "copilot" }
+expect = { kind = "cli_agent", install_method = "npm", liveness = "installed" }
+
+# The spec's `npm i -g @block/goose-cli` does not resolve: the scope does not
+# exist on the registry. The obvious substitute is worse than nothing - the
+# unscoped `goose-cli` on npm is a wrapper around the *database migration* tool
+# of the same name, so installing it would put an unrelated binary called
+# `goose` on PATH and the harness would record a successful install of the wrong
+# product. Left unresolved on purpose until somebody confirms how Block ships
+# it, and recorded `unimplemented` rather than `failed` in the meantime.
+[[entries]]
+id = "T-CLI-09"
+name = "Goose"
+subcategory = "cli_agent"
+catalog_id = "goose"
+platforms = ["mac", "linux", "win"]
+verify = "goose --version"
+install = { method = "npm-global", package = "@block/goose-cli", version = "1.0.28", binary = "goose", unresolved = "package not on the registry; see comment" }
+expect = { kind = "cli_agent", install_method = "npm", liveness = "installed" }
+
+[[entries]]
+id = "T-CLI-10"
+name = "Aider"
+subcategory = "cli_agent"
+catalog_id = "aider"
+platforms = ["mac", "linux", "win"]
+verify = "aider --version"
+install = { method = "pipx", package = "aider-chat", version = "0.86.1", binary = "aider" }
+expect = { kind = "cli_agent", install_method = "pipx", liveness = "installed" }
+
+# A binary dropped on PATH carries no channel marker, so `unknown` is the
+# correct expectation rather than a gap: claiming a channel we cannot see would
+# send a remediation to a package manager that never installed it.
+
+[[entries]]
+id = "T-CLI-11"
+name = "Crush"
+subcategory = "cli_agent"
+catalog_id = "crush"
+platforms = ["mac", "linux", "win"]
+verify = "crush --version"
+install = { method = "vendor-binary", source = "crush", dest = "/usr/local/bin/crush", binary = "crush" }
+expect = { kind = "cli_agent", install_method = "unknown", liveness = "installed" }
+
+[[entries]]
+id = "T-CLI-12"
+name = "Grok CLI"
+subcategory = "cli_agent"
+catalog_id = "grok-cli"
+platforms = ["mac", "linux", "win"]
+verify = "grok --version"
+install = { method = "vendor-binary", source = "grok-cli", dest = "/usr/local/bin/grok", binary = "grok" }
+expect = { kind = "cli_agent", install_method = "unknown", liveness = "installed" }
+
+# -- 1b. Desktop apps, IDEs and AI browsers -- T-APP-01 .. T-APP-16 -----
+# Vendor installers, so the real bundle, registry entry or .desktop file
+# exists. Every one of these needs a logged-in graphical session on the VM.
+# Download URLs and silent flags live in sources.toml, per OS.
+
+[[entries]]
+id = "T-APP-01"
+name = "Claude Desktop"
+subcategory = "app"
+catalog_id = "claude-desktop"
+platforms = ["mac", "win"]
+install = { method = "app-installer", source = "claude-desktop" }
+expect = { kind = "app", liveness = "installed" }
+
+[[entries]]
+id = "T-APP-02"
+name = "Cursor"
+subcategory = "app"
+catalog_id = "cursor"
+platforms = ["mac", "linux", "win"]
+install = { method = "app-installer", source = "cursor" }
+expect = { kind = "app", liveness = "installed" }
+
+[[entries]]
+id = "T-APP-03"
+name = "Windsurf"
+subcategory = "app"
+catalog_id = "windsurf"
+platforms = ["mac", "linux", "win"]
+install = { method = "app-installer", source = "windsurf" }
+expect = { kind = "app", liveness = "installed" }
+
+[[entries]]
+id = "T-APP-04"
+name = "VS Code"
+subcategory = "app"
+catalog_id = "vscode"
+platforms = ["mac", "linux", "win"]
+install = { method = "app-installer", source = "vscode" }
+expect = { kind = "app", liveness = "installed" }
+
+[[entries]]
+id = "T-APP-05"
+name = "Zed"
+subcategory = "app"
+catalog_id = "zed"
+platforms = ["mac", "linux"]
+install = { method = "app-installer", source = "zed" }
+expect = { kind = "app", liveness = "installed" }
+
+[[entries]]
+id = "T-APP-06"
+name = "JetBrains IDE + AI Assistant"
+subcategory = "app"
+catalog_id = "jetbrains-ai"
+platforms = ["mac", "linux", "win"]
+install = { method = "app-installer", source = "jetbrains-ai" }
+expect = { kind = "app", liveness = "installed" }
+
+[[entries]]
+id = "T-APP-07"
+name = "Trae"
+subcategory = "app"
+catalog_id = "trae"
+platforms = ["mac", "win"]
+install = { method = "app-installer", source = "trae" }
+expect = { kind = "app", liveness = "installed" }
+
+[[entries]]
+id = "T-APP-08"
+name = "Warp"
+subcategory = "app"
+catalog_id = "warp"
+platforms = ["mac", "linux", "win"]
+install = { method = "app-installer", source = "warp" }
+expect = { kind = "app", liveness = "installed" }
+
+[[entries]]
+id = "T-APP-09"
+name = "ChatGPT Desktop"
+subcategory = "app"
+catalog_id = "chatgpt-desktop"
+platforms = ["mac", "win"]
+install = { method = "app-installer", source = "chatgpt-desktop" }
+expect = { kind = "app", liveness = "installed" }
+
+[[entries]]
+id = "T-APP-10"
+name = "Perplexity"
+subcategory = "app"
+catalog_id = "perplexity"
+platforms = ["mac"]
+install = { method = "app-installer", source = "perplexity" }
+expect = { kind = "app", liveness = "installed" }
+
+[[entries]]
+id = "T-APP-11"
+name = "Gemini Desktop"
+subcategory = "app"
+catalog_id = "gemini-desktop"
+platforms = ["mac", "win"]
+install = { method = "app-installer", source = "gemini-desktop" }
+expect = { kind = "app", liveness = "installed" }
+
+[[entries]]
+id = "T-APP-12"
+name = "Copilot Desktop"
+subcategory = "app"
+catalog_id = "copilot-desktop"
+platforms = ["mac", "win"]
+install = { method = "app-installer", source = "copilot-desktop" }
+expect = { kind = "app", liveness = "installed" }
+
+[[entries]]
+id = "T-APP-13"
+name = "Raycast"
+subcategory = "app"
+catalog_id = "raycast"
+platforms = ["mac"]
+install = { method = "app-installer", source = "raycast" }
+expect = { kind = "app", liveness = "installed" }
+
+[[entries]]
+id = "T-APP-14"
+name = "Comet browser"
+subcategory = "app"
+catalog_id = "comet"
+platforms = ["mac", "win"]
+install = { method = "app-installer", source = "comet" }
+expect = { kind = "ai_browser", liveness = "installed" }
+
+[[entries]]
+id = "T-APP-15"
+name = "Dia browser"
+subcategory = "app"
+catalog_id = "dia"
+platforms = ["mac"]
+install = { method = "app-installer", source = "dia" }
+expect = { kind = "ai_browser", liveness = "installed" }
+
+[[entries]]
+id = "T-APP-16"
+name = "ChatGPT Atlas"
+subcategory = "app"
+catalog_id = "atlas"
+platforms = ["mac"]
+install = { method = "app-installer", source = "atlas" }
+expect = { kind = "ai_browser", liveness = "installed" }
+
+# -- 1c. IDE extensions -- T-EXT-01 .. T-EXT-05 ------------------------
+# Installed into the VS Code from T-APP-04, which is why the runner orders
+# app-installer ahead of vscode-ext rather than following manifest order.
+
+[[entries]]
+id = "T-EXT-01"
+name = "Cline"
+subcategory = "extension"
+catalog_id = "cline"
+platforms = ["mac", "linux", "win"]
+depends_on = ["T-APP-04"]
+install = { method = "vscode-ext", extension_id = "saoudrizwan.claude-dev", version = "3.42.0" }
+expect = { kind = "extension", install_method = "ide_extension", liveness = "installed" }
+
+[[entries]]
+id = "T-EXT-02"
+name = "Continue"
+subcategory = "extension"
+catalog_id = "continue"
+platforms = ["mac", "linux", "win"]
+depends_on = ["T-APP-04"]
+install = { method = "vscode-ext", extension_id = "continue.continue", version = "1.5.9" }
+expect = { kind = "extension", install_method = "ide_extension", liveness = "installed" }
+
+[[entries]]
+id = "T-EXT-03"
+name = "Roo Code"
+subcategory = "extension"
+catalog_id = "roo-code"
+platforms = ["mac", "linux", "win"]
+depends_on = ["T-APP-04"]
+install = { method = "vscode-ext", extension_id = "rooveterinaryinc.roo-cline", version = "3.30.1" }
+expect = { kind = "extension", install_method = "ide_extension", liveness = "installed" }
+
+[[entries]]
+id = "T-EXT-04"
+name = "Kilo Code"
+subcategory = "extension"
+catalog_id = "kilo-code"
+platforms = ["mac", "linux", "win"]
+depends_on = ["T-APP-04"]
+install = { method = "vscode-ext", extension_id = "kilocode.kilo-code", version = "4.108.0" }
+expect = { kind = "extension", install_method = "ide_extension", liveness = "installed" }
+
+[[entries]]
+id = "T-EXT-05"
+name = "GitHub Copilot"
+subcategory = "extension"
+catalog_id = "copilot-ext"
+platforms = ["mac", "linux", "win"]
+depends_on = ["T-APP-04"]
+install = { method = "vscode-ext", extension_id = "github.copilot", version = "1.380.0" }
+expect = { kind = "extension", install_method = "ide_extension", liveness = "installed" }
+
+# -- 1d. Local model runtimes -- T-RT-01 .. T-RT-09 --------------------
+# Installed *and started*, with a small model pulled, so the listening port and
+# the model-listing endpoint are both real. T-RT-03 and T-RT-07 both default to
+# 8080; the manifest assigns distinct ports so a collision can never masquerade
+# as a detection failure.
+
+[[entries]]
+id = "T-RT-01"
+name = "Ollama"
+subcategory = "model_runtime"
+catalog_id = "ollama"
+platforms = ["mac", "linux", "win"]
+install = { method = "service", source = "ollama", port = 11434, health = "/api/tags", model = "qwen2.5:0.5b" }
+expect = { kind = "model_runtime", liveness = "running" }
+
+[[entries]]
+id = "T-RT-02"
+name = "LM Studio"
+subcategory = "model_runtime"
+catalog_id = "lm-studio"
+platforms = ["mac", "linux", "win"]
+install = { method = "service", source = "lm-studio", port = 1234, health = "/v1/models", model = "qwen2.5-0.5b-gguf" }
+expect = { kind = "model_runtime", liveness = "running" }
+
+[[entries]]
+id = "T-RT-03"
+name = "llama.cpp"
+subcategory = "model_runtime"
+catalog_id = "llama.cpp"
+platforms = ["mac", "linux", "win"]
+install = { method = "service", source = "llama.cpp", port = 8080, health = "/v1/models", model = "qwen2.5-0.5b-gguf" }
+expect = { kind = "model_runtime", liveness = "running" }
+
+[[entries]]
+id = "T-RT-04"
+name = "GPT4All"
+subcategory = "model_runtime"
+catalog_id = "gpt4all"
+platforms = ["mac", "linux", "win"]
+install = { method = "service", source = "gpt4all", model = "bundled" }
+expect = { kind = "model_runtime", liveness = "installed" }
+
+[[entries]]
+id = "T-RT-05"
+name = "Jan"
+subcategory = "model_runtime"
+catalog_id = "jan"
+platforms = ["mac", "linux", "win"]
+install = { method = "service", source = "jan", port = 1337, health = "/v1/models", model = "any-small" }
+expect = { kind = "model_runtime", liveness = "running" }
+
+# The one entry no macOS or Windows guest can satisfy: it wants a CUDA GPU.
+# Recorded `unavailable` there rather than scored as a miss.
+
+[[entries]]
+id = "T-RT-06"
+name = "vLLM"
+subcategory = "model_runtime"
+catalog_id = "vllm"
+platforms = ["linux"]
+install = { method = "service", source = "vllm", port = 8000, health = "/v1/models", requires = "gpu" }
+expect = { kind = "model_runtime", liveness = "running" }
+
+[[entries]]
+id = "T-RT-07"
+name = "LocalAI"
+subcategory = "model_runtime"
+catalog_id = "localai"
+platforms = ["mac", "linux"]
+install = { method = "service", source = "localai", port = 8082, health = "/v1/models", model = "any-small" }
+expect = { kind = "model_runtime", liveness = "running" }
+
+[[entries]]
+id = "T-RT-08"
+name = "Open WebUI"
+subcategory = "model_runtime"
+catalog_id = "open-webui"
+platforms = ["mac", "linux", "win"]
+install = { method = "service", source = "open-webui", port = 8083, health = "/" }
+expect = { kind = "ai_frontend", liveness = "running" }
+
+[[entries]]
+id = "T-RT-09"
+name = "OpenHands"
+subcategory = "model_runtime"
+catalog_id = "openhands"
+platforms = ["mac", "linux", "win"]
+install = { method = "service", source = "openhands" }
+expect = { kind = "agent_platform", liveness = "installed" }
+
+# -- 1e. Install-channel variants -- T-CHAN-01 .. T-CHAN-08 ------------
+# Deliberate second installs of a tool already listed above. These are not
+# scored for presence - the base entry covers that - but for duplication: one
+# tool reached two ways must still resolve to one asset. This is the defect
+# class that has broken most often, which is why it has its own outcome (DUP)
+# rather than being folded into a partial success.
+
+[[entries]]
+id = "T-CHAN-01"
+name = "Claude Code under an nvm-managed Node"
+subcategory = "channel_variant"
+platforms = ["linux"]
+variant_of = "T-CLI-01"
+asserts = "version-manager Node roots resolve to one asset"
+install = { method = "channel-variant", variant = "nvm", package = "@anthropic-ai/claude-code" }
+
+[[entries]]
+id = "T-CHAN-02"
+name = "Claude Code under an fnm-managed Node"
+subcategory = "channel_variant"
+platforms = ["mac"]
+variant_of = "T-CLI-01"
+asserts = "as T-CHAN-01, second manager"
+install = { method = "channel-variant", variant = "fnm", package = "@anthropic-ai/claude-code" }
+
+[[entries]]
+id = "T-CHAN-03"
+name = "Codex installed to ~/.local/bin"
+subcategory = "channel_variant"
+platforms = ["linux"]
+variant_of = "T-CLI-02"
+asserts = "user-local install does not double-count"
+install = { method = "channel-variant", variant = "user-local", package = "@openai/codex" }
+
+[[entries]]
+id = "T-CHAN-04"
+name = "Claude Code reachable via both /usr/bin and /bin"
+subcategory = "channel_variant"
+platforms = ["linux"]
+variant_of = "T-CLI-01"
+asserts = "usr-merge: two spellings, one asset, canonical path reported"
+install = { method = "channel-variant", variant = "usr-merge" }
+
+[[entries]]
+id = "T-CHAN-05"
+name = "Aider via pip --user alongside pipx"
+subcategory = "channel_variant"
+platforms = ["mac"]
+variant_of = "T-CLI-10"
+asserts = "two Python channels, one asset"
+install = { method = "channel-variant", variant = "pip-user", package = "aider-chat" }
+
+[[entries]]
+id = "T-CHAN-06"
+name = "Ollama via distro package and vendor script"
+subcategory = "channel_variant"
+platforms = ["linux"]
+variant_of = "T-RT-01"
+asserts = "two package channels, one asset"
+install = { method = "channel-variant", variant = "distro-and-vendor", source = "ollama" }
+
+[[entries]]
+id = "T-CHAN-07"
+name = "Cursor via .deb and AppImage"
+subcategory = "channel_variant"
+platforms = ["linux"]
+variant_of = "T-APP-02"
+asserts = "two app channels, one asset"
+install = { method = "channel-variant", variant = "deb-and-appimage", source = "cursor" }
+
+[[entries]]
+id = "T-CHAN-08"
+name = "VS Code via winget and vendor .exe"
+subcategory = "channel_variant"
+platforms = ["win"]
+variant_of = "T-APP-04"
+asserts = "casing and registry vs filesystem agree"
+install = { method = "channel-variant", variant = "winget-and-exe", source = "vscode" }

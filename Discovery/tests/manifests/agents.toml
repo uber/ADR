@@ -1,0 +1,134 @@
+# Category 4 of Discovery/tests/README.md: the 12 agent entries.
+#
+# Agents are distinguished from tools by *liveness*, so each is left in the
+# required state immediately before the second scan - which is why the runner
+# executes runtime-state last and why nothing between it and the scan may
+# restart the machine.
+#
+# AG-08 .. AG-11 cannot be automated: OAuth device flows resist unattended
+# scripting. They are signed in by hand once while building the golden image
+# and captured in the snapshot. The run *asserts* those sessions are still
+# valid and fails loudly if they have expired, because a silently expired
+# session records four quiet misses and blames the collector for them.
+version = 1
+category = "agent"
+
+[[entries]]
+id = "AG-01"
+name = "Running agent"
+subcategory = "runtime_state"
+platforms = ["mac", "linux", "win"]
+depends_on = ["T-CLI-01"]
+state = { method = "runtime-state", launch = "claude", detach = true, hold_until_scan = true }
+expect = { kind = "cli_agent", liveness = "running" }
+
+[[entries]]
+id = "AG-02"
+name = "Spawned child"
+subcategory = "runtime_state"
+platforms = ["mac", "linux", "win"]
+depends_on = ["AG-01"]
+state = { method = "runtime-state", parent = "AG-01", launch = "sleep 3600", detach = true, hold_until_scan = true }
+expect = { parent_agent = "claude-code" }
+
+[[entries]]
+id = "AG-03"
+name = "Running runtime"
+subcategory = "runtime_state"
+platforms = ["mac", "linux", "win"]
+depends_on = ["T-RT-01"]
+state = { method = "runtime-state", launch = "ollama serve", detach = true, hold_until_scan = true }
+expect = { kind = "model_runtime", liveness = "running" }
+
+[[entries]]
+id = "AG-04"
+name = "launchd agent"
+subcategory = "scheduled"
+platforms = ["mac"]
+depends_on = ["T-CLI-01"]
+state = { method = "scheduler", backend = "launchd", path = "~/Library/LaunchAgents/com.adr.e2e.agent.plist", schedule = "0 * * * *", command = "claude -p 'nightly triage'" }
+expect = { kind = "scheduled_agent", liveness = "scheduled" }
+
+[[entries]]
+id = "AG-05"
+name = "cron job"
+subcategory = "scheduled"
+platforms = ["linux"]
+depends_on = ["T-CLI-01"]
+state = { method = "scheduler", backend = "cron", schedule = "0 * * * *", command = "claude -p 'nightly triage'" }
+expect = { kind = "scheduled_agent", liveness = "scheduled" }
+
+[[entries]]
+id = "AG-06"
+name = "systemd user unit"
+subcategory = "scheduled"
+platforms = ["linux"]
+depends_on = ["T-CLI-01"]
+state = { method = "scheduler", backend = "systemd", path = "~/.config/systemd/user/adr-agent.service", command = "claude -p 'nightly triage'" }
+expect = { kind = "scheduled_agent", liveness = "scheduled" }
+
+[[entries]]
+id = "AG-07"
+name = "Scheduled task"
+subcategory = "scheduled"
+platforms = ["win"]
+depends_on = ["T-CLI-01"]
+state = { method = "scheduler", backend = "schtasks", task_name = "ADR E2E Agent", schedule = "HOURLY", command = "claude -p 'nightly triage'" }
+expect = { kind = "scheduled_agent", liveness = "scheduled" }
+
+# Baked into the golden image, never scripted. `assert_only` tells the runner to
+# verify rather than create, and to fail the run - not the entry - when the
+# assertion does not hold.
+
+[[entries]]
+id = "AG-08"
+name = "Claude Code identity"
+subcategory = "identity"
+platforms = ["mac", "linux", "win"]
+depends_on = ["T-CLI-01"]
+state = { method = "identity", tool = "claude-code", account = "corporate", assert_only = true }
+expect = { kind = "cli_agent", has_identity = true }
+
+[[entries]]
+id = "AG-09"
+name = "Codex identity"
+subcategory = "identity"
+platforms = ["mac", "linux", "win"]
+depends_on = ["T-CLI-02"]
+state = { method = "identity", tool = "codex", account = "corporate", assert_only = true }
+expect = { kind = "cli_agent", has_identity = true }
+
+[[entries]]
+id = "AG-10"
+name = "Gemini CLI identity"
+subcategory = "identity"
+platforms = ["mac", "linux", "win"]
+depends_on = ["T-CLI-03"]
+state = { method = "identity", tool = "gemini-cli", account = "corporate", assert_only = true }
+expect = { kind = "cli_agent", has_identity = true }
+
+[[entries]]
+id = "AG-11"
+name = "Personal account"
+subcategory = "identity"
+platforms = ["mac", "linux", "win"]
+depends_on = ["T-CLI-04"]
+state = { method = "identity", tool = "opencode", account = "personal", assert_only = true }
+expect = { kind = "cli_agent", has_identity = true, risk_factor = "personal_account" }
+
+# The variable *name* is the signal and must be reported; the value is the
+# canary and must not survive serialization.
+
+[[entries]]
+id = "AG-12"
+name = "Shell-exported key"
+subcategory = "env_credential"
+platforms = ["mac", "linux", "win"]
+canaries = ["env_key"]
+expect = { env_name = "ANTHROPIC_API_KEY" }
+[entries.create]
+kind = "append"
+body = "shell_export"
+variable = "ANTHROPIC_API_KEY"
+value = "{{canary:env_key}}"
+path = { mac = "~/.zshrc", linux = "~/.bashrc", win = "%USERPROFILE%/Documents/WindowsPowerShell/profile.ps1" }

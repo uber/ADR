@@ -1,0 +1,156 @@
+# Where the vendor-installed entries come from, per OS.
+#
+# Kept out of the entry rows because these are the volatile part of the
+# manifest: sixteen vendors, sixteen sets of silent-install flags, and sixteen
+# habits of changing both. Separating them means a URL rotation is a one-line
+# diff to this file rather than an edit to the inventory.
+#
+# `url = ""` means unresolved. The app-installer and vendor-binary recipes
+# refuse to run an entry whose source is unresolved and record it
+# `unimplemented` rather than `failed`, because a URL nobody has filled in is a
+# harness gap and must never be reported as a vendor that stopped shipping.
+# `adr-e2e check` lists what is still empty.
+version = 1
+
+# -- vendor binaries (T-CLI-11, T-CLI-12) ------------------------------
+[sources.crush]
+mac = { type = "tarball", url = "" }
+linux = { type = "tarball", url = "" }
+win = { type = "zip", url = "" }
+
+[sources.grok-cli]
+mac = { type = "tarball", url = "" }
+linux = { type = "tarball", url = "" }
+win = { type = "zip", url = "" }
+
+# -- desktop apps and browsers (T-APP-01 .. T-APP-16) ------------------
+# `silent` is the flag set that makes the installer run unattended. An empty
+# string is not a default: it means nobody has confirmed the flags yet.
+[sources.claude-desktop]
+mac = { type = "dmg", url = "", silent = "" }
+win = { type = "exe", url = "", silent = "/S" }
+
+[sources.cursor]
+mac = { type = "dmg", url = "", silent = "" }
+linux = { type = "deb", url = "", silent = "" }
+win = { type = "exe", url = "", silent = "/VERYSILENT /MERGETASKS=!runcode" }
+
+[sources.windsurf]
+mac = { type = "dmg", url = "", silent = "" }
+linux = { type = "deb", url = "", silent = "" }
+win = { type = "exe", url = "", silent = "/VERYSILENT" }
+
+[sources.vscode]
+mac = { type = "zip", url = "", silent = "" }
+linux = { type = "deb", url = "", silent = "" }
+win = { type = "exe", url = "", silent = "/VERYSILENT /MERGETASKS=!runcode" }
+
+[sources.zed]
+mac = { type = "dmg", url = "", silent = "" }
+linux = { type = "tarball", url = "", silent = "" }
+
+[sources.jetbrains-ai]
+mac = { type = "dmg", url = "", silent = "" }
+linux = { type = "tarball", url = "", silent = "" }
+win = { type = "exe", url = "", silent = "/S" }
+
+[sources.trae]
+mac = { type = "dmg", url = "", silent = "" }
+win = { type = "exe", url = "", silent = "/VERYSILENT" }
+
+[sources.warp]
+mac = { type = "dmg", url = "", silent = "" }
+linux = { type = "deb", url = "", silent = "" }
+win = { type = "exe", url = "", silent = "/VERYSILENT" }
+
+[sources.chatgpt-desktop]
+mac = { type = "dmg", url = "", silent = "" }
+win = { type = "msix", url = "", silent = "" }
+
+[sources.perplexity]
+mac = { type = "dmg", url = "", silent = "" }
+
+[sources.gemini-desktop]
+mac = { type = "dmg", url = "", silent = "" }
+win = { type = "exe", url = "", silent = "/S" }
+
+[sources.copilot-desktop]
+mac = { type = "dmg", url = "", silent = "" }
+win = { type = "msix", url = "", silent = "" }
+
+[sources.raycast]
+mac = { type = "dmg", url = "", silent = "" }
+
+[sources.comet]
+mac = { type = "dmg", url = "", silent = "" }
+win = { type = "exe", url = "", silent = "/S" }
+
+[sources.dia]
+mac = { type = "dmg", url = "", silent = "" }
+
+[sources.atlas]
+mac = { type = "dmg", url = "", silent = "" }
+
+# -- services (T-RT-*, M-SP-01, N-08) ---------------------------------
+# Model weights are baked into the golden image rather than pulled per run: a
+# run that downloads gigabytes is a run that fails the day a registry
+# rate-limits it, and that failure would read as a detection regression.
+[sources.ollama]
+mac = { type = "dmg", url = "" }
+linux = { type = "script", url = "" }
+win = { type = "exe", url = "", silent = "/S" }
+
+[sources.lm-studio]
+mac = { type = "dmg", url = "" }
+linux = { type = "appimage", url = "" }
+win = { type = "exe", url = "", silent = "/S" }
+
+[sources."llama.cpp"]
+mac = { type = "brew", package = "llama.cpp" }
+linux = { type = "tarball", url = "" }
+win = { type = "zip", url = "" }
+
+[sources.gpt4all]
+mac = { type = "dmg", url = "" }
+linux = { type = "run", url = "" }
+win = { type = "exe", url = "", silent = "/S" }
+
+[sources.jan]
+mac = { type = "dmg", url = "" }
+linux = { type = "appimage", url = "" }
+win = { type = "exe", url = "", silent = "/S" }
+
+[sources.vllm]
+linux = { type = "pip", package = "vllm", requires = "gpu" }
+
+[sources.localai]
+mac = { type = "brew", package = "localai" }
+linux = { type = "docker", image = "localai/localai:latest" }
+
+[sources.open-webui]
+mac = { type = "pip", package = "open-webui" }
+linux = { type = "docker", image = "ghcr.io/open-webui/open-webui:main" }
+win = { type = "pip", package = "open-webui" }
+
+[sources.openhands]
+mac = { type = "docker", image = "docker.all-hands.dev/all-hands-ai/openhands:latest" }
+linux = { type = "docker", image = "docker.all-hands.dev/all-hands-ai/openhands:latest" }
+win = { type = "docker", image = "docker.all-hands.dev/all-hands-ai/openhands:latest" }
+
+# The trivial stdio MCP server M-SP-01 starts by hand and every M-SITE row
+# declares. Written by the harness, so it has no URL to resolve.
+[sources.adr-probe-server]
+mac = { type = "local", path = "~/dev/tools/adr-probe-server.js" }
+linux = { type = "local", path = "~/dev/tools/adr-probe-server.js" }
+win = { type = "local", path = "~/dev/tools/adr-probe-server.js" }
+
+# -- negative controls that need an installer (N-05, N-08) -------------
+[sources.slack]
+mac = { type = "dmg", url = "", silent = "" }
+linux = { type = "deb", url = "", silent = "" }
+win = { type = "exe", url = "", silent = "/S" }
+
+[sources.nginx]
+mac = { type = "brew", package = "nginx" }
+linux = { type = "apt", package = "nginx" }
+win = { type = "zip", url = "" }

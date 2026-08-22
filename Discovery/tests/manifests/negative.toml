@@ -1,0 +1,137 @@
+# Negative controls of Discovery/tests/README.md: N-01 .. N-10.
+#
+# Without these the false-positive rate cannot be measured, and a collector that
+# reported everything would score perfectly on every other table.
+#
+# `detect` is how the scorer attributes a false positive to the control that
+# provoked it. An FP matching none of these is still an FP - it is just an
+# unattributed one, which is the worse kind to receive.
+version = 1
+category = "negative_control"
+
+# N-01 .. N-04 are baseline: the golden image installs them because the rest of
+# the manifest depends on them. They are still scored, because "the
+# prerequisites are not AI tools" is exactly the claim that quietly stops being
+# true when a runtime starts shipping an assistant.
+
+[[entries]]
+id = "N-01"
+name = "Node.js"
+subcategory = "prerequisite"
+platforms = ["mac", "linux", "win"]
+must_not_appear = true
+reason = "a JavaScript runtime is not an AI tool"
+install = { method = "baseline-prereq", package = "nodejs" }
+detect = { names = ["node", "nodejs", "npm"], paths = ["/usr/bin/node", "/usr/local/bin/node"] }
+
+[[entries]]
+id = "N-02"
+name = "Python + pipx"
+subcategory = "prerequisite"
+platforms = ["mac", "linux", "win"]
+must_not_appear = true
+reason = "a language runtime and its installer are not AI tools"
+install = { method = "baseline-prereq", package = "python3-pipx" }
+detect = { names = ["python", "python3", "pipx"], paths = ["/usr/bin/python3", "/usr/local/bin/pipx"] }
+
+[[entries]]
+id = "N-03"
+name = "Docker"
+subcategory = "prerequisite"
+platforms = ["mac", "linux", "win"]
+must_not_appear = true
+reason = "a container runtime is not an AI tool, however many MCP servers run in it"
+install = { method = "baseline-prereq", package = "docker" }
+detect = { names = ["docker", "dockerd", "Docker Desktop"], paths = ["/usr/bin/docker"] }
+
+[[entries]]
+id = "N-04"
+name = "git"
+subcategory = "prerequisite"
+platforms = ["mac", "linux", "win"]
+must_not_appear = true
+reason = "version control is not an AI tool"
+install = { method = "baseline-prereq", package = "git" }
+detect = { names = ["git"], paths = ["/usr/bin/git"] }
+
+# A non-AI Electron app. Electron is the shape most AI desktop apps share, so a
+# collector that keys on the shape rather than on identity fails here.
+
+[[entries]]
+id = "N-05"
+name = "Slack desktop"
+subcategory = "non_ai_app"
+platforms = ["mac", "linux", "win"]
+must_not_appear = true
+reason = "an Electron app is not an AI app"
+install = { method = "non-ai-app", source = "slack" }
+detect = { names = ["Slack", "slack"], paths = ["/Applications/Slack.app", "/usr/share/slack"] }
+
+[[entries]]
+id = "N-06"
+name = "Prettier VS Code extension"
+subcategory = "non_ai_app"
+platforms = ["mac", "linux", "win"]
+depends_on = ["T-APP-04"]
+must_not_appear = true
+reason = "a formatter extension is not an AI extension"
+install = { method = "non-ai-app", extension_id = "esbenp.prettier-vscode" }
+detect = { names = ["prettier", "esbenp.prettier-vscode"] }
+
+# A path that contains "mcp" and nothing else that does. Substring matching on a
+# path is the cheapest possible MCP detector and the wrongest.
+
+[[entries]]
+id = "N-07"
+name = "mcp-backup.sh"
+subcategory = "lookalike"
+platforms = ["mac", "linux", "win"]
+must_not_appear = true
+reason = "a path containing \"mcp\" is not an MCP server"
+create = { kind = "file", path = "~/bin/mcp-backup.sh", body = "backup_script", mode = "0755" }
+detect = { names = ["mcp-backup", "mcp-backup.sh"], paths = ["~/bin/mcp-backup.sh"] }
+
+# An HTTP server on a plausible port serving JSON that is not a model list.
+# Port-plus-JSON is the other cheap detector, and this is where it fails.
+
+[[entries]]
+id = "N-08"
+name = "nginx serving non-model JSON"
+subcategory = "lookalike"
+platforms = ["mac", "linux", "win"]
+must_not_appear = true
+reason = "a listening port serving JSON is not a model runtime"
+install = { method = "service", source = "nginx", port = 8081, health = "/status.json" }
+detect = { names = ["nginx"], ports = [8081] }
+
+# A dangling symlink named after a real tool. The target does not exist, so
+# nothing is installed - and an asset here means the collector believes a name
+# rather than a file.
+
+[[entries]]
+id = "N-09"
+name = "Dangling claude symlink"
+subcategory = "lookalike"
+platforms = ["mac", "linux", "win"]
+privileged = true
+must_not_appear = true
+explains_error = true
+reason = "a symlink to a missing target is not an installed tool"
+create = { kind = "symlink", path = "/usr/local/bin/claude-old", target = "/opt/removed/claude", mode = "0777" }
+detect = { paths = ["/usr/local/bin/claude-old", "/opt/removed/claude"] }
+
+# The open-world check. Unlike every other control this one must not be silent
+# either: an unrecognized tool that looks like AI belongs in review_queue.
+# Confidently wrong and silent are different failures, and this entry is scored
+# against both.
+
+[[entries]]
+id = "N-10"
+name = "In-house AI wrapper"
+subcategory = "open_world"
+platforms = ["mac", "linux", "win"]
+must_not_appear = true
+must_be_reviewed = true
+reason = "an uncatalogued AI wrapper belongs in review_queue, not in assets"
+create = { kind = "file", path = "~/bin/ask-corp-llm.sh", body = "llm_wrapper", mode = "0755" }
+detect = { names = ["ask-corp-llm", "ask-corp-llm.sh"], paths = ["~/bin/ask-corp-llm.sh"] }
