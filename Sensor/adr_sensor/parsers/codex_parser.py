@@ -1,11 +1,13 @@
 """
 Parser for OpenAI Codex CLI logs.
 Reads JSONL files from ~/.codex/sessions/
+
+Performance-optimized: Skips log files older than 2 weeks by default.
 """
 
 import json
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -14,12 +16,15 @@ from ..utils.string_utils import truncate_middle
 from ..utils.timestamp_utils import normalize_timestamp
 from .base_parser import BaseParser
 
+MAX_LOG_AGE_DAYS = 14
+
 
 class CodexParser(BaseParser):
     """Parser for OpenAI Codex CLI JSONL log files."""
 
-    def __init__(self):
+    def __init__(self, max_age_days: int = MAX_LOG_AGE_DAYS):
         self.base_path = Path.home() / ".codex/sessions"
+        self.max_age_days = max_age_days
 
     def parse_all(self) -> List[AgentEvent]:
         """Parse all available Codex logs."""
@@ -32,7 +37,26 @@ class CodexParser(BaseParser):
         jsonl_files = list(self.base_path.glob("**/*.jsonl"))
         print(f"[CODEX] Found {len(jsonl_files)} JSONL files")
 
+        cutoff_time = datetime.now(timezone.utc) - timedelta(days=self.max_age_days)
+        filtered_files = []
+        skipped_count = 0
+
         for jsonl_file in jsonl_files:
+            try:
+                mtime = datetime.fromtimestamp(jsonl_file.stat().st_mtime, tz=timezone.utc)
+                if mtime >= cutoff_time:
+                    filtered_files.append(jsonl_file)
+                else:
+                    skipped_count += 1
+            except (OSError, PermissionError):
+                skipped_count += 1
+
+        if skipped_count > 0:
+            print(f"[CODEX] Skipped {skipped_count} files older than {self.max_age_days} days")
+
+        print(f"[CODEX] Processing {len(filtered_files)} recent files")
+
+        for jsonl_file in filtered_files:
             try:
                 entry = self.parse_jsonl_file(jsonl_file)
                 if entry and entry.has_meaningful_content():

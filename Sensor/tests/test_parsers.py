@@ -157,6 +157,23 @@ class TestClineParser:
 
 
 class TestCodexParser:
+    def _write_session(self, path: Path, created_at: str = "2020-01-01T00:00:00Z") -> None:
+        events = [
+            {
+                "type": "session_meta",
+                "payload": {"id": path.stem, "timestamp": created_at, "cwd": "/tmp"},
+            },
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "Review this project"}],
+                },
+            },
+        ]
+        path.write_text("".join(json.dumps(event) + "\n" for event in events))
+
     def test_parse_jsonl_file(self, tmp_path):
         """Test parsing a Codex CLI JSONL file."""
         jsonl_file = tmp_path / "rollout-001.jsonl"
@@ -426,6 +443,46 @@ class TestCodexParser:
         entry = CodexParser().parse_jsonl_file(jsonl_file)
         assert len(entry.chat_history) == 2  # user message + assistant tool turn
         assert len([t for m in entry.chat_history for t in m.tools]) == 1
+
+    def test_default_max_age_days(self):
+        assert CodexParser().max_age_days == 14
+
+    def test_parse_all_skips_old_files_before_parsing(self, tmp_path):
+        jsonl_file = tmp_path / "old-session.jsonl"
+        self._write_session(jsonl_file)
+        old_time = (datetime.now(timezone.utc) - timedelta(days=30)).timestamp()
+        os.utime(jsonl_file, (old_time, old_time))
+
+        parser = CodexParser(max_age_days=14)
+        parser.base_path = tmp_path
+        with patch.object(parser, "parse_jsonl_file") as parse_file:
+            assert parser.parse_all() == []
+        parse_file.assert_not_called()
+
+    def test_parse_all_includes_recently_modified_session(self, tmp_path):
+        jsonl_file = tmp_path / "resumed-session.jsonl"
+        self._write_session(jsonl_file, created_at="2020-01-01T00:00:00Z")
+        recent_time = (datetime.now(timezone.utc) - timedelta(hours=1)).timestamp()
+        os.utime(jsonl_file, (recent_time, recent_time))
+
+        parser = CodexParser(max_age_days=14)
+        parser.base_path = tmp_path
+
+        entries = parser.parse_all()
+
+        assert len(entries) == 1
+        assert entries[0].session_id == "codex_resumed-session"
+
+    def test_parse_all_honors_larger_age_window(self, tmp_path):
+        jsonl_file = tmp_path / "historical-session.jsonl"
+        self._write_session(jsonl_file)
+        old_time = (datetime.now(timezone.utc) - timedelta(days=30)).timestamp()
+        os.utime(jsonl_file, (old_time, old_time))
+
+        parser = CodexParser(max_age_days=10000)
+        parser.base_path = tmp_path
+
+        assert len(parser.parse_all()) == 1
 
     def test_parse_no_directory(self):
         """Test parse_all when directory doesn't exist."""

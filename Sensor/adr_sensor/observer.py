@@ -71,7 +71,7 @@ class AgentObserver:
         self.claude_desktop_parser = (
             ClaudeDesktopParser(max_age_days=max_age_days) if max_age_days is not None else ClaudeDesktopParser()
         )
-        self.codex_parser = CodexParser()
+        self.codex_parser = CodexParser(max_age_days=max_age_days) if max_age_days is not None else CodexParser()
         self.cline_parser = ClineParser()
         self.warp_parser = WarpParser(max_age_days=max_age_days) if max_age_days is not None else WarpParser()
         self.opencode_parser = (
