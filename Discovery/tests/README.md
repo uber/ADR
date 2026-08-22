@@ -58,186 +58,240 @@ compare(delta.added, manifest)          # this comparison is the test result
 
 ## The install manifest
 
-The manifest is grouped by the categories the collector reports, so each table maps directly onto a slice of the snapshot. `catalog_id` is the join key between "what we installed" and "what was reported".
+This is the complete inventory the harness installs. Every row has a stable **id**, and the id is what the runner executes, what `manifest.actual.json` records an outcome against, and what a scorecard reports a miss under. Nothing is left as "and a few others" — an entry that is not listed here is not tested.
 
-Platform columns record where a vendor ships the tool. Availability is re-confirmed at provisioning time; where a tool has disappeared for an OS, the cell becomes `n/a` for that run rather than an expected miss.
+`catalog_id` is the join key between what we installed and what was reported. Rows with no `catalog_id` (MCP servers, skills, hooks) are matched by install path or launch identity instead.
 
-The manifest covers **all 42 entries in the catalog**, and that is a property worth keeping: a catalog entry with no manifest row is a tool the collector claims to recognize but that nothing ever verifies. Adding a catalog entry should mean adding a manifest row in the same change.
+Platform columns record where a vendor ships the tool. Availability is re-confirmed at provisioning time; where a vendor no longer ships for an OS, that run records the entry as `unavailable` rather than scoring it as a miss.
+
+**120 entries in total:**
+
+| Category | Entries | ids |
+| --- | ---: | --- |
+| AI tools | 50 | `T-CLI-*` `T-APP-*` `T-EXT-*` `T-RT-*` `T-CHAN-*` |
+| MCP servers | 29 | `M-SITE-*` `M-PIN-*` `M-SP-*` |
+| Skills & programmable surface | 19 | `S-*` |
+| Agents | 12 | `AG-*` |
+| Negative controls | 10 | `N-*` |
+
+The AI-tool rows cover **all 42 entries in the catalog**, and that is a property worth keeping: a catalog entry with no manifest row is a tool the collector claims to recognize but that nothing ever verifies. Adding a catalog entry should mean adding a manifest row in the same change.
 
 ### Category 1 — AI tools
 
-The `assets` entries the collector classifies as installed software. Four sub-tables, because the evidence channel differs for each.
+The `assets` entries the collector classifies as installed software. Five sub-tables, because the evidence channel differs for each.
 
-#### 1a. CLI coding agents
+#### 1a. CLI coding agents — `T-CLI-01` … `T-CLI-12`
 
-Installed globally so their binaries land on `PATH`. Each should resolve to one asset with a version and an install method.
+Installed globally so their binaries land on `PATH`. Versions are pinned, because an unpinned install makes the expected `version` unscoreable.
 
-| Tool | `catalog_id` | Install | macOS | Linux | Windows |
-| --- | --- | --- | :-: | :-: | :-: |
-| Claude Code | `claude-code` | `npm i -g @anthropic-ai/claude-code` | ✓ | ✓ | ✓ |
-| Codex CLI | `codex` | `npm i -g @openai/codex` | ✓ | ✓ | ✓ |
-| Gemini CLI | `gemini-cli` | `npm i -g @google/gemini-cli` | ✓ | ✓ | ✓ |
-| opencode | `opencode` | `npm i -g opencode-ai` | ✓ | ✓ | ✓ |
-| Amp | `amp` | `npm i -g @sourcegraph/amp` | ✓ | ✓ | ✓ |
-| Kilo CLI | `kilo-cli` | `npm i -g @kilocode/cli` | ✓ | ✓ | ✓ |
-| Qwen Code | `qwen-code` | `npm i -g @qwen-code/qwen-code` | ✓ | ✓ | ✓ |
-| Copilot CLI | `copilot-cli` | `npm i -g @github/copilot` | ✓ | ✓ | ✓ |
-| Goose | `goose` | `npm i -g @block/goose-cli` | ✓ | ✓ | ✓ |
-| Aider | `aider` | `pipx install aider-chat` | ✓ | ✓ | ✓ |
-| Crush | `crush` | vendor binary | ✓ | ✓ | ✓ |
-| Grok CLI | `grok-cli` | vendor binary | ✓ | ✓ | ✓ |
+| id | Tool | `catalog_id` | Install | mac | linux | win |
+| --- | --- | --- | --- | :-: | :-: | :-: |
+| `T-CLI-01` | Claude Code | `claude-code` | `npm i -g @anthropic-ai/claude-code@<pin>` | ✓ | ✓ | ✓ |
+| `T-CLI-02` | Codex CLI | `codex` | `npm i -g @openai/codex@<pin>` | ✓ | ✓ | ✓ |
+| `T-CLI-03` | Gemini CLI | `gemini-cli` | `npm i -g @google/gemini-cli@<pin>` | ✓ | ✓ | ✓ |
+| `T-CLI-04` | opencode | `opencode` | `npm i -g opencode-ai@<pin>` | ✓ | ✓ | ✓ |
+| `T-CLI-05` | Amp | `amp` | `npm i -g @sourcegraph/amp@<pin>` | ✓ | ✓ | ✓ |
+| `T-CLI-06` | Kilo CLI | `kilo-cli` | `npm i -g @kilocode/cli@<pin>` | ✓ | ✓ | ✓ |
+| `T-CLI-07` | Qwen Code | `qwen-code` | `npm i -g @qwen-code/qwen-code@<pin>` | ✓ | ✓ | ✓ |
+| `T-CLI-08` | Copilot CLI | `copilot-cli` | `npm i -g @github/copilot@<pin>` | ✓ | ✓ | ✓ |
+| `T-CLI-09` | Goose | `goose` | `npm i -g @block/goose-cli@<pin>` | ✓ | ✓ | ✓ |
+| `T-CLI-10` | Aider | `aider` | `pipx install aider-chat==<pin>` | ✓ | ✓ | ✓ |
+| `T-CLI-11` | Crush | `crush` | vendor binary → `/usr/local/bin` | ✓ | ✓ | ✓ |
+| `T-CLI-12` | Grok CLI | `grok-cli` | vendor binary → `/usr/local/bin` | ✓ | ✓ | ✓ |
 
-**Install-channel variants.** At least three of the above are installed a second way on at least one VM — a version-manager Node (`nvm`, `fnm`), a distro package, and a user-local `~/.local/bin` install. These exist to test that one tool reached two ways is still **one asset**, which is the defect class that has broken most often.
+Expected for each: one asset, correct `version`, `install_path` on the real binary, `install_method` matching the channel, `liveness` = installed.
 
-#### 1b. Desktop apps, IDEs and AI browsers
+#### 1b. Desktop apps, IDEs and AI browsers — `T-APP-01` … `T-APP-16`
 
 Installed from vendor installers so the real bundle, registry entry or `.desktop` file exists.
 
-| Tool | `catalog_id` | macOS | Linux | Windows |
-| --- | --- | :-: | :-: | :-: |
-| Claude Desktop | `claude-desktop` | ✓ | n/a | ✓ |
-| Cursor | `cursor` | ✓ | ✓ | ✓ |
-| Windsurf | `windsurf` | ✓ | ✓ | ✓ |
-| VS Code | `vscode` | ✓ | ✓ | ✓ |
-| Zed | `zed` | ✓ | ✓ | n/a |
-| JetBrains IDE + AI Assistant | `jetbrains-ai` | ✓ | ✓ | ✓ |
-| Trae | `trae` | ✓ | n/a | ✓ |
-| Warp | `warp` | ✓ | ✓ | ✓ |
-| ChatGPT Desktop | `chatgpt-desktop` | ✓ | n/a | ✓ |
-| Perplexity | `perplexity` | ✓ | n/a | n/a |
-| Gemini Desktop | `gemini-desktop` | ✓ | n/a | ✓ |
-| Copilot Desktop | `copilot-desktop` | ✓ | n/a | ✓ |
-| Raycast | `raycast` | ✓ | n/a | n/a |
-| Comet browser | `comet` | ✓ | n/a | ✓ |
-| Dia browser | `dia` | ✓ | n/a | n/a |
-| ChatGPT Atlas | `atlas` | ✓ | n/a | n/a |
+| id | Tool | `catalog_id` | mac | linux | win |
+| --- | --- | --- | :-: | :-: | :-: |
+| `T-APP-01` | Claude Desktop | `claude-desktop` | ✓ | n/a | ✓ |
+| `T-APP-02` | Cursor | `cursor` | ✓ | ✓ | ✓ |
+| `T-APP-03` | Windsurf | `windsurf` | ✓ | ✓ | ✓ |
+| `T-APP-04` | VS Code | `vscode` | ✓ | ✓ | ✓ |
+| `T-APP-05` | Zed | `zed` | ✓ | ✓ | n/a |
+| `T-APP-06` | JetBrains IDE + AI Assistant | `jetbrains-ai` | ✓ | ✓ | ✓ |
+| `T-APP-07` | Trae | `trae` | ✓ | n/a | ✓ |
+| `T-APP-08` | Warp | `warp` | ✓ | ✓ | ✓ |
+| `T-APP-09` | ChatGPT Desktop | `chatgpt-desktop` | ✓ | n/a | ✓ |
+| `T-APP-10` | Perplexity | `perplexity` | ✓ | n/a | n/a |
+| `T-APP-11` | Gemini Desktop | `gemini-desktop` | ✓ | n/a | ✓ |
+| `T-APP-12` | Copilot Desktop | `copilot-desktop` | ✓ | n/a | ✓ |
+| `T-APP-13` | Raycast | `raycast` | ✓ | n/a | n/a |
+| `T-APP-14` | Comet browser | `comet` | ✓ | n/a | ✓ |
+| `T-APP-15` | Dia browser | `dia` | ✓ | n/a | n/a |
+| `T-APP-16` | ChatGPT Atlas | `atlas` | ✓ | n/a | n/a |
 
-#### 1c. IDE and browser extensions
+These require a logged-in graphical session on the VM; see *Test environment*.
 
-Installed into the VS Code from 1b, and into the browser where applicable.
+#### 1c. IDE and browser extensions — `T-EXT-01` … `T-EXT-05`
 
-| Extension | `catalog_id` | Extension id | All three VMs |
-| --- | --- | --- | :-: |
-| Cline | `cline` | `saoudrizwan.claude-dev` | ✓ |
-| Continue | `continue` | `continue.continue` | ✓ |
-| Roo Code | `roo-code` | `rooveterinaryinc.roo-cline` | ✓ |
-| Kilo Code | `kilo-code` | `kilocode.kilo-code` | ✓ |
-| GitHub Copilot | `copilot-ext` | `github.copilot` | ✓ |
+Installed into the VS Code from `T-APP-04` via `code --install-extension <id>@<pin>`.
 
-#### 1d. Local model runtimes
+| id | Extension | `catalog_id` | Extension id | mac | linux | win |
+| --- | --- | --- | --- | :-: | :-: | :-: |
+| `T-EXT-01` | Cline | `cline` | `saoudrizwan.claude-dev` | ✓ | ✓ | ✓ |
+| `T-EXT-02` | Continue | `continue` | `continue.continue` | ✓ | ✓ | ✓ |
+| `T-EXT-03` | Roo Code | `roo-code` | `rooveterinaryinc.roo-cline` | ✓ | ✓ | ✓ |
+| `T-EXT-04` | Kilo Code | `kilo-code` | `kilocode.kilo-code` | ✓ | ✓ | ✓ |
+| `T-EXT-05` | GitHub Copilot | `copilot-ext` | `github.copilot` | ✓ | ✓ | ✓ |
+
+#### 1d. Local model runtimes and platforms — `T-RT-01` … `T-RT-09`
 
 Installed **and started**, with at least one small model pulled, so the listening port and the model-listing endpoint are both real.
 
-| Runtime | `catalog_id` | Port / endpoint | macOS | Linux | Windows |
-| --- | --- | --- | :-: | :-: | :-: |
-| Ollama | `ollama` | 11434 `/api/tags` | ✓ | ✓ | ✓ |
-| LM Studio | `lm-studio` | 1234 `/v1/models` | ✓ | ✓ | ✓ |
-| llama.cpp | `llama.cpp` | 8080 `/v1/models` | ✓ | ✓ | ✓ |
-| GPT4All | `gpt4all` | — | ✓ | ✓ | ✓ |
-| Jan | `jan` | 1337 `/v1/models` | ✓ | ✓ | ✓ |
-| vLLM | `vllm` | 8000 `/v1/models` | n/a | ✓ | n/a |
-| LocalAI | `localai` | 8080 `/v1/models` | ✓ | ✓ | n/a |
-| Open WebUI | `open-webui` | 8080 `/` | ✓ | ✓ | ✓ |
-| OpenHands | `openhands` | — | ✓ | ✓ | ✓ |
+| id | Runtime | `catalog_id` | Port / endpoint | Model to pull | mac | linux | win |
+| --- | --- | --- | --- | --- | :-: | :-: | :-: |
+| `T-RT-01` | Ollama | `ollama` | 11434 `/api/tags` | `qwen2.5:0.5b` | ✓ | ✓ | ✓ |
+| `T-RT-02` | LM Studio | `lm-studio` | 1234 `/v1/models` | any 0.5B GGUF | ✓ | ✓ | ✓ |
+| `T-RT-03` | llama.cpp | `llama.cpp` | 8080 `/v1/models` | any 0.5B GGUF | ✓ | ✓ | ✓ |
+| `T-RT-04` | GPT4All | `gpt4all` | — | bundled small | ✓ | ✓ | ✓ |
+| `T-RT-05` | Jan | `jan` | 1337 `/v1/models` | any small | ✓ | ✓ | ✓ |
+| `T-RT-06` | vLLM | `vllm` | 8000 `/v1/models` | needs GPU | n/a | ✓ | n/a |
+| `T-RT-07` | LocalAI | `localai` | 8080 `/v1/models` | any small | ✓ | ✓ | n/a |
+| `T-RT-08` | Open WebUI | `open-webui` | 8080 `/` | — | ✓ | ✓ | ✓ |
+| `T-RT-09` | OpenHands | `openhands` | — | — | ✓ | ✓ | ✓ |
 
-Expected: each running runtime reports `liveness` reflecting that it is live, plus the models it holds.
+`T-RT-03` and `T-RT-07` both default to 8080; the manifest assigns distinct ports so a port collision never masquerades as a detection failure.
+
+#### 1e. Install-channel variants — `T-CHAN-01` … `T-CHAN-08`
+
+Deliberate second installs of tools already listed above. These exist to prove **one tool reached two ways is still one asset**, which is the defect class that has broken most often. Each is scored for duplication, not for presence.
+
+| id | Variant | Also installed as | OS | Asserts |
+| --- | --- | --- | --- | --- |
+| `T-CHAN-01` | Claude Code under an `nvm`-managed Node | `T-CLI-01` | linux | version-manager Node roots resolve to one asset |
+| `T-CHAN-02` | Claude Code under an `fnm`-managed Node | `T-CLI-01` | mac | as above, second manager |
+| `T-CHAN-03` | Codex installed to `~/.local/bin` | `T-CLI-02` | linux | user-local install does not double-count |
+| `T-CHAN-04` | Claude Code reachable via both `/usr/bin` and `/bin` | `T-CLI-01` | linux | **usr-merge**: two spellings, one asset, canonical path reported |
+| `T-CHAN-05` | Aider via `pip --user` alongside `pipx` | `T-CLI-10` | mac | two Python channels, one asset |
+| `T-CHAN-06` | Ollama via distro package and vendor script | `T-RT-01` | linux | two package channels, one asset |
+| `T-CHAN-07` | Cursor via `.deb` and AppImage | `T-APP-02` | linux | two app channels, one asset |
+| `T-CHAN-08` | VS Code via `winget` and vendor `.exe` | `T-APP-04` | win | casing and registry vs filesystem agree |
 
 ### Category 2 — MCP servers
 
-MCP is the only purely *declared* surface: a server exists because a config file says so, whether or not it has ever run. The manifest therefore has two axes — **where** the server is declared, and **what** is declared.
+MCP is the only purely *declared* surface: a server exists because a config file says so, whether or not it has ever run.
 
-#### 2a. Declaration sites
+#### 2a. Declaration sites — `M-SITE-01` … `M-SITE-14`
 
-One server declared in each site the collector reads, so a missed site shows up as a specific miss rather than a lower total.
+One server declared in each site the collector reads, so a missed site shows up as a specific miss rather than a lower total. Each declares the same trivial stdio server so the only variable is the site.
 
-| Host application | Config file (macOS / Linux / Windows) | Scope |
+| id | Host application | Config file (mac / linux / win) | Expected `config_scope` |
+| --- | --- | --- | --- |
+| `M-SITE-01` | Claude Code | `~/.claude.json` | user |
+| `M-SITE-02` | Claude Desktop | `~/Library/Application Support/Claude/claude_desktop_config.json` · `~/.config/claude-desktop/…` · `%APPDATA%/Claude/…` | user |
+| `M-SITE-03` | Cursor | `~/.cursor/mcp.json` | user |
+| `M-SITE-04` | Windsurf | `~/.codeium/windsurf/mcp_config.json` · `%APPDATA%/Codeium/…` | user |
+| `M-SITE-05` | VS Code | `…/Code/User/mcp.json` | user |
+| `M-SITE-06` | Cline | `…/Code/User/globalStorage/saoudrizwan.claude-dev/` | user |
+| `M-SITE-07` | Zed | `…/Zed/settings.json` | user |
+| `M-SITE-08` | JetBrains | `…/JetBrains/options/mcp.json` | user |
+| `M-SITE-09` | opencode | `~/.config/opencode/opencode.json` | user |
+| `M-SITE-10` | Codex | `~/.codex/config.toml` | user |
+| `M-SITE-11` | Goose | `~/.config/goose/config.yaml` | user |
+| `M-SITE-12` | Managed policy | `/Library/Application Support/ClaudeCode/managed-settings.json` | enterprise_managed |
+| `M-SITE-13` | ADR policy | `/Library/Application Support/ADR/managed-mcp.json` | enterprise_managed |
+| `M-SITE-14` | Project-local | `<repo>/.mcp.json` under `~/dev`, `~/src`, `~/workspace`, `~/code` | project |
+
+#### 2b. Launch forms and the supply-chain verdict — `M-PIN-01` … `M-PIN-09`
+
+All declared in `~/.claude.json`, so the only variable is the launch line.
+
+| id | Server | Launch | Expected verdict |
+| --- | --- | --- | --- |
+| `M-PIN-01` | filesystem | `npx -y @modelcontextprotocol/server-filesystem@2025.8.21` | pinned |
+| `M-PIN-02` | git | `npx -y @modelcontextprotocol/server-git` | **unpinned** |
+| `M-PIN-03` | github | `docker run ghcr.io/github/github-mcp-server:v0.5.0` | pinned |
+| `M-PIN-04` | sqlite | `uvx mcp-server-sqlite@0.1.0` | pinned |
+| `M-PIN-05` | fetch | `uvx mcp-server-fetch` | **unpinned** |
+| `M-PIN-06` | memory | `docker run mcp/memory:latest` | **unpinned** — `latest` is mutable |
+| `M-PIN-07` | playwright | `npx @playwright/mcp@1.x` | **unpinned** — a range, not a version |
+| `M-PIN-08` | local script | `node ~/dev/tools/my-server.js` | local, unpinned |
+| `M-PIN-09` | remote | SSE endpoint over HTTPS | remote transport, no pinning verdict |
+
+#### 2c. Special cases — `M-SP-01` … `M-SP-06`
+
+| id | Case | Setup | Expected |
+| --- | --- | --- | --- |
+| `M-SP-01` | Undeclared server | Start an MCP server by hand, in no config | `undeclared_mcp_server` finding |
+| `M-SP-02` | Scope precedence | Same server in `M-SITE-12` **and** `M-SITE-01` | `config_scope: enterprise_managed`, one asset |
+| `M-SP-03` | Token in argv | Declared with `--token {{canary:mcp_token}}` | server reported, canary absent from snapshot |
+| `M-SP-04` | Auth header | Declared with an `Authorization` header canary | as above |
+| `M-SP-05` | Key in env | Declared with an API key in `env` | variable **name** only, value absent |
+| `M-SP-06` | Malformed bundle | A bundle manifest declaring nothing runnable | recorded as malformed, **not** as a server |
+
+### Category 3 — Skills, commands, hooks and instruction files — `S-01` … `S-19`
+
+The programmable surface: what an installed agent has been *told* to do. Created as real files. Project-level artifacts go in checkouts under `~/dev`, `~/src`, `~/workspace` and `~/code`, since those are the roots the collector walks.
+
+| id | Artifact | Exact path |
 | --- | --- | --- |
-| Claude Code | `~/.claude.json` | user |
-| Claude Desktop | `~/Library/Application Support/Claude/claude_desktop_config.json` · `~/.config/claude-desktop/…` · `%APPDATA%/Claude/…` | user |
-| Cursor | `~/.cursor/mcp.json` | user |
-| Windsurf | `~/.codeium/windsurf/mcp_config.json` · `%APPDATA%/Codeium/…` | user |
-| VS Code | `…/Code/User/mcp.json` | user |
-| Cline | `…/Code/User/globalStorage/saoudrizwan.claude-dev/` | user |
-| Zed | `…/Zed/settings.json` | user |
-| JetBrains | `…/JetBrains/options/mcp.json` | user |
-| opencode | `~/.config/opencode/opencode.json` | user |
-| Codex | `~/.codex/config.toml` | user |
-| Goose | `~/.config/goose/config.yaml` | user |
-| Managed policy | `/Library/Application Support/ClaudeCode/managed-settings.json` | enterprise_managed |
-| ADR policy | `/Library/Application Support/ADR/managed-mcp.json` | enterprise_managed |
-| Project-local | `<repo>/.mcp.json` under `~/dev`, `~/src`, `~/workspace`, `~/code` | project |
+| `S-01` | User skill | `~/.claude/skills/pdf-filler/SKILL.md` |
+| `S-02` | Project skill | `~/dev/demo-repo/.claude/skills/deploy-check/SKILL.md` |
+| `S-03` | Claude command | `~/.claude/commands/ship.md` |
+| `S-04` | Gemini command | `~/.gemini/commands/review.toml` |
+| `S-05` | Codex prompt | `~/.codex/prompts/triage.md` |
+| `S-06` | Project command | `~/dev/demo-repo/.claude/commands/release.md` |
+| `S-07` | Output style | `~/.claude/output-styles/terse.md` |
+| `S-08` | Claude subagent | `~/.claude/agents/reviewer.md` |
+| `S-09` | Cursor agent | `~/.cursor/agents/refactor.md` |
+| `S-10` | Windsurf agent | `~/.codeium/windsurf/agents/scan.md` |
+| `S-11` | Project subagent | `~/dev/demo-repo/.claude/agents/tester.md` |
+| `S-12` | Plugin | `~/.claude/plugins/acme-tools/` |
+| `S-13` | User hook | `PreToolUse` in `~/.claude/settings.json`, runs a shell command |
+| `S-14` | Project hook | `PreToolUse` in `~/dev/demo-repo/.claude/settings.json` |
+| `S-15` | Local project hook | `PostToolUse` in `~/dev/demo-repo/.claude/settings.local.json` |
+| `S-16` | Hook with a secret | Hook command containing `{{canary:hook_token}}` |
+| `S-17` | Claude instructions | `~/.claude/CLAUDE.md` |
+| `S-18` | Codex instructions | `~/.codex/AGENTS.md` |
+| `S-19` | Gemini instructions | `~/.gemini/GEMINI.md` |
 
-**Precedence case.** One server is declared in *both* the enterprise policy file and a user config. It must report `config_scope: enterprise_managed` — not "whichever was read last".
+`S-13` through `S-16` carry the most weight: a hook is arbitrary code that runs on an agent event, so each must be reported with its command visible enough to review — and `S-16` must be reported with the canary redacted.
 
-#### 2b. Launch forms
+### Category 4 — Agents: running, scheduled and delegated — `AG-01` … `AG-12`
 
-The same handful of servers, declared in different launch forms, because the supply-chain verdict is derived from the launch line.
+Agents are distinguished from tools by *liveness*, so each item is left in the required state immediately before the second scan.
 
-| Server | Launch | Expected verdict |
+| id | Item | How it is created | Expected |
+| --- | --- | --- | --- |
+| `AG-01` | Running agent | Start Claude Code, leave the session open | live liveness, session recorded |
+| `AG-02` | Spawned child | The running agent launches a subprocess | parent/child relationship recorded |
+| `AG-03` | Running runtime | `ollama serve` left running (`T-RT-01`) | live liveness on the runtime asset |
+| `AG-04` | launchd agent | `.plist` in `~/Library/LaunchAgents` invoking `claude` | scheduled (mac) |
+| `AG-05` | cron job | `crontab` entry invoking `claude` | scheduled (linux) |
+| `AG-06` | systemd user unit | `~/.config/systemd/user/agent.service` | scheduled (linux) |
+| `AG-07` | Scheduled task | Task Scheduler entry invoking `claude` | scheduled (win) |
+| `AG-08` | Claude Code identity | Signed in with a corporate test account | account and auth method, no credential value |
+| `AG-09` | Codex identity | Signed in with a corporate test account | as above |
+| `AG-10` | Gemini CLI identity | Signed in with a corporate test account | as above |
+| `AG-11` | Personal account | One agent signed in with a non-corporate account | flagged in risk factors |
+| `AG-12` | Shell-exported key | `export ANTHROPIC_API_KEY={{canary:env_key}}` in `~/.zshrc` | variable **name** only, canary absent |
+
+`AG-08` through `AG-11` need real authenticated sessions. Because OAuth device flows resist unattended scripting, these are signed in by hand once while building the golden image and captured in the snapshot; the run asserts the sessions are still valid and fails loudly if they have expired.
+
+### Negative controls — `N-01` … `N-10`
+
+Without these the false-positive rate cannot be measured, and a collector that reported everything would score perfectly on every table above.
+
+| id | Installed | Must **not** appear as |
 | --- | --- | --- |
-| filesystem | `npx -y @modelcontextprotocol/server-filesystem@2025.8.21` | pinned |
-| git | `npx -y @modelcontextprotocol/server-git` | **unpinned** |
-| github | `docker run ghcr.io/github/github-mcp-server:v0.5.0` | pinned |
-| sqlite | `uvx mcp-server-sqlite@0.1.0` | pinned |
-| fetch | `uvx mcp-server-fetch` | **unpinned** |
-| memory | `docker run mcp/memory:latest` | **unpinned** (`latest` is mutable) |
-| playwright | `npx @playwright/mcp@1.x` | **unpinned** (range, not a version) |
-| local script | `node ~/dev/tools/my-server.js` | local, unpinned |
-| remote | SSE/HTTP endpoint | remote transport |
+| `N-01` | Node.js | an AI tool |
+| `N-02` | Python + pipx | an AI tool |
+| `N-03` | Docker | an AI tool |
+| `N-04` | git | an AI tool |
+| `N-05` | Slack desktop (non-AI Electron app) | an AI app |
+| `N-06` | Prettier VS Code extension | an AI extension |
+| `N-07` | `~/bin/mcp-backup.sh` — a shell script whose path contains "mcp" | an MCP server |
+| `N-08` | nginx on 8081 serving non-model JSON | a model runtime |
+| `N-09` | Dangling symlink `/usr/local/bin/claude` → missing target | any asset |
+| `N-10` | `~/bin/ask-corp-llm.sh` — an in-house AI wrapper unknown to the catalog | an **asset** — it belongs in `review_queue` |
 
-**Undeclared-server case.** One MCP server is started by hand without appearing in any config. It must surface as an `undeclared_mcp_server` finding.
+`N-01` through `N-04` are installed as part of the golden image, since the manifest depends on them. They are baseline, not manifest — but they are still scored, because "the prerequisites are not AI tools" is exactly the kind of claim that quietly stops being true.
 
-**Credential case.** One server is declared with `--token`, one with an `Authorization` header, and one with an API key in `env`. The values are canary strings; see *Redaction* below.
-
-### Category 3 — Skills, commands, hooks and instruction files
-
-The programmable surface — what an installed agent has been *told* to do. Created as real files in real locations, both user-level and project-level.
-
-| Artifact | User-level location | Project-level location |
-| --- | --- | --- |
-| Skills | `~/.claude/skills/<name>/` | `<repo>/.claude/skills/` |
-| Slash commands | `~/.claude/commands/` · `~/.gemini/commands/` · `~/.codex/prompts/` | `<repo>/.claude/commands/` |
-| Output styles | `~/.claude/output-styles/` | — |
-| Subagent definitions | `~/.claude/agents/` · `~/.cursor/agents/` · `~/.codeium/windsurf/agents/` | `<repo>/.claude/agents/` |
-| Plugins | `~/.claude/plugins/` | — |
-| Hooks | `~/.claude/settings.json` | `<repo>/.claude/settings.json` · `settings.local.json` |
-| Instruction files | `~/.claude/CLAUDE.md` · `~/.codex/AGENTS.md` · `~/.gemini/GEMINI.md` | `<repo>/CLAUDE.md` · `AGENTS.md` |
-
-Project-level artifacts are placed in checkouts under `~/dev`, `~/src`, `~/workspace` and `~/code`, since those are the roots the collector walks.
-
-**Hooks matter most.** A hook is arbitrary code that runs on an agent event, so the manifest includes at least one `PreToolUse` hook running a shell command. It must be reported, with the command visible enough to review and any secret redacted.
-
-### Category 4 — Agents: running, scheduled and delegated
-
-Agents are distinguished from tools by *liveness*. This category is about state at scan time, so each item is left in the required state before step 4.
-
-| Item | How it is created | Expected in snapshot |
-| --- | --- | --- |
-| Running agent | Start Claude Code and leave the session open | asset with live liveness, parent agent recorded |
-| Spawned child | Have the running agent launch a subprocess | process relationship recorded |
-| launchd agent | `.plist` in `~/Library/LaunchAgents` invoking a CLI agent | scheduled (macOS) |
-| cron job | `crontab` entry invoking a CLI agent | scheduled (Linux) |
-| systemd user unit | `~/.config/systemd/user/*.service` | scheduled (Linux) |
-| Scheduled task | Task Scheduler entry invoking a CLI agent | scheduled (Windows) |
-| Authenticated identity | Sign in to Claude Code, Codex and Gemini CLI | account and auth method per agent, no credential values |
-| Personal account on corp machine | Sign one agent in with a non-corporate account | flagged in risk factors |
-| Shell-exported key | `export ANTHROPIC_API_KEY=…` in `~/.zshrc` | variable **name** only, never the value |
-
-### Negative controls — what must **not** be reported
-
-Without these the false-positive rate cannot be measured, and a collector that reports everything would score perfectly on every table above.
-
-| Installed | Must not appear as |
-| --- | --- |
-| Node, Python, Docker, git | an AI tool |
-| A non-AI Electron app (e.g. Slack) | an AI app |
-| A non-AI VS Code extension (e.g. Prettier) | an AI extension |
-| A shell script whose path contains `mcp` | an MCP server |
-| A web server on a common port serving non-model JSON | a model runtime |
-| A dangling symlink on `PATH` named `claude` | any asset |
-| An in-house AI wrapper script, unknown to the catalog | an *asset* — it belongs in `review_queue` |
-
-The last row is the open-world check: an unrecognized tool that looks like AI should be **queued for review**, not confidently classified and not silently dropped.
+`N-10` is the open-world check: an unrecognized tool that looks like AI should be **queued for review**, not confidently classified and not silently dropped.
 
 ## Comparing, and scoring
 
