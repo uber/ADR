@@ -20,6 +20,12 @@ OUTCOMES = ("tp", "fp", "fn", "dup")
 SCORED_FIELDS = ("version", "install_path", "install_method", "config_scope",
                  "transport", "pinned", "liveness")
 
+#: Why a run failed, in the order a reader should care. Canary leaks come first
+#: because they invalidate everything below them.
+GATE_REASONS = ("canary_leaked", "baseline_dirty", "unexplained_errors",
+                "duplicates", "recall_regressed", "review_queue_miss")
+
+
 def empty_totals() -> Dict[str, Any]:
     return {"tp": 0, "fp": 0, "fn": 0, "dup": 0, "recall": None, "precision": None}
 
@@ -46,12 +52,14 @@ def blank_score(run: Dict[str, Any]) -> Dict[str, Any]:
         "totals": empty_totals(),
         "by_category": {},
         "fields": {},
+        "canaries": {},
         "errors": {},
         "review_queue": {},
         "misses": [],
         "inventions": [],
         "duplicates": [],
         "excluded": [],
+        "gate": {"passed": True, "reasons": []},
     }
 
 

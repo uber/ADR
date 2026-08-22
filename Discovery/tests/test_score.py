@@ -7,12 +7,14 @@ scorer whose totals drift by one has a bug, and a test that only checked
 "recall is high" would not notice.
 """
 
+import copy
 import json
 import os
 import unittest
 
 from . import manifest as manifest_module
-from .scoring import score_run
+from .scoring import canary, score, score_run
+from .scoring.snapshot import Snapshot
 
 RECORDED = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                         "recorded", "synthetic-linux")
@@ -103,6 +105,93 @@ class RecordedRun(unittest.TestCase):
     def test_the_open_world_entry_reaches_the_review_queue(self):
         self.assertTrue(self.score["review_queue"]["passed"])
         self.assertEqual(self.score["review_queue"]["expected"], 1)
+
+    def test_the_gate_fails_on_the_duplicates(self):
+        self.assertFalse(self.score["gate"]["passed"])
+        self.assertEqual(self.score["gate"]["reasons"], ["duplicates"])
+
+
+class Gate(unittest.TestCase):
+    """Everything the gate refuses, one refusal at a time."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.manifest = manifest_module.load()
+        cls.actual = _load("manifest.actual")
+        cls.planted = _load("canaries")
+
+    def _score(self, before=None, after=None, planted=None, previous=None):
+        return score(Snapshot(before or _load("before")), Snapshot(after or _load("after")),
+                     self.actual, self.manifest, planted=planted or self.planted,
+                     previous=previous)
+
+    def test_a_leaked_canary_fails_the_run(self):
+        """Regardless of every other score: a collector that finds every tool
+        and leaks one token has not had a good run."""
+        after = copy.deepcopy(_load("after"))
+        after["assets"][0]["risk"]["args"] = [self.planted["hook_token"]]
+        result = self._score(after=after)
+        self.assertIn("canary_leaked", result["gate"]["reasons"])
+        self.assertEqual(result["canaries"]["leaked"], 1)
+        self.assertNotIn(self.planted["hook_token"], json.dumps(result["canaries"]))
+
+    def test_an_unplanted_canary_is_not_reported_clean(self):
+        """A check that never ran is not a check that passed."""
+        result = self._score(planted=dict(self.planted, hook_token=""))
+        self.assertFalse(result["canaries"]["clean"])
+
+    def test_a_dirty_baseline_fails_the_run(self):
+        """Anything on a clean machine is a false positive with no manifest to
+        blame, and it invalidates every number computed after it."""
+        before = copy.deepcopy(_load("before"))
+        before["assets"] = [copy.deepcopy(_load("after")["assets"][0])]
+        result = self._score(before=before)
+        self.assertIn("baseline_dirty", result["gate"]["reasons"])
+
+    def test_an_unexplained_error_fails_the_run(self):
+        after = copy.deepcopy(_load("after"))
+        after["errors"].append({"probe": "app", "path": "/opt/mystery", "message": "denied"})
+        result = self._score(after=after)
+        self.assertIn("unexplained_errors", result["gate"]["reasons"])
+
+    def test_recall_is_compared_against_the_last_accepted_run(self):
+        """A real endpoint is not perfectly reproducible, so the gate compares
+        against history rather than an absolute threshold."""
+        previous = {"run": {"id": "yesterday"}, "totals": {"recall": 1.0}}
+        result = self._score(previous=previous)
+        self.assertIn("recall_regressed", result["gate"]["reasons"])
+        self.assertEqual(result["gate"]["compared_to"], "yesterday")
+
+    def test_a_repeated_asset_id_is_refused_rather_than_scored(self):
+        """Any score computed from a halved delta would be wrong in a direction
+        that flatters the collector."""
+        after = copy.deepcopy(_load("after"))
+        after["assets"].append(copy.deepcopy(after["assets"][0]))
+        with self.assertRaises(ValueError):
+            self._score(after=after)
+
+
+class CanarySearch(unittest.TestCase):
+    def test_the_search_covers_the_whole_document_not_the_modelled_fields(self):
+        snapshot = Snapshot({"hostname": "h", "assets": [],
+                             "stats": {"note": "leaked-value-here"}})
+        result = canary.check_canaries(snapshot, {"c": "leaked-value-here"})
+        self.assertEqual(result["leaked"], 1)
+
+    def test_the_context_line_masks_the_value_it_reports(self):
+        """Printing the value into a report that then gets shared would repeat
+        exactly the mistake being reported."""
+        snapshot = Snapshot({"hostname": "h", "assets": [], "stats": {"n": "sk-xyz"}})
+        result = canary.check_canaries(snapshot, {"c": "sk-xyz"})
+        self.assertIn("<CANARY>", result["hits"][0]["detail"])
+        self.assertNotIn("sk-xyz", result["hits"][0]["detail"])
+
+    def test_extra_documents_are_searched_too(self):
+        """A value redacted out of the snapshot and copied into the scorecard
+        has still left the machine."""
+        snapshot = Snapshot({"hostname": "h", "assets": []})
+        result = canary.check_canaries(snapshot, {"c": "tok"}, also=[{"report": "tok"}])
+        self.assertEqual(result["leaked"], 1)
 
 
 if __name__ == "__main__":

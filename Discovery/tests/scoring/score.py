@@ -12,11 +12,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from ..manifest import Entry, Manifest
 from . import schema
+from .canary import check_canaries
 from .match import Match, expand, load_snapshot, match_all, norm_path
 from .snapshot import Asset, Snapshot, added_assets, duplicate_ids
 
 
-def score_run(run_dir: str, manifest: Manifest) -> Dict[str, Any]:
+def score_run(run_dir: str, manifest: Manifest, previous: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Score a run directory: the two snapshots plus what actually installed.
 
     A run directory is the unit of replay. Everything the scorer needs is in it,
@@ -26,11 +27,26 @@ def score_run(run_dir: str, manifest: Manifest) -> Dict[str, Any]:
     after = load_snapshot(os.path.join(run_dir, "after.json"))
     with open(os.path.join(run_dir, "manifest.actual.json"), encoding="utf-8") as handle:
         actual = json.load(handle)
-    return score(before, after, actual, manifest)
+    planted = _load_planted(run_dir)
+    return score(before, after, actual, manifest, planted=planted, previous=previous)
+
+
+def _load_planted(run_dir: str) -> Dict[str, str]:
+    """Canary values for this run, if the runner recorded them.
+
+    Absent is not the same as none planted: a run whose canary file is missing
+    cannot claim a clean redaction check, and ``check_canaries`` is what says so.
+    """
+    path = os.path.join(run_dir, "canaries.json")
+    if not os.path.exists(path):
+        return {}
+    with open(path, encoding="utf-8") as handle:
+        return json.load(handle)
 
 
 def score(before: Snapshot, after: Snapshot, actual: Dict[str, Any],
-          manifest: Manifest) -> Dict[str, Any]:
+          manifest: Manifest, planted: Optional[Dict[str, str]] = None,
+          previous: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Compare what the collector reported against what was actually installed."""
     platform = actual.get("os", "linux")
     for name, snapshot in (("before", before), ("after", after)):
@@ -64,8 +80,10 @@ def score(before: Snapshot, after: Snapshot, actual: Dict[str, Any],
     result["duplicates"] = schema.sort_findings(duplicates)
     result["excluded"] = schema.sort_findings(excluded)
     result["fields"] = _field_accuracy(matches, actual, platform)
+    result["canaries"] = check_canaries(after, planted or {})
     result["errors"] = _errors(after, manifest, platform, actual.get("home"))
     result["review_queue"] = _review_queue(after, manifest, platform, actual.get("home"))
+    result["gate"] = _gate(result, previous)
     return result
 
 
@@ -301,3 +319,31 @@ def _review_queue(after: Snapshot, manifest: Manifest, platform: str,
     return {"expected": len(wanted), "queued": sum(1 for row in rows if row["queued"]),
             "size": len(after.review_queue), "entries": rows,
             "passed": all(row["queued"] for row in rows)}
+
+
+def _gate(result: Dict[str, Any], previous: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Whether this run is allowed to pass.
+
+    Absolute thresholds do not survive contact with a real endpoint - a
+    background updater can change a version mid-run - so recall is compared
+    against the previous accepted run for the same OS. Everything else is
+    binary, because a leaked credential or an invented asset is not weather.
+    """
+    reasons: List[str] = []
+    if not result["canaries"].get("clean", False):
+        reasons.append("canary_leaked")
+    if not result["baseline"]["clean"]:
+        reasons.append("baseline_dirty")
+    if result["errors"]["unexplained"]:
+        reasons.append("unexplained_errors")
+    if result["totals"]["dup"]:
+        reasons.append("duplicates")
+    if not result["review_queue"]["passed"]:
+        reasons.append("review_queue_miss")
+    baseline_recall = ((previous or {}).get("totals") or {}).get("recall")
+    recall = result["totals"]["recall"]
+    if baseline_recall is not None and recall is not None and recall < baseline_recall:
+        reasons.append("recall_regressed")
+    return {"passed": not reasons, "reasons": reasons,
+            "compared_to": (previous or {}).get("run", {}).get("id") if previous else None,
+            "previous_recall": baseline_recall}
