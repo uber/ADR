@@ -40,7 +40,7 @@ See **[docs/REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md)** for the full evaluati
 
 Component documentation:
 
-- [Discovery/README.md](Discovery/README.md): endpoint inventory, probes, and the fingerprint catalog
+- [Discovery/adr_discovery/README.md](Discovery/adr_discovery/README.md): endpoint inventory, probes, and the fingerprint catalog
 - [Sensor/README.md](Sensor/README.md): telemetry collection and unified schema
 - [Detection/README.md](Detection/README.md): ADR-Bench, detector baselines, MCP infrastructure
 
