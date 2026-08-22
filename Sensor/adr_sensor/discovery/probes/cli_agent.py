@@ -2,6 +2,7 @@
 state directories that prove somebody actually ran them."""
 
 import hashlib
+import os
 import posixpath
 from typing import Any, Dict, List, Optional
 
@@ -13,7 +14,13 @@ from ..paths import install_method, install_root, owner_of
 #: PATH the user actually types into.
 EXTRA_BIN_DIRS = ("~/.local/bin", "/usr/local/bin", "/opt/homebrew/bin", "~/bin", "~/.npm-global/bin")
 
+#: /usr/lib/node_modules is the global root on Debian, Ubuntu and Fedora -
+#: both the distro nodejs package and the NodeSource builds use it. Its absence
+#: meant no npm package observation was ever raised on mainstream Linux, so the
+#: version had to come from executing the binary and the pkg: merge key was
+#: never available. Found by scanning a real container, not a fixture.
 NODE_MODULE_ROOTS = ("/opt/homebrew/lib/node_modules", "/usr/local/lib/node_modules",
+                     "/usr/lib/node_modules",
                      "~/.npm-global/lib/node_modules", "~/.local/share/pnpm/global/5/node_modules")
 
 #: Version managers keep a node install per version, each with its own global
@@ -80,10 +87,19 @@ class CliAgentProbe(BaseProbe):
         for user in [env.user] + list(env.extra_users):
             directories.append("/Users/%s/.local/bin" % user)
             directories.append("/home/%s/.local/bin" % user)
+        # Deduplicate by directory *identity*, not by spelling. /bin and
+        # /usr/bin are the same directory on any usrmerge system, and scanning
+        # both walks every binary on the box twice. First spelling wins, which
+        # keeps the conventional path (/usr/bin) ahead of the compatibility
+        # symlink (/bin) in the PATH order the caller gave us.
         ordered, seen = [], set()
         for directory in directories:
-            if directory not in seen:
-                seen.add(directory)
+            try:
+                identity = os.path.realpath(str(env.real(directory)))
+            except (OSError, ValueError):
+                identity = directory
+            if identity not in seen:
+                seen.add(identity)
                 ordered.append(directory)
         return ordered
 

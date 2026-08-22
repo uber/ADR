@@ -274,7 +274,14 @@ class DiscoveryEnv:
                 inside = str(candidate).startswith(str(self.root))
                 following = candidate if inside else self.real(target)
             else:
-                following = current.parent / target
+                # Resolve a relative target against the *canonicalized* parent.
+                # On a usrmerge system /bin is a symlink to usr/bin, so joining
+                # "../lib/node_modules/x" onto the literal parent yields
+                # /lib/node_modules/x while the same binary reached via
+                # /usr/bin yields /usr/lib/node_modules/x. Two spellings of one
+                # file produce two merge keys and the tool is counted twice.
+                parent = Path(os.path.realpath(str(current.parent)))
+                following = parent / target
             try:
                 following = Path(os.path.normpath(str(following)))
             except (OSError, ValueError):

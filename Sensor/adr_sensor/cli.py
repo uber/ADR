@@ -24,7 +24,6 @@ except Exception:
     resource_mod = None
 
 from . import __version__
-from .observer import AgentObserver
 
 
 def get_version():
@@ -41,6 +40,12 @@ def main():
         from .discovery.cli import main as discover_main
 
         return discover_main(sys.argv[2:])
+
+    # Imported here rather than at module scope: the dispatch above must reach
+    # discovery without pulling in the observability plane and its third-party
+    # dependency, or `adr-sensor discover` cannot run on an endpoint that has
+    # only the standard library.
+    from .observer import AgentObserver
 
     parser = argparse.ArgumentParser(
         description="ADR Sensor - Security observability for AI coding agents",

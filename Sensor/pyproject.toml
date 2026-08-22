@@ -56,6 +56,12 @@ Issues = "https://github.com/uber/ADR/issues"
 [tool.setuptools.packages.find]
 include = ["adr_sensor*"]
 
+[tool.setuptools.package-data]
+# catalog.json is the only non-Python file in the package and every
+# discovery run reads it. Without this the installed wheel omits it and
+# `adr-sensor discover` dies on a missing file at import-adjacent time.
+adr_sensor = ["discovery/catalog.json"]
+
 [tool.ruff]
 line-length = 120
 target-version = "py39"

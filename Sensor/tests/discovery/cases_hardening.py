@@ -7,7 +7,7 @@ it exists to find.
 """
 
 
-from .cases_tools import count, none_of
+from .cases_tools import count, none_of, only, total
 from .framework import World, assets, has
 
 CASES = {}
@@ -859,3 +859,89 @@ def r45():
                has("and are judged unpinned like their posix spellings",
                    lambda s: not [c for c in windows
                                   if classify_launch(c, ["run", "-y", "unversioned"], "")[0]])]
+
+
+@case("R-46")
+def r46():
+    """usrmerge: /bin is a symlink to usr/bin, so one binary has two spellings.
+
+    Found by scanning a real Ubuntu 24.04 container rather than a fixture. The
+    npm bin symlink is *relative* (../lib/node_modules/...), so resolving it
+    against the literal parent produced /lib/... via /bin and /usr/lib/... via
+    /usr/bin. Two merge keys, one file, every PATH-installed agent counted
+    twice on every mainstream Linux distribution.
+    """
+    w = World(platform="linux", home="/home/alice")
+    w.json("/usr/lib/node_modules/@anthropic-ai/claude-code/package.json",
+           {"name": "@anthropic-ai/claude-code", "version": "2.1.235",
+            "bin": {"claude": "cli.js"}})
+    w.file("/usr/lib/node_modules/@anthropic-ai/claude-code/cli.js", "#!/usr/bin/env node\n")
+    w.dir("/usr/bin")
+    w.raw_link("/usr/bin/claude", "../lib/node_modules/@anthropic-ai/claude-code/cli.js")
+    w.raw_link("/bin", "usr/bin")          # the usrmerge compatibility link
+    w.path("/usr/bin", "/bin")
+    return w, [only("claude-code", version="2.1.235"),
+               total(1),
+               has("the canonical spelling is reported, not the compat link",
+                   lambda s: not s.assets[0].install_path.startswith("/bin/")
+                   or "reported as %s" % s.assets[0].install_path)]
+
+
+@case("R-47")
+def r47():
+    """A directory symlink must not make one binary look like two installs."""
+    w = World(platform="linux", home="/home/alice")
+    w.json("/opt/tools/node_modules/@openai/codex/package.json",
+           {"name": "@openai/codex", "version": "0.147.0", "bin": {"codex": "cli.js"}})
+    w.file("/opt/tools/node_modules/@openai/codex/cli.js", "#!/usr/bin/env node\n")
+    w.dir("/opt/tools/bin")
+    w.raw_link("/opt/tools/bin/codex", "../node_modules/@openai/codex/cli.js")
+    w.raw_link("/opt/alias", "tools")      # a second spelling of the same tree
+    w.path("/opt/tools/bin", "/opt/alias/bin")
+    # No version assertion: /opt/tools is not an npm global root, so the
+    # package.json is not read and the version can only come from running the
+    # binary. Duplication is what this case exists to catch.
+    return w, [only("codex"), total(1)]
+
+
+_SPEC = {"command": "npx", "args": ["-y", "@playwright/mcp@1.0.0"], "transport": "stdio"}
+
+
+@case("R-48")
+def r48():
+    """Enterprise precedence survives a user declaring the same server.
+
+    Found at 10x scale on a real container. ``config_scope`` was written by the
+    last observation to arrive, so a policy-pushed server that the user had also
+    configured reported as "user" - inverting the one field that separates
+    corporate policy from something an employee added.
+    """
+    w = World(platform="linux", home="/home/alice")
+    w.json("/etc/claude-code/managed-settings.json", {"mcpServers": {"pw": _SPEC}})
+    w.json("~/.claude.json", {"mcpServers": {"pw": _SPEC}})
+    def scope(s):
+        server = [a for a in s.assets if a.kind == "mcp_server"][0]
+        return server.config_scope == "enterprise_managed" or "reported %r" % server.config_scope
+    return w, [count(1, kind="mcp_server"),
+               has("the managed scope outranks the personal one", scope)]
+
+
+@case("R-49")
+def r49():
+    """Merging identical launch specs must not discard the declaration sites.
+
+    One server configured across many repositories is deliberately one asset -
+    identity is what a server launches, not what it is called. The sites are
+    still the answer to "which projects can reach this", so every one of them
+    has to survive the merge as evidence.
+    """
+    w = World(platform="linux", home="/home/alice")
+    for name in ("alpha", "beta", "gamma", "delta"):
+        w.json("~/dev/%s/.mcp.json" % name, {"mcpServers": {"pw": _SPEC}})
+    def sites(s):
+        server = [a for a in s.assets if a.kind == "mcp_server"][0]
+        paths = {(e if isinstance(e, dict) else vars(e)).get("path") for e in server.evidence}
+        found = {p for p in paths if p and p.endswith("/.mcp.json")}
+        return len(found) == 4 or "kept %d of 4: %s" % (len(found), sorted(found))
+    return w, [count(1, kind="mcp_server"),
+               has("all four declaring projects survive as evidence", sites)]

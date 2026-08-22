@@ -204,6 +204,21 @@ PASSTHROUGH_KEYS = (
 VERSION_PRECEDENCE = ("runtime", "plist", "registry", "package", "unknown")
 
 
+#: Config scopes, weakest first. Precedence, not arrival order, decides which
+#: one an asset reports: enterprise policy outranks a project file, which
+#: outranks a personal one.
+SCOPE_RANK = ("user", "project", "enterprise_managed")
+
+
+def _stronger_scope(current: Optional[str], incoming: str) -> str:
+    """Return whichever scope carries more authority."""
+    if not current:
+        return incoming
+    def rank(value):
+        return SCOPE_RANK.index(value) if value in SCOPE_RANK else -1
+    return incoming if rank(incoming) > rank(current) else current
+
+
 def _absorb(asset: DiscoveredAsset, observation: Observation) -> None:
     """Fold one observation's facts into the asset, first writer wins."""
     extra = observation.extra or {}
@@ -232,7 +247,12 @@ def _absorb(asset: DiscoveredAsset, observation: Observation) -> None:
     if extra.get("transport"):
         asset.transport = extra["transport"]
     if extra.get("scope"):
-        asset.config_scope = extra["scope"]
+        # Highest precedence wins, not the last observation to arrive. A server
+        # pushed by policy and *also* declared by the user is still an
+        # enterprise-managed server; reporting "user" because that config was
+        # read second inverts the one field an operator uses to tell corporate
+        # policy from something an employee added.
+        asset.config_scope = _stronger_scope(asset.config_scope, extra["scope"])
     if extra.get("parent_agent"):
         asset.parent_agent = asset.parent_agent or extra["parent_agent"]
         parents = set(asset.risk.get("parent_agents", [])) | {extra["parent_agent"]}
