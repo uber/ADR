@@ -22,7 +22,11 @@ def load():
 
 
 def main():
-    only = sys.argv[1] if len(sys.argv) > 1 else None
+    # Only a bare word is a case-id filter. Taking argv[1] unconditionally made
+    # `run_suite.py -v` filter for cases starting with "-v", so the one
+    # invocation that asks to see everything silently ran nothing.
+    filters = [arg for arg in sys.argv[1:] if not arg.startswith("-")]
+    only = filters[0] if filters else None
     verbose = "-v" in sys.argv
     cases = load()
     results, failures = run_cases(cases, only=only)

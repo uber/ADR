@@ -116,6 +116,8 @@ python3 tests/run_suite.py -v    # every check, including passes
 
 The scorecard is grouped rather than a single pass count, because "480 of 490" hides which *kind* of wrong it is.
 
+See [tests/README.md](tests/README.md) for the fixture-world DSL, the expectation helpers, the five case groups, and how to add a case.
+
 ## Development
 
 ```bash
