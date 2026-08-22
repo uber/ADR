@@ -1,0 +1,748 @@
+{
+  "applicable": 105,
+  "collector": "0.1.0+synthetic",
+  "entries": [
+    {
+      "catalog_id": "claude-code",
+      "family": "npm-global",
+      "id": "T-CLI-01",
+      "method": "npm",
+      "path": "/usr/lib/node_modules/@anthropic-ai/claude-code/bin/claude",
+      "status": "installed",
+      "version": "2.1.235"
+    },
+    {
+      "catalog_id": "codex",
+      "family": "npm-global",
+      "id": "T-CLI-02",
+      "method": "npm",
+      "path": "/usr/lib/node_modules/@openai/codex/bin/codex",
+      "status": "installed",
+      "version": "0.58.0"
+    },
+    {
+      "catalog_id": "gemini-cli",
+      "family": "npm-global",
+      "id": "T-CLI-03",
+      "method": "npm",
+      "path": "/usr/lib/node_modules/@google/gemini-cli/bin/gemini",
+      "status": "installed",
+      "version": "0.12.0"
+    },
+    {
+      "catalog_id": "opencode",
+      "family": "npm-global",
+      "id": "T-CLI-04",
+      "method": "npm",
+      "path": "/usr/lib/node_modules/opencode-ai/bin/opencode",
+      "status": "installed",
+      "version": "0.5.29"
+    },
+    {
+      "catalog_id": "amp",
+      "family": "npm-global",
+      "id": "T-CLI-05",
+      "method": "npm",
+      "path": "/usr/lib/node_modules/@sourcegraph/amp/bin/amp",
+      "status": "installed",
+      "version": "0.0.1787428878-gebb20a"
+    },
+    {
+      "catalog_id": "kilo-cli",
+      "family": "npm-global",
+      "id": "T-CLI-06",
+      "method": "npm",
+      "path": "/usr/lib/node_modules/@kilocode/cli/bin/kilo",
+      "status": "installed",
+      "version": "7.4.23"
+    },
+    {
+      "catalog_id": "qwen-code",
+      "family": "npm-global",
+      "id": "T-CLI-07",
+      "method": "npm",
+      "path": "/usr/lib/node_modules/@qwen-code/qwen-code/bin/qwen",
+      "status": "installed",
+      "version": "0.22.0"
+    },
+    {
+      "catalog_id": "copilot-cli",
+      "family": "npm-global",
+      "id": "T-CLI-08",
+      "method": "npm",
+      "path": "/usr/lib/node_modules/@github/copilot/bin/copilot",
+      "status": "installed",
+      "version": "1.0.80"
+    },
+    {
+      "catalog_id": "goose",
+      "family": "npm-global",
+      "id": "T-CLI-09",
+      "method": "npm",
+      "path": "/usr/lib/node_modules/@block/goose-cli/bin/goose",
+      "status": "installed",
+      "version": "1.0.28"
+    },
+    {
+      "catalog_id": "aider",
+      "family": "pipx",
+      "id": "T-CLI-10",
+      "method": "pipx",
+      "path": "/home/tester/.local/pipx/venvs/aider-chat/bin/aider",
+      "status": "installed",
+      "version": "0.86.1"
+    },
+    {
+      "catalog_id": "crush",
+      "family": "vendor-binary",
+      "id": "T-CLI-11",
+      "reason": "source url unresolved in sources.yaml",
+      "status": "unimplemented"
+    },
+    {
+      "catalog_id": "grok-cli",
+      "family": "vendor-binary",
+      "id": "T-CLI-12",
+      "reason": "source url unresolved in sources.yaml",
+      "status": "unimplemented"
+    },
+    {
+      "catalog_id": "cursor",
+      "family": "app-installer",
+      "id": "T-APP-02",
+      "reason": "source url unresolved in sources.yaml",
+      "status": "unimplemented"
+    },
+    {
+      "catalog_id": "windsurf",
+      "family": "app-installer",
+      "id": "T-APP-03",
+      "reason": "source url unresolved in sources.yaml",
+      "status": "unimplemented"
+    },
+    {
+      "catalog_id": "vscode",
+      "family": "app-installer",
+      "id": "T-APP-04",
+      "reason": "source url unresolved in sources.yaml",
+      "status": "unimplemented"
+    },
+    {
+      "catalog_id": "zed",
+      "family": "app-installer",
+      "id": "T-APP-05",
+      "reason": "source url unresolved in sources.yaml",
+      "status": "unimplemented"
+    },
+    {
+      "catalog_id": "jetbrains-ai",
+      "family": "app-installer",
+      "id": "T-APP-06",
+      "reason": "source url unresolved in sources.yaml",
+      "status": "unimplemented"
+    },
+    {
+      "catalog_id": "warp",
+      "family": "app-installer",
+      "id": "T-APP-08",
+      "reason": "source url unresolved in sources.yaml",
+      "status": "unimplemented"
+    },
+    {
+      "catalog_id": "cline",
+      "family": "vscode-ext",
+      "id": "T-EXT-01",
+      "reason": "depends on T-APP-04, which is unimplemented",
+      "status": "unimplemented"
+    },
+    {
+      "catalog_id": "continue",
+      "family": "vscode-ext",
+      "id": "T-EXT-02",
+      "reason": "depends on T-APP-04, which is unimplemented",
+      "status": "unimplemented"
+    },
+    {
+      "catalog_id": "roo-code",
+      "family": "vscode-ext",
+      "id": "T-EXT-03",
+      "reason": "depends on T-APP-04, which is unimplemented",
+      "status": "unimplemented"
+    },
+    {
+      "catalog_id": "kilo-code",
+      "family": "vscode-ext",
+      "id": "T-EXT-04",
+      "reason": "depends on T-APP-04, which is unimplemented",
+      "status": "unimplemented"
+    },
+    {
+      "catalog_id": "copilot-ext",
+      "family": "vscode-ext",
+      "id": "T-EXT-05",
+      "reason": "depends on T-APP-04, which is unimplemented",
+      "status": "unimplemented"
+    },
+    {
+      "catalog_id": "ollama",
+      "family": "service",
+      "id": "T-RT-01",
+      "status": "installed"
+    },
+    {
+      "catalog_id": "lm-studio",
+      "family": "service",
+      "id": "T-RT-02",
+      "status": "installed"
+    },
+    {
+      "catalog_id": "llama.cpp",
+      "family": "service",
+      "id": "T-RT-03",
+      "status": "installed"
+    },
+    {
+      "catalog_id": "gpt4all",
+      "family": "service",
+      "id": "T-RT-04",
+      "status": "installed"
+    },
+    {
+      "catalog_id": "jan",
+      "family": "service",
+      "id": "T-RT-05",
+      "status": "installed"
+    },
+    {
+      "catalog_id": "vllm",
+      "family": "service",
+      "id": "T-RT-06",
+      "reason": "CUDA absent; service did not start",
+      "status": "failed"
+    },
+    {
+      "catalog_id": "localai",
+      "family": "service",
+      "id": "T-RT-07",
+      "status": "installed"
+    },
+    {
+      "catalog_id": "open-webui",
+      "family": "service",
+      "id": "T-RT-08",
+      "status": "installed"
+    },
+    {
+      "catalog_id": "openhands",
+      "family": "service",
+      "id": "T-RT-09",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "channel-variant",
+      "id": "T-CHAN-01",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "channel-variant",
+      "id": "T-CHAN-03",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "channel-variant",
+      "id": "T-CHAN-04",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "channel-variant",
+      "id": "T-CHAN-06",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "channel-variant",
+      "id": "T-CHAN-07",
+      "reason": "base T-APP-02 did not install",
+      "status": "unimplemented"
+    },
+    {
+      "catalog_id": null,
+      "family": "declare-mcp",
+      "id": "M-SITE-01",
+      "path": "/home/tester/.claude.json",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "declare-mcp",
+      "id": "M-SITE-02",
+      "path": "/home/tester/.config/claude-desktop/claude_desktop_config.json",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "declare-mcp",
+      "id": "M-SITE-03",
+      "path": "/home/tester/.cursor/mcp.json",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "declare-mcp",
+      "id": "M-SITE-04",
+      "path": "/home/tester/.codeium/windsurf/mcp_config.json",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "declare-mcp",
+      "id": "M-SITE-05",
+      "path": "/home/tester/.config/Code/User/mcp.json",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "declare-mcp",
+      "id": "M-SITE-06",
+      "path": "/home/tester/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "declare-mcp",
+      "id": "M-SITE-07",
+      "path": "/home/tester/.config/zed/settings.json",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "declare-mcp",
+      "id": "M-SITE-08",
+      "path": "/home/tester/.config/JetBrains/options/mcp.json",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "declare-mcp",
+      "id": "M-SITE-09",
+      "path": "/home/tester/.config/opencode/opencode.json",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "declare-mcp",
+      "id": "M-SITE-10",
+      "path": "/home/tester/.codex/config.toml",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "declare-mcp",
+      "id": "M-SITE-11",
+      "path": "/home/tester/.config/goose/config.yaml",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "declare-mcp",
+      "id": "M-SITE-12",
+      "path": "/etc/claude-code/managed-settings.json",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "declare-mcp",
+      "id": "M-SITE-13",
+      "path": "/etc/adr/managed-mcp.json",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "declare-mcp",
+      "id": "M-SITE-14",
+      "path": "/home/tester/dev/demo-repo/.mcp.json",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "declare-mcp",
+      "id": "M-PIN-01",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "declare-mcp",
+      "id": "M-PIN-02",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "declare-mcp",
+      "id": "M-PIN-03",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "declare-mcp",
+      "id": "M-PIN-04",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "declare-mcp",
+      "id": "M-PIN-05",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "declare-mcp",
+      "id": "M-PIN-06",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "declare-mcp",
+      "id": "M-PIN-07",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "declare-mcp",
+      "id": "M-PIN-08",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "declare-mcp",
+      "id": "M-PIN-09",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "service",
+      "id": "M-SP-01",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "declare-mcp",
+      "id": "M-SP-02",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "declare-mcp",
+      "id": "M-SP-03",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "declare-mcp",
+      "id": "M-SP-04",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "declare-mcp",
+      "id": "M-SP-05",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "artifact",
+      "id": "M-SP-06",
+      "path": "/home/tester/.mcpb/broken-bundle/manifest.json",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "artifact",
+      "id": "S-01",
+      "method": "agent_artifact",
+      "path": "/home/tester/.claude/skills/pdf-filler/SKILL.md",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "artifact",
+      "id": "S-02",
+      "method": "agent_artifact",
+      "path": "/home/tester/dev/demo-repo/.claude/skills/deploy-check/SKILL.md",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "artifact",
+      "id": "S-03",
+      "method": "agent_artifact",
+      "path": "/home/tester/.claude/commands/ship.md",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "artifact",
+      "id": "S-04",
+      "method": "agent_artifact",
+      "path": "/home/tester/.gemini/commands/review.toml",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "artifact",
+      "id": "S-05",
+      "method": "agent_artifact",
+      "path": "/home/tester/.codex/prompts/triage.md",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "artifact",
+      "id": "S-06",
+      "method": "agent_artifact",
+      "path": "/home/tester/dev/demo-repo/.claude/commands/release.md",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "artifact",
+      "id": "S-07",
+      "method": "agent_artifact",
+      "path": "/home/tester/.claude/output-styles/terse.md",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "artifact",
+      "id": "S-08",
+      "method": "agent_artifact",
+      "path": "/home/tester/.claude/agents/reviewer.md",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "artifact",
+      "id": "S-09",
+      "method": "agent_artifact",
+      "path": "/home/tester/.cursor/agents/refactor.md",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "artifact",
+      "id": "S-10",
+      "method": "agent_artifact",
+      "path": "/home/tester/.codeium/windsurf/agents/scan.md",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "artifact",
+      "id": "S-11",
+      "method": "agent_artifact",
+      "path": "/home/tester/dev/demo-repo/.claude/agents/tester.md",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "artifact",
+      "id": "S-12",
+      "method": "agent_artifact",
+      "path": "/home/tester/.claude/plugins/acme-tools/",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "artifact",
+      "id": "S-13",
+      "method": "agent_artifact",
+      "path": "/home/tester/.claude/settings.json",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "artifact",
+      "id": "S-14",
+      "method": "agent_artifact",
+      "path": "/home/tester/dev/demo-repo/.claude/settings.json",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "artifact",
+      "id": "S-15",
+      "method": "agent_artifact",
+      "path": "/home/tester/dev/demo-repo/.claude/settings.local.json",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "artifact",
+      "id": "S-16",
+      "method": "agent_artifact",
+      "path": "/home/tester/.claude/settings.json",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "artifact",
+      "id": "S-17",
+      "method": "agent_artifact",
+      "path": "/home/tester/.claude/CLAUDE.md",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "artifact",
+      "id": "S-18",
+      "method": "agent_artifact",
+      "path": "/home/tester/.codex/AGENTS.md",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "artifact",
+      "id": "S-19",
+      "method": "agent_artifact",
+      "path": "/home/tester/.gemini/GEMINI.md",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "runtime-state",
+      "id": "AG-01",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "runtime-state",
+      "id": "AG-02",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "runtime-state",
+      "id": "AG-03",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "scheduler",
+      "id": "AG-05",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "scheduler",
+      "id": "AG-06",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "identity",
+      "id": "AG-08",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "identity",
+      "id": "AG-09",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "identity",
+      "id": "AG-10",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "identity",
+      "id": "AG-11",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "artifact",
+      "id": "AG-12",
+      "path": "/home/tester/.bashrc",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "baseline-prereq",
+      "id": "N-01",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "baseline-prereq",
+      "id": "N-02",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "baseline-prereq",
+      "id": "N-03",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "baseline-prereq",
+      "id": "N-04",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "non-ai-app",
+      "id": "N-05",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "non-ai-app",
+      "id": "N-06",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "artifact",
+      "id": "N-07",
+      "path": "/home/tester/bin/mcp-backup.sh",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "service",
+      "id": "N-08",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "artifact",
+      "id": "N-09",
+      "path": "/usr/local/bin/claude-old",
+      "status": "installed"
+    },
+    {
+      "catalog_id": null,
+      "family": "artifact",
+      "id": "N-10",
+      "path": "/home/tester/bin/ask-corp-llm.sh",
+      "status": "installed"
+    }
+  ],
+  "failed": 1,
+  "home": "/home/tester",
+  "image": "synthetic",
+  "installed": 90,
+  "note": "generated by tests/tools/synthesize.py - not a captured run",
+  "os": "linux",
+  "run_id": "synthetic-linux",
+  "synthetic": true,
+  "unavailable": 0,
+  "unimplemented": 14
+}

@@ -1,0 +1,19 @@
+{
+  "assets": [],
+  "errors": [],
+  "findings": [],
+  "hostname": "adr-disco-linux",
+  "platform": "linux",
+  "review_queue": [],
+  "stats": {
+    "asset_count": 0,
+    "catalog_version": "2026.08.18",
+    "coverage": {},
+    "error_count": 0,
+    "probes": {},
+    "review_queue_count": 0,
+    "wall_ms": 3120.0
+  },
+  "timestamp": "2026-08-22T09:00:00Z",
+  "username": "tester"
+}

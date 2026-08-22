@@ -1,0 +1,2682 @@
+{
+  "assets": [
+    {
+      "asset_id": "57245534b29bc9be",
+      "catalog_id": "claude-code",
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "binary:claude",
+          "path": "/usr/lib/node_modules/@anthropic-ai/claude-code/bin/claude",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "claude-code",
+      "install_method": "npm",
+      "install_path": "/usr/lib/node_modules/@anthropic-ai/claude-code/bin/claude",
+      "install_root": "/usr/lib/node_modules/@anthropic-ai/claude-code/bin",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "Claude Code",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": "2.1.235"
+    },
+    {
+      "asset_id": "cc78c8c76a9b1c73",
+      "catalog_id": "codex",
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "binary:codex",
+          "path": "/usr/lib/node_modules/@openai/codex/bin/codex",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "codex",
+      "install_method": "npm",
+      "install_path": "/usr/lib/node_modules/@openai/codex/bin/codex",
+      "install_root": "/usr/lib/node_modules/@openai/codex/bin",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "Codex CLI",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": "0.58.0"
+    },
+    {
+      "asset_id": "db9b6aa373e96945",
+      "catalog_id": "gemini-cli",
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "binary:gemini",
+          "path": "/usr/lib/node_modules/@google/gemini-cli/bin/gemini",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "gemini-cli",
+      "install_method": "npm",
+      "install_path": "/usr/lib/node_modules/@google/gemini-cli/bin/gemini",
+      "install_root": "/usr/lib/node_modules/@google/gemini-cli/bin",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "Gemini CLI",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": "0.12.0"
+    },
+    {
+      "asset_id": "4e811b63f1845a6f",
+      "catalog_id": "opencode",
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "binary:opencode",
+          "path": "/usr/lib/node_modules/opencode-ai/bin/opencode",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "opencode",
+      "install_method": "npm",
+      "install_path": "/usr/lib/node_modules/opencode-ai/bin/opencode",
+      "install_root": "/usr/lib/node_modules/opencode-ai/bin",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "opencode",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": "0.5.29"
+    },
+    {
+      "asset_id": "8899c50a5f663426",
+      "catalog_id": "amp",
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "binary:amp",
+          "path": "/usr/lib/node_modules/@sourcegraph/amp/bin/amp",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "amp",
+      "install_method": "npm",
+      "install_path": "/usr/lib/node_modules/@sourcegraph/amp/bin/amp",
+      "install_root": "/usr/lib/node_modules/@sourcegraph/amp/bin",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "Amp",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": "0.0.1787428878-gebb20a"
+    },
+    {
+      "asset_id": "a0af736becb9cc73",
+      "catalog_id": "kilo-cli",
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "binary:kilo",
+          "path": "/usr/lib/node_modules/@kilocode/cli/bin/kilo",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "kilo-cli",
+      "install_method": "npm",
+      "install_path": "/usr/lib/node_modules/@kilocode/cli/bin/kilo",
+      "install_root": "/usr/lib/node_modules/@kilocode/cli/bin",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "Kilo CLI",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": "7.4.23"
+    },
+    {
+      "asset_id": "7e1f2a2684445c7f",
+      "catalog_id": "qwen-code",
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "binary:qwen",
+          "path": "/usr/lib/node_modules/@qwen-code/qwen-code/bin/qwen",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "qwen-code",
+      "install_method": "npm",
+      "install_path": "/usr/lib/node_modules/@qwen-code/qwen-code/bin/qwen",
+      "install_root": "/usr/lib/node_modules/@qwen-code/qwen-code/bin",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "Qwen Code",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": "0.22.0"
+    },
+    {
+      "asset_id": "6b23018745a7c34c",
+      "catalog_id": "copilot-cli",
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "binary:copilot",
+          "path": "/usr/lib/node_modules/@github/copilot/bin/copilot",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "copilot-cli",
+      "install_method": "npm",
+      "install_path": "/usr/lib/node_modules/@github/copilot/bin/copilot",
+      "install_root": "/usr/lib/node_modules/@github/copilot/bin",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "Copilot CLI",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": "1.0.80"
+    },
+    {
+      "asset_id": "d2503d4c9b08eeee",
+      "catalog_id": "goose",
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "binary:goose",
+          "path": "/usr/lib/node_modules/@block/goose-cli/bin/goose",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "goose",
+      "install_method": "npm",
+      "install_path": "/usr/lib/node_modules/@block/goose-cli/bin/goose",
+      "install_root": "/usr/lib/node_modules/@block/goose-cli/bin",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "Goose",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": "1.0.28"
+    },
+    {
+      "asset_id": "9c1596b73c3fd822",
+      "catalog_id": "aider",
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "binary:aider",
+          "path": "/home/tester/.local/pipx/venvs/aider-chat/bin/aider",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "aider",
+      "install_method": "pipx",
+      "install_path": "/home/tester/.local/pipx/venvs/aider-chat/bin/aider",
+      "install_root": "/home/tester/.local/pipx/venvs/aider-chat/bin",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "Aider",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": "0.86.1"
+    },
+    {
+      "asset_id": "76e3c7bfe641ea12",
+      "catalog_id": "ollama",
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "binary:Ollama",
+          "path": "",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "ollama",
+      "install_method": "unknown",
+      "install_path": "",
+      "install_root": null,
+      "kind": "model_runtime",
+      "last_used": null,
+      "liveness": "running",
+      "location": null,
+      "models": [],
+      "name": "Ollama",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "fc5710d9d89a9132",
+      "catalog_id": "lm-studio",
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "binary:LM",
+          "path": "",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "lm-studio",
+      "install_method": "unknown",
+      "install_path": "",
+      "install_root": null,
+      "kind": "model_runtime",
+      "last_used": null,
+      "liveness": "running",
+      "location": null,
+      "models": [],
+      "name": "LM Studio",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "150dc86746a90bad",
+      "catalog_id": "llama.cpp",
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "binary:llama.cpp",
+          "path": "",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "llama.cpp",
+      "install_method": "unknown",
+      "install_path": "",
+      "install_root": null,
+      "kind": "model_runtime",
+      "last_used": null,
+      "liveness": "running",
+      "location": null,
+      "models": [],
+      "name": "llama.cpp",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "6a0ac0fd972c325d",
+      "catalog_id": "jan",
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "binary:Jan",
+          "path": "",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "jan",
+      "install_method": "unknown",
+      "install_path": "",
+      "install_root": null,
+      "kind": "model_runtime",
+      "last_used": null,
+      "liveness": "running",
+      "location": null,
+      "models": [],
+      "name": "Jan",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "ba89eaf314075b69",
+      "catalog_id": "localai",
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "binary:LocalAI",
+          "path": "",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "localai",
+      "install_method": "unknown",
+      "install_path": "",
+      "install_root": null,
+      "kind": "model_runtime",
+      "last_used": null,
+      "liveness": "running",
+      "location": null,
+      "models": [],
+      "name": "LocalAI",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "d496c82198e4f336",
+      "catalog_id": "open-webui",
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "binary:Open",
+          "path": "",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "open-webui",
+      "install_method": "unknown",
+      "install_path": "",
+      "install_root": null,
+      "kind": "ai_frontend",
+      "last_used": null,
+      "liveness": "running",
+      "location": null,
+      "models": [],
+      "name": "Open WebUI",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "ead627e2b11190fd",
+      "catalog_id": "openhands",
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "binary:OpenHands",
+          "path": "",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "openhands",
+      "install_method": "unknown",
+      "install_path": "",
+      "install_root": null,
+      "kind": "agent_platform",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "OpenHands",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "67ddc4622529eaa4",
+      "catalog_id": "claude-code",
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "binary:claude",
+          "path": "/bin/claude",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "claude-code",
+      "install_method": "npm",
+      "install_path": "/bin/claude",
+      "install_root": "/bin",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "Claude Code",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "2ad940e243573d44",
+      "catalog_id": null,
+      "config_scope": "user",
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.6,
+          "matched_on": "config:claude-code",
+          "path": "/home/tester/.claude.json",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "mcp:4da9adfa9c4a7a10",
+      "install_method": "unknown",
+      "install_path": "/home/tester/.claude.json",
+      "install_root": "/home/tester",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "adr-probe-cc",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "args": [
+          "~/dev/tools/adr-probe-server.js"
+        ],
+        "command": "node",
+        "factors": [],
+        "pinned": true
+      },
+      "signature": {},
+      "transport": "stdio",
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "2703516ea2f96607",
+      "catalog_id": null,
+      "config_scope": "user",
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.6,
+          "matched_on": "config:claude-desktop",
+          "path": "/home/tester/.config/claude-desktop/claude_desktop_config.json",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "mcp:78cc4dbf761ec61d",
+      "install_method": "unknown",
+      "install_path": "/home/tester/.config/claude-desktop/claude_desktop_config.json",
+      "install_root": "/home/tester/.config/claude-desktop",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "adr-probe-cd",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "args": [
+          "~/dev/tools/adr-probe-server.js"
+        ],
+        "command": "node",
+        "factors": [],
+        "pinned": true
+      },
+      "signature": {},
+      "transport": "stdio",
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "fe4ee5dab845c7bd",
+      "catalog_id": null,
+      "config_scope": "user",
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.6,
+          "matched_on": "config:cursor",
+          "path": "/home/tester/.cursor/mcp.json",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "mcp:3f3c363c8d068369",
+      "install_method": "unknown",
+      "install_path": "/home/tester/.cursor/mcp.json",
+      "install_root": "/home/tester/.cursor",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "adr-probe-cursor",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "args": [
+          "~/dev/tools/adr-probe-server.js"
+        ],
+        "command": "node",
+        "factors": [],
+        "pinned": true
+      },
+      "signature": {},
+      "transport": "stdio",
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "d005ee308451630f",
+      "catalog_id": null,
+      "config_scope": "user",
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.6,
+          "matched_on": "config:windsurf",
+          "path": "/home/tester/.codeium/windsurf/mcp_config.json",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "mcp:ca28a4ec25fce51a",
+      "install_method": "unknown",
+      "install_path": "/home/tester/.codeium/windsurf/mcp_config.json",
+      "install_root": "/home/tester/.codeium/windsurf",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "adr-probe-windsurf",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "args": [
+          "~/dev/tools/adr-probe-server.js"
+        ],
+        "command": "node",
+        "factors": [],
+        "pinned": true
+      },
+      "signature": {},
+      "transport": "stdio",
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "4af28df5e2b0eefe",
+      "catalog_id": null,
+      "config_scope": "user",
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.6,
+          "matched_on": "config:vscode",
+          "path": "/home/tester/.config/Code/User/mcp.json",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "mcp:e181aca7c81c2d2f",
+      "install_method": "unknown",
+      "install_path": "/home/tester/.config/Code/User/mcp.json",
+      "install_root": "/home/tester/.config/Code/User",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "adr-probe-vscode",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "args": [
+          "~/dev/tools/adr-probe-server.js"
+        ],
+        "command": "node",
+        "factors": [],
+        "pinned": true
+      },
+      "signature": {},
+      "transport": "stdio",
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "fb417130c4fa68af",
+      "catalog_id": null,
+      "config_scope": "user",
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.6,
+          "matched_on": "config:cline",
+          "path": "/home/tester/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "mcp:bd6cf519f1238f14",
+      "install_method": "unknown",
+      "install_path": "/home/tester/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+      "install_root": "/home/tester/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "adr-probe-cline",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "args": [
+          "~/dev/tools/adr-probe-server.js"
+        ],
+        "command": "node",
+        "factors": [],
+        "pinned": true
+      },
+      "signature": {},
+      "transport": "stdio",
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "1f68ef4171b77b5e",
+      "catalog_id": null,
+      "config_scope": "user",
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.6,
+          "matched_on": "config:zed",
+          "path": "/home/tester/.config/zed/settings.json",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "mcp:5a56d3171388008d",
+      "install_method": "unknown",
+      "install_path": "/home/tester/.config/zed/settings.json",
+      "install_root": "/home/tester/.config/zed",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "adr-probe-zed",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "args": [
+          "~/dev/tools/adr-probe-server.js"
+        ],
+        "command": "node",
+        "factors": [],
+        "pinned": true
+      },
+      "signature": {},
+      "transport": "stdio",
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "eb56fd2185d82781",
+      "catalog_id": null,
+      "config_scope": "user",
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.6,
+          "matched_on": "config:opencode",
+          "path": "/home/tester/.config/opencode/opencode.json",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "mcp:9a025dec901e2046",
+      "install_method": "unknown",
+      "install_path": "/home/tester/.config/opencode/opencode.json",
+      "install_root": "/home/tester/.config/opencode",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "adr-probe-opencode",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "args": [
+          "~/dev/tools/adr-probe-server.js"
+        ],
+        "command": "node",
+        "factors": [],
+        "pinned": true
+      },
+      "signature": {},
+      "transport": "stdio",
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "e824055745e426fd",
+      "catalog_id": null,
+      "config_scope": "user",
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.6,
+          "matched_on": "config:codex",
+          "path": "/home/tester/.codex/config.toml",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "mcp:b7290b3d527bf154",
+      "install_method": "unknown",
+      "install_path": "/home/tester/.codex/config.toml",
+      "install_root": "/home/tester/.codex",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "adr-probe-codex",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "args": [
+          "~/dev/tools/adr-probe-server.js"
+        ],
+        "command": "node",
+        "factors": [],
+        "pinned": true
+      },
+      "signature": {},
+      "transport": "stdio",
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "c33e0d3d4fb99ed3",
+      "catalog_id": null,
+      "config_scope": "user",
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.6,
+          "matched_on": "config:goose",
+          "path": "/home/tester/.config/goose/config.yaml",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "mcp:021c83533a0826fd",
+      "install_method": "unknown",
+      "install_path": "/home/tester/.config/goose/config.yaml",
+      "install_root": "/home/tester/.config/goose",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "adr-probe-goose",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "args": [
+          "~/dev/tools/adr-probe-server.js"
+        ],
+        "command": "node",
+        "factors": [],
+        "pinned": true
+      },
+      "signature": {},
+      "transport": "stdio",
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "6d2482cfb1fc3f44",
+      "catalog_id": null,
+      "config_scope": "enterprise_managed",
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.6,
+          "matched_on": "config:managed-claude-code",
+          "path": "/etc/claude-code/managed-settings.json",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "mcp:446dd4b3b6f87bbc",
+      "install_method": "unknown",
+      "install_path": "/etc/claude-code/managed-settings.json",
+      "install_root": "/etc/claude-code",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "adr-probe-managed",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "args": [
+          "~/dev/tools/adr-probe-server.js"
+        ],
+        "command": "node",
+        "factors": [],
+        "pinned": true
+      },
+      "signature": {},
+      "transport": "stdio",
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "c500d6e2de810ff2",
+      "catalog_id": null,
+      "config_scope": "enterprise_managed",
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.6,
+          "matched_on": "config:managed-adr",
+          "path": "/etc/adr/managed-mcp.json",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "mcp:752daf98fd74d80e",
+      "install_method": "unknown",
+      "install_path": "/etc/adr/managed-mcp.json",
+      "install_root": "/etc/adr",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "adr-probe-adr-policy",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "args": [
+          "~/dev/tools/adr-probe-server.js"
+        ],
+        "command": "node",
+        "factors": [],
+        "pinned": true
+      },
+      "signature": {},
+      "transport": "stdio",
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "3e624ec77867505e",
+      "catalog_id": null,
+      "config_scope": "project",
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.6,
+          "matched_on": "config:project",
+          "path": "/home/tester/dev/demo-repo/.mcp.json",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "mcp:fab3819589524bdf",
+      "install_method": "unknown",
+      "install_path": "/home/tester/dev/demo-repo/.mcp.json",
+      "install_root": "/home/tester/dev/demo-repo",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "adr-probe-project",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "args": [
+          "~/dev/tools/adr-probe-server.js"
+        ],
+        "command": "node",
+        "factors": [],
+        "pinned": true
+      },
+      "signature": {},
+      "transport": "stdio",
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "f9a6e137e2e5803a",
+      "catalog_id": null,
+      "config_scope": "user",
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.6,
+          "matched_on": "config:claude-code",
+          "path": "",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "mcp:aa8eb546aaade4ba",
+      "install_method": "unknown",
+      "install_path": null,
+      "install_root": null,
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "filesystem",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-filesystem@2025.8.21",
+          "~/dev"
+        ],
+        "command": "npx",
+        "factors": [],
+        "pinned": true
+      },
+      "signature": {},
+      "transport": "stdio",
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "3dd11c55cd4f45fc",
+      "catalog_id": null,
+      "config_scope": "user",
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.6,
+          "matched_on": "config:claude-code",
+          "path": "",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "mcp:6f8ad3819f2cda16",
+      "install_method": "unknown",
+      "install_path": null,
+      "install_root": null,
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "git",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-git"
+        ],
+        "command": "npx",
+        "factors": [],
+        "pinned": false
+      },
+      "signature": {},
+      "transport": "stdio",
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "f25d2ffe00baa537",
+      "catalog_id": null,
+      "config_scope": "user",
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.6,
+          "matched_on": "config:claude-code",
+          "path": "",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "mcp:7698eb0e72657d74",
+      "install_method": "unknown",
+      "install_path": null,
+      "install_root": null,
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "github",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "ghcr.io/github/github-mcp-server:v0.5.0"
+        ],
+        "command": "docker",
+        "factors": [],
+        "pinned": true
+      },
+      "signature": {},
+      "transport": "stdio",
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "dfc173393628fcc0",
+      "catalog_id": null,
+      "config_scope": "user",
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.6,
+          "matched_on": "config:claude-code",
+          "path": "",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "mcp:a29f9a5ef078946a",
+      "install_method": "unknown",
+      "install_path": null,
+      "install_root": null,
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "sqlite",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "args": [
+          "mcp-server-sqlite@0.1.0",
+          "--db-path",
+          "~/dev/demo.db"
+        ],
+        "command": "uvx",
+        "factors": [],
+        "pinned": true
+      },
+      "signature": {},
+      "transport": "stdio",
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "aba1fcacef7b80e9",
+      "catalog_id": null,
+      "config_scope": "user",
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.6,
+          "matched_on": "config:claude-code",
+          "path": "",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "mcp:0dd8a0c60e6e9993",
+      "install_method": "unknown",
+      "install_path": null,
+      "install_root": null,
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "fetch",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "args": [
+          "mcp-server-fetch"
+        ],
+        "command": "uvx",
+        "factors": [],
+        "pinned": false
+      },
+      "signature": {},
+      "transport": "stdio",
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "88e2504e43d3120e",
+      "catalog_id": null,
+      "config_scope": "user",
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.6,
+          "matched_on": "config:claude-code",
+          "path": "",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "mcp:eba24a80d7ba72ab",
+      "install_method": "unknown",
+      "install_path": null,
+      "install_root": null,
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "memory",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "mcp/memory:latest"
+        ],
+        "command": "docker",
+        "factors": [],
+        "pinned": false
+      },
+      "signature": {},
+      "transport": "stdio",
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "3a4156edabd277e2",
+      "catalog_id": null,
+      "config_scope": "user",
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.6,
+          "matched_on": "config:claude-code",
+          "path": "",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "mcp:fc64019837d2cb1d",
+      "install_method": "unknown",
+      "install_path": null,
+      "install_root": null,
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "playwright",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "args": [
+          "@playwright/mcp@1.x"
+        ],
+        "command": "npx",
+        "factors": [],
+        "pinned": false
+      },
+      "signature": {},
+      "transport": "stdio",
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "50798c0b8d226c5c",
+      "catalog_id": null,
+      "config_scope": "user",
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.6,
+          "matched_on": "config:claude-code",
+          "path": "",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "mcp:b3e47e23230529d0",
+      "install_method": "unknown",
+      "install_path": null,
+      "install_root": null,
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "local-script",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "args": [
+          "~/dev/tools/my-server.js"
+        ],
+        "command": "node",
+        "factors": [],
+        "pinned": false
+      },
+      "signature": {},
+      "transport": "stdio",
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "c376656634be85a3",
+      "catalog_id": null,
+      "config_scope": "user",
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.6,
+          "matched_on": "config:claude-code",
+          "path": "",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "mcp:701e39c46a02f400",
+      "install_method": "unknown",
+      "install_path": null,
+      "install_root": null,
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "remote-sse",
+      "network": {
+        "endpoint": "https://mcp.example.invalid/sse"
+      },
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "args": [],
+        "command": null,
+        "factors": [],
+        "pinned": true
+      },
+      "signature": {},
+      "transport": "sse",
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "8380714ff6bcbcb6",
+      "catalog_id": null,
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "runtime",
+          "confidence": 0.6,
+          "matched_on": "listening:39100",
+          "path": "",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "mcp:594c14586a4be05e",
+      "install_method": "unknown",
+      "install_path": null,
+      "install_root": null,
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "running",
+      "location": null,
+      "models": [],
+      "name": "Undeclared server",
+      "network": {
+        "port": 39100
+      },
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "args": [],
+        "command": "node",
+        "factors": [
+          "undeclared"
+        ],
+        "pinned": false
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "ef38f0562f257a4a",
+      "catalog_id": null,
+      "config_scope": "enterprise_managed",
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.6,
+          "matched_on": "config:both",
+          "path": "",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "mcp:335d03b1d1d654ba",
+      "install_method": "unknown",
+      "install_path": null,
+      "install_root": null,
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "adr-probe-precedence",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "args": [
+          "~/dev/tools/adr-probe-server.js",
+          "--precedence"
+        ],
+        "command": "node",
+        "factors": [],
+        "pinned": true
+      },
+      "signature": {},
+      "transport": "stdio",
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "b59ee5ba79032b99",
+      "catalog_id": null,
+      "config_scope": "user",
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.6,
+          "matched_on": "config:claude-code",
+          "path": "",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "mcp:6bf009eb79373051",
+      "install_method": "unknown",
+      "install_path": null,
+      "install_root": null,
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "adr-probe-argv-token",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "args": [
+          "~/dev/tools/adr-probe-server.js",
+          "--token",
+          "[REDACTED]"
+        ],
+        "command": "node",
+        "factors": [],
+        "pinned": true
+      },
+      "signature": {},
+      "transport": "stdio",
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "01a4922b8965801a",
+      "catalog_id": null,
+      "config_scope": "user",
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.6,
+          "matched_on": "config:claude-code",
+          "path": "",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "mcp:3b3506fe45f00b58",
+      "install_method": "unknown",
+      "install_path": null,
+      "install_root": null,
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "adr-probe-auth-header",
+      "network": {
+        "endpoint": "https://mcp.example.invalid/authed"
+      },
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "args": [],
+        "command": null,
+        "factors": [],
+        "pinned": true
+      },
+      "signature": {},
+      "transport": "sse",
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "7e017648afa6baa9",
+      "catalog_id": null,
+      "config_scope": "user",
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.6,
+          "matched_on": "config:claude-code",
+          "path": "",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "mcp:079682a3715b620c",
+      "install_method": "unknown",
+      "install_path": null,
+      "install_root": null,
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "adr-probe-env-key",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "args": [
+          "~/dev/tools/adr-probe-server.js",
+          "--env-mode"
+        ],
+        "command": "node",
+        "env_names": [
+          "ANTHROPIC_API_KEY",
+          "OPENAI_API_KEY"
+        ],
+        "factors": [],
+        "pinned": true
+      },
+      "signature": {},
+      "transport": "stdio",
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "960136168a131e3a",
+      "catalog_id": null,
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "mcp_special",
+          "path": "/home/tester/.mcpb/broken-bundle/manifest.json",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "/home/tester/.mcpb/broken-bundle/manifest.json",
+      "install_method": "agent_artifact",
+      "install_path": "/home/tester/.mcpb/broken-bundle/manifest.json",
+      "install_root": "/home/tester/.mcpb/broken-bundle",
+      "kind": "mcp_bundle",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "manifest.json",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "a9f54c6fe40e2500",
+      "catalog_id": null,
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "skill",
+          "path": "/home/tester/.claude/skills/pdf-filler/SKILL.md",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "/home/tester/.claude/skills/pdf-filler/SKILL.md",
+      "install_method": "agent_artifact",
+      "install_path": "/home/tester/.claude/skills/pdf-filler/SKILL.md",
+      "install_root": "/home/tester/.claude/skills/pdf-filler",
+      "kind": "skill",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "SKILL.md",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "787463a8da76e81e",
+      "catalog_id": null,
+      "config_scope": "project",
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "skill",
+          "path": "/home/tester/dev/demo-repo/.claude/skills/deploy-check/SKILL.md",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "/home/tester/dev/demo-repo/.claude/skills/deploy-check/SKILL.md",
+      "install_method": "agent_artifact",
+      "install_path": "/home/tester/dev/demo-repo/.claude/skills/deploy-check/SKILL.md",
+      "install_root": "/home/tester/dev/demo-repo/.claude/skills/deploy-check",
+      "kind": "skill",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "SKILL.md",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "9b58001ced07ec93",
+      "catalog_id": null,
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "command",
+          "path": "/home/tester/.claude/commands/ship.md",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "/home/tester/.claude/commands/ship.md",
+      "install_method": "agent_artifact",
+      "install_path": "/home/tester/.claude/commands/ship.md",
+      "install_root": "/home/tester/.claude/commands",
+      "kind": "skill",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "ship.md",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "7a4d5fc9da897f37",
+      "catalog_id": null,
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "command",
+          "path": "/home/tester/.gemini/commands/review.toml",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "/home/tester/.gemini/commands/review.toml",
+      "install_method": "agent_artifact",
+      "install_path": "/home/tester/.gemini/commands/review.toml",
+      "install_root": "/home/tester/.gemini/commands",
+      "kind": "skill",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "review.toml",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "f4212c5dd09acbb4",
+      "catalog_id": null,
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "command",
+          "path": "/home/tester/.codex/prompts/triage.md",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "/home/tester/.codex/prompts/triage.md",
+      "install_method": "agent_artifact",
+      "install_path": "/home/tester/.codex/prompts/triage.md",
+      "install_root": "/home/tester/.codex/prompts",
+      "kind": "skill",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "triage.md",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "d17457f91017f8ce",
+      "catalog_id": null,
+      "config_scope": "project",
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "command",
+          "path": "/home/tester/dev/demo-repo/.claude/commands/release.md",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "/home/tester/dev/demo-repo/.claude/commands/release.md",
+      "install_method": "agent_artifact",
+      "install_path": "/home/tester/dev/demo-repo/.claude/commands/release.md",
+      "install_root": "/home/tester/dev/demo-repo/.claude/commands",
+      "kind": "skill",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "release.md",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "7cc639b7513bb186",
+      "catalog_id": null,
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "style",
+          "path": "/home/tester/.claude/output-styles/terse.md",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "/home/tester/.claude/output-styles/terse.md",
+      "install_method": "agent_artifact",
+      "install_path": "/home/tester/.claude/output-styles/terse.md",
+      "install_root": "/home/tester/.claude/output-styles",
+      "kind": "skill",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "terse.md",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "a0666342e7697991",
+      "catalog_id": null,
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "subagent",
+          "path": "/home/tester/.claude/agents/reviewer.md",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "/home/tester/.claude/agents/reviewer.md",
+      "install_method": "agent_artifact",
+      "install_path": "/home/tester/.claude/agents/reviewer.md",
+      "install_root": "/home/tester/.claude/agents",
+      "kind": "agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "reviewer.md",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "e4604344c62c22d3",
+      "catalog_id": null,
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "subagent",
+          "path": "/home/tester/.cursor/agents/refactor.md",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "/home/tester/.cursor/agents/refactor.md",
+      "install_method": "agent_artifact",
+      "install_path": "/home/tester/.cursor/agents/refactor.md",
+      "install_root": "/home/tester/.cursor/agents",
+      "kind": "agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "refactor.md",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "b273db4d287bc2d9",
+      "catalog_id": null,
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "subagent",
+          "path": "/home/tester/.codeium/windsurf/agents/scan.md",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "/home/tester/.codeium/windsurf/agents/scan.md",
+      "install_method": "agent_artifact",
+      "install_path": "/home/tester/.codeium/windsurf/agents/scan.md",
+      "install_root": "/home/tester/.codeium/windsurf/agents",
+      "kind": "agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "scan.md",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "9b771c7f9c3477e7",
+      "catalog_id": null,
+      "config_scope": "project",
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "subagent",
+          "path": "/home/tester/dev/demo-repo/.claude/agents/tester.md",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "/home/tester/dev/demo-repo/.claude/agents/tester.md",
+      "install_method": "agent_artifact",
+      "install_path": "/home/tester/dev/demo-repo/.claude/agents/tester.md",
+      "install_root": "/home/tester/dev/demo-repo/.claude/agents",
+      "kind": "agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "tester.md",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "8e5e4d8f04d4d702",
+      "catalog_id": null,
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "plugin",
+          "path": "/home/tester/.claude/plugins/acme-tools/",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "/home/tester/.claude/plugins/acme-tools/",
+      "install_method": "agent_artifact",
+      "install_path": "/home/tester/.claude/plugins/acme-tools/",
+      "install_root": "/home/tester/.claude/plugins/acme-tools",
+      "kind": "plugin",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "acme-tools",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "14d63cb87a1290f2",
+      "catalog_id": null,
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "hook",
+          "path": "/home/tester/.claude/settings.json",
+          "probe": "synthetic"
+        },
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "hook",
+          "path": "/home/tester/.claude/settings.json",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "/home/tester/.claude/settings.json",
+      "install_method": "agent_artifact",
+      "install_path": "/home/tester/.claude/settings.json",
+      "install_root": "/home/tester/.claude",
+      "kind": "hook",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "settings.json",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "command": "~/bin/audit.sh --event pre",
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "69b5e62f64943fae",
+      "catalog_id": null,
+      "config_scope": "project",
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "hook",
+          "path": "/home/tester/dev/demo-repo/.claude/settings.json",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "/home/tester/dev/demo-repo/.claude/settings.json",
+      "install_method": "agent_artifact",
+      "install_path": "/home/tester/dev/demo-repo/.claude/settings.json",
+      "install_root": "/home/tester/dev/demo-repo/.claude",
+      "kind": "hook",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "settings.json",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "command": "./scripts/audit.sh --event pre",
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "75c92e9ab7186da7",
+      "catalog_id": null,
+      "config_scope": "project",
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "hook",
+          "path": "/home/tester/dev/demo-repo/.claude/settings.local.json",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "/home/tester/dev/demo-repo/.claude/settings.local.json",
+      "install_method": "agent_artifact",
+      "install_path": "/home/tester/dev/demo-repo/.claude/settings.local.json",
+      "install_root": "/home/tester/dev/demo-repo/.claude",
+      "kind": "hook",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "settings.local.json",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "command": "./scripts/audit.sh --event post",
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "015d1e115c6c5f97",
+      "catalog_id": null,
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "instructions",
+          "path": "/home/tester/.claude/CLAUDE.md",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "/home/tester/.claude/CLAUDE.md",
+      "install_method": "agent_artifact",
+      "install_path": "/home/tester/.claude/CLAUDE.md",
+      "install_root": "/home/tester/.claude",
+      "kind": "instructions",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "CLAUDE.md",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "42d38e5de1379ee1",
+      "catalog_id": null,
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "instructions",
+          "path": "/home/tester/.codex/AGENTS.md",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "/home/tester/.codex/AGENTS.md",
+      "install_method": "agent_artifact",
+      "install_path": "/home/tester/.codex/AGENTS.md",
+      "install_root": "/home/tester/.codex",
+      "kind": "instructions",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "AGENTS.md",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "55d3246a9a3adfc7",
+      "catalog_id": null,
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "instructions",
+          "path": "/home/tester/.gemini/GEMINI.md",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "/home/tester/.gemini/GEMINI.md",
+      "install_method": "agent_artifact",
+      "install_path": "/home/tester/.gemini/GEMINI.md",
+      "install_root": "/home/tester/.gemini",
+      "kind": "instructions",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "GEMINI.md",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "fe34819e45683b17",
+      "catalog_id": null,
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "runtime",
+          "confidence": 0.6,
+          "matched_on": "process:child",
+          "path": "",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "child:ce8f1de8cecface1",
+      "install_method": "agent_session",
+      "install_path": null,
+      "install_root": null,
+      "kind": "agent",
+      "last_used": null,
+      "liveness": "running",
+      "location": null,
+      "models": [],
+      "name": "sleep 3600",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": "claude-code",
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "4237418b793e8c0f",
+      "catalog_id": null,
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.6,
+          "matched_on": "scheduler:cron",
+          "path": "cron",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "sched:e7a6e6d2dc430a83",
+      "install_method": "agent_artifact",
+      "install_path": null,
+      "install_root": null,
+      "kind": "scheduled_agent",
+      "last_used": null,
+      "liveness": "scheduled",
+      "location": null,
+      "models": [],
+      "name": "cron job",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "args": [
+          "-p",
+          "'nightly",
+          "triage'"
+        ],
+        "command": "claude",
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "31e4a01b800fb2c9",
+      "catalog_id": null,
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.6,
+          "matched_on": "scheduler:systemd",
+          "path": "/home/tester/.config/systemd/user/adr-agent.service",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "sched:48a611854d467ad3",
+      "install_method": "agent_artifact",
+      "install_path": "/home/tester/.config/systemd/user/adr-agent.service",
+      "install_root": "/home/tester/.config/systemd/user",
+      "kind": "scheduled_agent",
+      "last_used": null,
+      "liveness": "scheduled",
+      "location": null,
+      "models": [],
+      "name": "systemd user unit",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "args": [
+          "-p",
+          "'nightly",
+          "triage'"
+        ],
+        "command": "claude",
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "8ddbaa98fe75a5b0",
+      "catalog_id": null,
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "env_credential",
+          "path": "/home/tester/.bashrc",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "/home/tester/.bashrc",
+      "install_method": "agent_artifact",
+      "install_path": "/home/tester/.bashrc",
+      "install_root": "/home/tester",
+      "kind": "skill",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": ".bashrc",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "env_names": [
+          "ANTHROPIC_API_KEY"
+        ],
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "ec5156bb71c59b7e",
+      "catalog_id": null,
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "path-contains:mcp",
+          "path": "/home/tester/bin/mcp-backup.sh",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "mcp:513bbecf08baa10b",
+      "install_method": "unknown",
+      "install_path": "/home/tester/bin/mcp-backup.sh",
+      "install_root": "/home/tester/bin",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "mcp-backup.sh",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "args": [],
+        "command": "/home/tester/bin/mcp-backup.sh",
+        "factors": [],
+        "pinned": false
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": null
+    },
+    {
+      "asset_id": "a1acdcab3f8e2d62",
+      "catalog_id": null,
+      "config_scope": null,
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.6,
+          "matched_on": "binary:ghost-agent",
+          "path": "/home/tester/.cache/ghost/ghost-agent",
+          "probe": "synthetic"
+        }
+      ],
+      "flags": [],
+      "identity": "ghost-agent",
+      "install_method": "unknown",
+      "install_path": "/home/tester/.cache/ghost/ghost-agent",
+      "install_root": "/home/tester/.cache/ghost",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": null,
+      "models": [],
+      "name": "ghost-agent",
+      "network": {},
+      "owner": "tester",
+      "parent_agent": null,
+      "risk": {
+        "factors": []
+      },
+      "signature": {},
+      "transport": null,
+      "vendor": null,
+      "version": "9.9.9"
+    }
+  ],
+  "errors": [
+    {
+      "message": "broken symlink",
+      "path": "/usr/local/bin/claude-old",
+      "probe": "cli_agent"
+    }
+  ],
+  "findings": [
+    {
+      "asset_id": "8380714ff6bcbcb6",
+      "finding": "undeclared_mcp_server",
+      "name": "Undeclared server",
+      "severity": "high"
+    }
+  ],
+  "hostname": "adr-disco-linux",
+  "platform": "linux",
+  "review_queue": [
+    {
+      "kind": "cli_agent",
+      "name": "ask-corp-llm.sh",
+      "path": "/home/tester/bin/ask-corp-llm.sh",
+      "priority": 0.7,
+      "score": 0.7,
+      "sessions": 0,
+      "signals": [
+        "name_hints_ai",
+        "invokes_model_api"
+      ],
+      "state": "probable_ai_unclassified",
+      "threshold": 0.6
+    }
+  ],
+  "stats": {
+    "asset_count": 70,
+    "catalog_version": "2026.08.18",
+    "coverage": {},
+    "error_count": 1,
+    "probes": {},
+    "review_queue_count": 1,
+    "wall_ms": 6480.0
+  },
+  "timestamp": "2026-08-22T09:41:00Z",
+  "username": "tester"
+}
