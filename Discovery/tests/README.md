@@ -94,12 +94,14 @@ Installed globally so their binaries land on `PATH`. Versions are pinned, becaus
 | `T-CLI-06` | Kilo CLI | `kilo-cli` | `npm i -g @kilocode/cli@<pin>` | ✓ | ✓ | ✓ |
 | `T-CLI-07` | Qwen Code | `qwen-code` | `npm i -g @qwen-code/qwen-code@<pin>` | ✓ | ✓ | ✓ |
 | `T-CLI-08` | Copilot CLI | `copilot-cli` | `npm i -g @github/copilot@<pin>` | ✓ | ✓ | ✓ |
-| `T-CLI-09` | Goose | `goose` | `npm i -g @block/goose-cli@<pin>` | ✓ | ✓ | ✓ |
+| `T-CLI-09` | Goose | `goose` | vendor installer — **not npm**, see below | ✓ | ✓ | ✓ |
 | `T-CLI-10` | Aider | `aider` | `pipx install aider-chat==<pin>` | ✓ | ✓ | ✓ |
 | `T-CLI-11` | Crush | `crush` | vendor binary → `/usr/local/bin` | ✓ | ✓ | ✓ |
 | `T-CLI-12` | Grok CLI | `grok-cli` | vendor binary → `/usr/local/bin` | ✓ | ✓ | ✓ |
 
 Expected for each: one asset, correct `version`, `install_path` on the real binary, `install_method` matching the channel, `liveness` = installed.
+
+`T-CLI-09` is the one row where the install channel is not settled. `@block/goose-cli` does not resolve — the scope does not exist on the npm registry — and the plausible substitute is worse than nothing: the unscoped `goose-cli` package on npm is a wrapper around the **database migration tool** of the same name, so installing it would put an unrelated binary called `goose` on `PATH` and the harness would record a successful install of the wrong product. The row stays in the manifest and is recorded `unimplemented` until somebody confirms how Block ships it.
 
 #### 1b. Desktop apps, IDEs and AI browsers — `T-APP-01` … `T-APP-16`
 
