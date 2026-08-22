@@ -222,9 +222,9 @@ Accuracy claims state which layer produced them. A suite whose worlds are built 
 
 ### The two instruments
 
-[tests/README.md](tests/README.md) documents the end-to-end fidelity measurement: real tools installed on a clean guest per OS, a scan before and after, and a comparison of what was installed against what the collector reported. Because it installs real software, signs into real accounts and starts real listeners, it is not part of per-commit CI — it runs against a release candidate, when the catalog changes, and when a new OS version ships.
+[tests/README.md](../tests/README.md) documents the end-to-end fidelity measurement: real tools installed on a clean guest per OS, a scan before and after, and a comparison of what was installed against what the collector reported. Because it installs real software, signs into real accounts and starts real listeners, it is not part of per-commit CI — it runs against a release candidate, when the catalog changes, and when a new OS version ships.
 
-[tests/FIXTURE_SUITE.md](tests/FIXTURE_SUITE.md) documents the fast per-commit suite: synthetic endpoints built on disk, scanned by a real pipeline, in about four seconds on any CI box.
+[tests/FIXTURE_SUITE.md](../tests/FIXTURE_SUITE.md) documents the fast per-commit suite: synthetic endpoints built on disk, scanned by a real pipeline, in about four seconds on any CI box.
 
 The two are complementary and neither replaces the other. The fixture suite has a perfect oracle — it built the machine — but can only contain situations somebody imagined, so it catches regressions. The VM run has real input nobody predicted but a slower, costlier oracle, so it discovers defects. Every defect a VM run finds should be reduced to a fixture case, which is the intended flow of work between them.
 
@@ -249,4 +249,4 @@ Steps 1 and 2 are mechanical and remove most of the measured miss rate. Step 3 c
 
 ## License
 
-Apache License 2.0. See [LICENSE](../LICENSE) at the repository root.
+Apache License 2.0. See [LICENSE](../LICENSE).
