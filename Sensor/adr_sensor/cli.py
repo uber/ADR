@@ -13,7 +13,6 @@ import argparse
 import json
 import os
 import platform
-import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,6 +23,7 @@ except Exception:
     resource_mod = None
 
 from . import __version__
+from .observer import AgentObserver
 
 
 def get_version():
@@ -33,20 +33,6 @@ def get_version():
 
 def main():
     """Main entry point for the ADR Sensor CLI."""
-    # ``adr-sensor discover`` runs ADR Discovery (inventory) rather than the
-    # observability ingest. It is dispatched before argparse so the two
-    # subsystems keep independent option sets.
-    if len(sys.argv) > 1 and sys.argv[1] == "discover":
-        from .discovery.cli import main as discover_main
-
-        return discover_main(sys.argv[2:])
-
-    # Imported here rather than at module scope: the dispatch above must reach
-    # discovery without pulling in the observability plane and its third-party
-    # dependency, or `adr-sensor discover` cannot run on an endpoint that has
-    # only the standard library.
-    from .observer import AgentObserver
-
     parser = argparse.ArgumentParser(
         description="ADR Sensor - Security observability for AI coding agents",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -60,8 +46,6 @@ Examples:
   adr-sensor --save-sessions              Save individual session files
   adr-sensor --output-format jsonl        Export as JSONL
   adr-sensor --all-history                Include all logs (not just last 2 weeks)
-  adr-sensor discover                     Inventory AI tools on this endpoint
-  adr-sensor discover --dry-run --explain Show what would be collected, write nothing
         """,
     )
     parser.add_argument("--version", action="version", version=get_version(), help="Show version and exit")

@@ -5,16 +5,16 @@ from collections import OrderedDict
 
 sys.path.insert(0, ".")
 
-from tests.discovery.framework import run_cases  # noqa: E402
+from tests.framework import run_cases  # noqa: E402
 
 
 def load():
     cases = OrderedDict()
-    from tests.discovery import cases_tools
+    from tests import cases_tools
     cases.update(cases_tools.CASES)
     for module_name in ("cases_mcp", "cases_skills", "cases_agents", "cases_hardening"):
         try:
-            module = __import__("tests.discovery.%s" % module_name, fromlist=["CASES"])
+            module = __import__("tests.%s" % module_name, fromlist=["CASES"])
         except ImportError:
             continue
         cases.update(module.CASES)

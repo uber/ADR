@@ -6,7 +6,7 @@ open-world scorer flags the unknown ones, and a resolver merges every
 observation into assets.
 
 Every probe reads the world through an injected
-:class:`~adr_sensor.discovery.env.DiscoveryEnv` rather than touching the live
+:class:`~adr_discovery.env.DiscoveryEnv` rather than touching the live
 machine, so the whole pipeline can be pointed at a fixture world and graded.
 """
 

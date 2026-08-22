@@ -3,16 +3,16 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "adr-sensor"
-version = "1.0.0"
-description = "ADR Sensor - Agentic Detection & Response: Security observability for AI coding agents"
+name = "adr-discovery"
+version = "0.1.0"
+description = "ADR Discovery - Agentic Detection & Response: inventory the AI tools present on an endpoint"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.9"
 authors = [
     { name = "ADR Project Contributors" },
 ]
-keywords = ["security", "ai-agents", "observability", "threat-detection", "mcp", "llm"]
+keywords = ["security", "ai-agents", "discovery", "inventory", "shadow-ai", "mcp", "llm"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -29,8 +29,13 @@ classifiers = [
     "Topic :: Security",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
+# Discovery runs on endpoints that may not reach PyPI, so the collector is
+# standard-library-only wherever the standard library suffices. The single
+# exception is TOML on Python 3.9 and 3.10, which have no tomllib: parsing
+# Codex's config with a hand-written subset lost quoted keys and any comma
+# inside a string, so a compliant parser is a dependency rather than a nicety.
 dependencies = [
-    "tabulate>=0.9.0",
+    "tomli>=2.0.1; python_version < '3.11'",
 ]
 
 [project.optional-dependencies]
@@ -41,16 +46,22 @@ dev = [
 ]
 
 [project.scripts]
-adr-sensor = "adr_sensor.cli:main"
+adr-discovery = "adr_discovery.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/uber/ADR"
-Documentation = "https://github.com/uber/ADR/tree/main/Sensor"
+Documentation = "https://github.com/uber/ADR/tree/main/Discovery"
 Repository = "https://github.com/uber/ADR"
 Issues = "https://github.com/uber/ADR/issues"
 
 [tool.setuptools.packages.find]
-include = ["adr_sensor*"]
+include = ["adr_discovery*"]
+
+[tool.setuptools.package-data]
+# catalog.json is the only non-Python file in the package and every discovery
+# run reads it. Without this the installed wheel omits it and `adr-discovery`
+# dies on a missing file at import-adjacent time.
+adr_discovery = ["catalog.json"]
 
 [tool.ruff]
 line-length = 120

@@ -12,7 +12,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from adr_sensor.discovery import DiscoveryEnv, ProcessInfo, SocketInfo, discover
+from adr_discovery import DiscoveryEnv, ProcessInfo, SocketInfo, discover
 
 
 class World:

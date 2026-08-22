@@ -38,6 +38,48 @@ jobs:
       - name: Run tests
         run: uv run pytest tests/ -q
 
+  test-discovery:
+    name: Discovery tests (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    defaults:
+      run:
+        working-directory: Discovery
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync --extra dev --python ${{ matrix.python-version }}
+
+      - name: Run tests
+        run: uv run --python ${{ matrix.python-version }} pytest tests/ -q
+
+      - name: Build distributions
+        if: matrix.python-version == '3.12'
+        run: uv build
+
+  # Mirrors test-sensor-gate: one stable check name in front of the matrix.
+  test-discovery-gate:
+    name: Discovery tests
+    runs-on: ubuntu-latest
+    needs: test-discovery
+    if: always()
+    steps:
+      - name: All Discovery matrix legs must pass
+        run: test "${{ needs.test-discovery.result }}" = "success"
+
   test-sensor:
     name: Sensor tests (py${{ matrix.python-version }})
     runs-on: ubuntu-latest

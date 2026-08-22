@@ -1,4 +1,4 @@
-"""``adr-sensor discover`` - run Plane A against this machine.
+"""``adr-discovery`` - run Plane A against this machine.
 
 ``--dry-run --explain`` prints exactly what would leave the endpoint, per probe
 and per field, so an employee can audit the collector before it reports.
@@ -18,7 +18,7 @@ from .runner import discover, live_env
 
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="adr-sensor discover",
+        prog="adr-discovery",
         description="Inventory the AI tools and agents present on this endpoint.")
     parser.add_argument("--output-dir", type=Path, default=None,
                         help="Directory to write the snapshot to (default: ./output)")

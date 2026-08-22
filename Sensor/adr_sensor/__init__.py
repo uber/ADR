@@ -21,30 +21,9 @@ try:
 except PackageNotFoundError:
     __version__ = "0+unknown"
 
-# Imported lazily. Plane A (discovery) depends on nothing outside the
-# standard library, and an eager import here drags in `tabulate` via
-# .observer, which makes the collector un-deployable on an endpoint that
-# cannot reach PyPI. Attribute access below keeps `from adr_sensor import
-# AgentObserver` working unchanged.
-_LAZY = {
-    "AgentObserver": ".observer",
-    "AgentEvent": ".schemas.agent_event_schema",
-    "ChatMessage": ".schemas.agent_event_schema",
-    "ToolUsage": ".schemas.agent_event_schema",
-    "SystemConfiguration": ".schemas.system_config_schema",
-}
-
-
-def __getattr__(name):
-    module = _LAZY.get(name)
-    if module is None:
-        raise AttributeError("module %r has no attribute %r" % (__name__, name))
-    from importlib import import_module
-    return getattr(import_module(module, __name__), name)
-
-
-def __dir__():
-    return sorted(list(globals()) + list(_LAZY))
+from .observer import AgentObserver
+from .schemas.agent_event_schema import AgentEvent, ChatMessage, ToolUsage
+from .schemas.system_config_schema import SystemConfiguration
 
 __all__ = [
     "AgentObserver",
