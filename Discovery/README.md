@@ -116,7 +116,7 @@ python3 tests/run_suite.py -v    # every check, including passes
 
 The scorecard is grouped rather than a single pass count, because "480 of 490" hides which *kind* of wrong it is.
 
-See [tests/README.md](tests/README.md) for the fixture-world DSL, the expectation helpers, the five case groups, and how to add a case.
+[tests/README.md](tests/README.md) describes the end-to-end fidelity measurement: three VMs, a manifest of real tools installed per OS, and a comparison of what was installed against what the collector reported. [tests/FIXTURE_SUITE.md](tests/FIXTURE_SUITE.md) covers the fast per-commit suite above — the fixture-world DSL, the expectation helpers, the five case groups, and how to add a case.
 
 ## Development
 
