@@ -38,6 +38,31 @@ jobs:
       - name: Run tests
         run: uv run pytest tests/ -q
 
+  # The Discovery harness is standard-library only and needs no VM to check
+  # itself: the manifest invariants and the harness's own tests both run here,
+  # in well under a second. The end-to-end run this manifest describes installs
+  # real software and needs a self-hosted runner, so it is deliberately not part
+  # of per-commit CI.
+  test-discovery:
+    name: Discovery tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Discovery
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Check the manifest
+        run: python3 -m tests.manifest_check
+
+      - name: Run the harness's own tests
+        run: python3 -m unittest discover -s tests -t . -q
+
   test-sensor:
     name: Sensor tests (py${{ matrix.python-version }})
     runs-on: ubuntu-latest

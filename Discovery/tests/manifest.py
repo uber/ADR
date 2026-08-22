@@ -259,16 +259,98 @@ class Manifest:
     # -- validation ----------------------------------------------------
 
     def validate(self) -> None:
-        """The structural rules the format enforces, at load time.
+        """Every structural rule the format enforces, at load time.
 
         Load-time rather than run-time because the alternative is discovering a
         broken row twenty minutes into a VM run that then has to start again.
         """
         problems: List[str] = []
+        problems.extend(self.check_ids())
+        problems.extend(self.check_canaries())
         problems.extend(self._check_pins())
         problems.extend(self._check_references())
         if problems:
             raise ManifestError("manifest is invalid:\n  " + "\n  ".join(problems))
+
+    def check_ids(self) -> List[str]:
+        """Static check 2: every id unique, and every family series contiguous.
+
+        A gap in a series is almost always a row someone deleted rather than a
+        deliberate hole, and a duplicate id silently makes one of the two rows
+        unscoreable.
+        """
+        problems = []
+        seen = set()
+        series: Dict[str, List[int]] = {}
+        for entry in self.entries:
+            if entry.id in seen:
+                problems.append("duplicate id %s" % entry.id)
+            seen.add(entry.id)
+            prefix, _, number = entry.id.rpartition("-")
+            if not number.isdigit():
+                problems.append("id %s does not end in a number" % entry.id)
+                continue
+            series.setdefault(prefix, []).append(int(number))
+        for prefix, numbers in sorted(series.items()):
+            numbers.sort()
+            expected = list(range(1, len(numbers) + 1))
+            if numbers != expected:
+                missing = sorted(set(expected) - set(numbers))
+                problems.append("series %s is not contiguous: missing %s" % (prefix, missing))
+        return problems
+
+    def check_canaries(self) -> List[str]:
+        """Static check 3: no ``{{canary:x}}`` without a declared ``x``.
+
+        An undeclared canary is worse than a missing one: it is planted, never
+        searched for, and the run reports a clean redaction check it never made.
+        """
+        problems = []
+        declared = set(self.canary_names())
+        for entry in self.entries:
+            referenced = set(CANARY_REF.findall(_serialize(entry.raw)))
+            for name in sorted(referenced - declared):
+                problems.append("%s references undeclared canary %r" % (entry.id, name))
+            for name in sorted(set(entry.canaries) - referenced):
+                problems.append("%s declares canary %r it never plants" % (entry.id, name))
+            for name in sorted(referenced - set(entry.canaries)):
+                problems.append("%s plants canary %r without listing it" % (entry.id, name))
+        return problems
+
+    def check_catalog_coverage(self, catalog_ids: Iterable[str]) -> List[str]:
+        """Static check 1: every catalog entry has a manifest row.
+
+        The check that keeps the manifest honest over time. A catalog entry
+        with no row is a tool the collector claims to recognize but that
+        nothing ever verifies, and adding a tool should fail CI until someone
+        adds the row. This single test does more than any process rule.
+        """
+        covered = {entry.catalog_id for entry in self.entries if entry.catalog_id}
+        return ["catalog entry %r has no manifest row" % name
+                for name in sorted(set(catalog_ids) - covered)]
+
+    def check_sources(self) -> List[str]:
+        """Which vendor-installed entries still have no resolved download.
+
+        Reported rather than raised: an unresolved source is a harness gap that
+        blocks one entry, not a broken manifest that blocks the run.
+        """
+        pending = []
+        for entry in self.entries:
+            source = (entry.install or {}).get("source")
+            if not source or entry.family not in ("app-installer", "vendor-binary", "service", "non-ai-app"):
+                continue
+            descriptor = self.sources.get(source)
+            if descriptor is None:
+                pending.append("%s: source %r is not in sources.yaml" % (entry.id, source))
+                continue
+            for platform in entry.platforms:
+                per_os = descriptor.get(platform)
+                if per_os is None:
+                    pending.append("%s: source %r has no %s descriptor" % (entry.id, source, platform))
+                elif per_os.get("url") == "":
+                    pending.append("%s: source %r has no %s url" % (entry.id, source, platform))
+        return pending
 
     def _check_pins(self) -> List[str]:
         """Every installed package names a version.

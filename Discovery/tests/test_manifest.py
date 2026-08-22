@@ -36,6 +36,30 @@ class ManifestShape(unittest.TestCase):
                         if entry.family in ("declare-mcp", "artifact")]
         self.assertEqual(len(no_installer), 51)
 
+    def test_ids_are_unique_and_contiguous(self):
+        """Static check 2. A gap is a deleted row; a duplicate silently makes
+        one of the two rows unscoreable."""
+        self.assertEqual(self.manifest.check_ids(), [])
+
+    def test_every_canary_is_declared_and_planted(self):
+        """Static check 3. An undeclared canary is planted, never searched for,
+        and the run reports a clean redaction check it never made."""
+        self.assertEqual(self.manifest.check_canaries(), [])
+        self.assertEqual(len(self.manifest.canaries), 6)
+
+    def test_catalog_coverage_is_checkable(self):
+        """Static check 1, against a catalog supplied by the caller.
+
+        The harness does not read the collector's tree, so the catalog is an
+        input. What is asserted here is that the check *works* - a catalog entry
+        with no manifest row must be reported.
+        """
+        covered = [entry.catalog_id for entry in self.manifest if entry.catalog_id]
+        self.assertEqual(self.manifest.check_catalog_coverage(covered), [])
+        missing = self.manifest.check_catalog_coverage(covered + ["brand-new-tool"])
+        self.assertEqual(len(missing), 1)
+        self.assertIn("brand-new-tool", missing[0])
+
     def test_every_catalogued_tool_appears_once(self):
         seen = {}
         for entry in self.manifest:
@@ -62,11 +86,27 @@ class ManifestShape(unittest.TestCase):
         shapes = {entry.shape for entry in self.manifest}
         self.assertEqual(shapes, {"install", "declare", "create", "state"})
 
+    def test_unresolved_sources_are_reported_not_raised(self):
+        """A URL nobody has filled in blocks one entry; it does not invalidate
+        the manifest."""
+        pending = self.manifest.check_sources()
+        self.assertTrue(pending)
+        self.assertTrue(all(":" in line for line in pending))
+
 
 class ManifestValidation(unittest.TestCase):
     def test_a_bad_family_is_refused_at_load(self):
         with self.assertRaises(manifest_module.ManifestError):
             manifest_module._family({"id": "X-01", "install": {"method": "telepathy"}})
+
+    def test_an_undeclared_canary_is_a_failure(self):
+        manifest = manifest_module.load()
+        entry = manifest.by_id("S-16")
+        entry.raw = dict(entry.raw)
+        entry.raw["create"] = dict(entry.raw["create"],
+                                   command="audit.sh --token {{canary:not_declared}}")
+        problems = manifest.check_canaries()
+        self.assertTrue(any("not_declared" in problem for problem in problems))
 
 
 if __name__ == "__main__":
