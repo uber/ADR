@@ -1,0 +1,3748 @@
+{
+  "assets": [
+    {
+      "asset_id": "t-cli-01",
+      "catalog_id": "claude-code",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-CLI-01",
+          "proof": "T-CLI-01",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "has_identity=True"
+      ],
+      "identity": "claude-code",
+      "install_method": "npm",
+      "install_path": "/root/.local/bin/t-cli-01",
+      "install_root": null,
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Claude Code",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": "2.1.235"
+    },
+    {
+      "asset_id": "t-cli-02",
+      "catalog_id": "codex",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-CLI-02",
+          "proof": "T-CLI-02",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "has_identity=True"
+      ],
+      "identity": "codex",
+      "install_method": "npm",
+      "install_path": "/root/.local/bin/t-cli-02",
+      "install_root": null,
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Codex CLI",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": "0.58.0"
+    },
+    {
+      "asset_id": "t-cli-03",
+      "catalog_id": "gemini-cli",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-CLI-03",
+          "proof": "T-CLI-03",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "has_identity=True"
+      ],
+      "identity": "gemini-cli",
+      "install_method": "npm",
+      "install_path": "/root/.local/bin/t-cli-03",
+      "install_root": null,
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Gemini CLI",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": "0.12.0"
+    },
+    {
+      "asset_id": "t-cli-04",
+      "catalog_id": "opencode",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-CLI-04",
+          "proof": "T-CLI-04",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "has_identity=True",
+        "risk_factor=personal_account"
+      ],
+      "identity": "opencode",
+      "install_method": "npm",
+      "install_path": "/root/.local/bin/t-cli-04",
+      "install_root": null,
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "opencode",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": "0.5.29"
+    },
+    {
+      "asset_id": "t-cli-05",
+      "catalog_id": "amp",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-CLI-05",
+          "proof": "T-CLI-05",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "amp",
+      "install_method": "npm",
+      "install_path": "/root/.local/bin/t-cli-05",
+      "install_root": null,
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Amp",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": "0.0.1787428878-gebb20a"
+    },
+    {
+      "asset_id": "t-cli-06",
+      "catalog_id": "kilo-cli",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-CLI-06",
+          "proof": "T-CLI-06",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "kilo-cli",
+      "install_method": "npm",
+      "install_path": "/root/.local/bin/t-cli-06",
+      "install_root": null,
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Kilo CLI",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": "7.4.23"
+    },
+    {
+      "asset_id": "t-cli-07",
+      "catalog_id": "qwen-code",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-CLI-07",
+          "proof": "T-CLI-07",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "qwen-code",
+      "install_method": "npm",
+      "install_path": "/root/.local/bin/t-cli-07",
+      "install_root": null,
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Qwen Code",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": "0.22.0"
+    },
+    {
+      "asset_id": "t-cli-08",
+      "catalog_id": "copilot-cli",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-CLI-08",
+          "proof": "T-CLI-08",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "copilot-cli",
+      "install_method": "npm",
+      "install_path": "/root/.local/bin/t-cli-08",
+      "install_root": null,
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Copilot CLI",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": "1.0.80"
+    },
+    {
+      "asset_id": "t-cli-09",
+      "catalog_id": "goose",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-CLI-09",
+          "proof": "T-CLI-09",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "goose",
+      "install_method": "npm",
+      "install_path": "/root/.local/bin/t-cli-09",
+      "install_root": null,
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Goose",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": "1.0.28"
+    },
+    {
+      "asset_id": "t-cli-10",
+      "catalog_id": "aider",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-CLI-10",
+          "proof": "T-CLI-10",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "aider",
+      "install_method": "pipx",
+      "install_path": "/root/.local/bin/t-cli-10",
+      "install_root": null,
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Aider",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": "0.86.1"
+    },
+    {
+      "asset_id": "t-cli-11",
+      "catalog_id": "crush",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-CLI-11",
+          "proof": "T-CLI-11",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "crush",
+      "install_method": "unknown",
+      "install_path": "/root/.local/bin/t-cli-11",
+      "install_root": null,
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Crush",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "t-cli-12",
+      "catalog_id": "grok-cli",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-CLI-12",
+          "proof": "T-CLI-12",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "grok-cli",
+      "install_method": "unknown",
+      "install_path": "/root/.local/bin/t-cli-12",
+      "install_root": null,
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Grok CLI",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "t-app-02",
+      "catalog_id": "cursor",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-APP-02",
+          "proof": "T-APP-02",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "cursor",
+      "install_method": "app-installer",
+      "install_path": "/root/.local/bin/t-app-02",
+      "install_root": null,
+      "kind": "app",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Cursor",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "t-app-03",
+      "catalog_id": "windsurf",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-APP-03",
+          "proof": "T-APP-03",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "windsurf",
+      "install_method": "app-installer",
+      "install_path": "/root/.local/bin/t-app-03",
+      "install_root": null,
+      "kind": "app",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Windsurf",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "t-app-04",
+      "catalog_id": "vscode",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-APP-04",
+          "proof": "T-APP-04",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "vscode",
+      "install_method": "app-installer",
+      "install_path": "/root/.local/bin/t-app-04",
+      "install_root": null,
+      "kind": "app",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "VS Code",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "t-app-05",
+      "catalog_id": "zed",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-APP-05",
+          "proof": "T-APP-05",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "zed",
+      "install_method": "app-installer",
+      "install_path": "/root/.local/bin/t-app-05",
+      "install_root": null,
+      "kind": "app",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Zed",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "t-app-06",
+      "catalog_id": "jetbrains-ai",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-APP-06",
+          "proof": "T-APP-06",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "jetbrains-ai",
+      "install_method": "app-installer",
+      "install_path": "/root/.local/bin/t-app-06",
+      "install_root": null,
+      "kind": "app",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "JetBrains IDE + AI Assistant",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "t-app-08",
+      "catalog_id": "warp",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-APP-08",
+          "proof": "T-APP-08",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "warp",
+      "install_method": "app-installer",
+      "install_path": "/root/.local/bin/t-app-08",
+      "install_root": null,
+      "kind": "app",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Warp",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "t-ext-01",
+      "catalog_id": "cline",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-EXT-01",
+          "proof": "T-EXT-01",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "cline",
+      "install_method": "ide_extension",
+      "install_path": "/root/.local/bin/t-ext-01",
+      "install_root": null,
+      "kind": "extension",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Cline",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": "3.42.0"
+    },
+    {
+      "asset_id": "t-ext-02",
+      "catalog_id": "continue",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-EXT-02",
+          "proof": "T-EXT-02",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "continue",
+      "install_method": "ide_extension",
+      "install_path": "/root/.local/bin/t-ext-02",
+      "install_root": null,
+      "kind": "extension",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Continue",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": "1.5.9"
+    },
+    {
+      "asset_id": "t-ext-03",
+      "catalog_id": "roo-code",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-EXT-03",
+          "proof": "T-EXT-03",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "roo-code",
+      "install_method": "ide_extension",
+      "install_path": "/root/.local/bin/t-ext-03",
+      "install_root": null,
+      "kind": "extension",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Roo Code",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": "3.30.1"
+    },
+    {
+      "asset_id": "t-ext-04",
+      "catalog_id": "kilo-code",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-EXT-04",
+          "proof": "T-EXT-04",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "kilo-code",
+      "install_method": "ide_extension",
+      "install_path": "/root/.local/bin/t-ext-04",
+      "install_root": null,
+      "kind": "extension",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Kilo Code",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": "4.108.0"
+    },
+    {
+      "asset_id": "t-ext-05",
+      "catalog_id": "copilot-ext",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-EXT-05",
+          "proof": "T-EXT-05",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "copilot-ext",
+      "install_method": "ide_extension",
+      "install_path": "/root/.local/bin/t-ext-05",
+      "install_root": null,
+      "kind": "extension",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "GitHub Copilot",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": "1.380.0"
+    },
+    {
+      "asset_id": "t-rt-01",
+      "catalog_id": "ollama",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-RT-01",
+          "proof": "T-RT-01",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "ollama",
+      "install_method": "service",
+      "install_path": "/root/.local/bin/t-rt-01",
+      "install_root": null,
+      "kind": "model_runtime",
+      "last_used": null,
+      "liveness": "running",
+      "location": "local",
+      "name": "Ollama",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "t-rt-02",
+      "catalog_id": "lm-studio",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-RT-02",
+          "proof": "T-RT-02",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "lm-studio",
+      "install_method": "service",
+      "install_path": "/root/.local/bin/t-rt-02",
+      "install_root": null,
+      "kind": "model_runtime",
+      "last_used": null,
+      "liveness": "running",
+      "location": "local",
+      "name": "LM Studio",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "t-rt-03",
+      "catalog_id": "llama.cpp",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-RT-03",
+          "proof": "T-RT-03",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "llama.cpp",
+      "install_method": "service",
+      "install_path": "/root/.local/bin/t-rt-03",
+      "install_root": null,
+      "kind": "model_runtime",
+      "last_used": null,
+      "liveness": "running",
+      "location": "local",
+      "name": "llama.cpp",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "t-rt-04",
+      "catalog_id": "gpt4all",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-RT-04",
+          "proof": "T-RT-04",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "gpt4all",
+      "install_method": "service",
+      "install_path": "/root/.local/bin/t-rt-04",
+      "install_root": null,
+      "kind": "model_runtime",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "GPT4All",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "t-rt-05",
+      "catalog_id": "jan",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-RT-05",
+          "proof": "T-RT-05",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "jan",
+      "install_method": "service",
+      "install_path": "/root/.local/bin/t-rt-05",
+      "install_root": null,
+      "kind": "model_runtime",
+      "last_used": null,
+      "liveness": "running",
+      "location": "local",
+      "name": "Jan",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "t-rt-06",
+      "catalog_id": "vllm",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-RT-06",
+          "proof": "T-RT-06",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "vllm",
+      "install_method": "service",
+      "install_path": "/root/.local/bin/t-rt-06",
+      "install_root": null,
+      "kind": "model_runtime",
+      "last_used": null,
+      "liveness": "running",
+      "location": "local",
+      "name": "vLLM",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "t-rt-07",
+      "catalog_id": "localai",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-RT-07",
+          "proof": "T-RT-07",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "localai",
+      "install_method": "service",
+      "install_path": "/root/.local/bin/t-rt-07",
+      "install_root": null,
+      "kind": "model_runtime",
+      "last_used": null,
+      "liveness": "running",
+      "location": "local",
+      "name": "LocalAI",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "t-rt-08",
+      "catalog_id": "open-webui",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-RT-08",
+          "proof": "T-RT-08",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "open-webui",
+      "install_method": "service",
+      "install_path": "/root/.local/bin/t-rt-08",
+      "install_root": null,
+      "kind": "model_runtime",
+      "last_used": null,
+      "liveness": "running",
+      "location": "local",
+      "name": "Open WebUI",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "t-rt-09",
+      "catalog_id": "openhands",
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "T-RT-09",
+          "proof": "T-RT-09",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "openhands",
+      "install_method": "service",
+      "install_path": "/root/.local/bin/t-rt-09",
+      "install_root": null,
+      "kind": "agent_platform",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "OpenHands",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "m-site-01",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.claude.json",
+          "proof": "M-SITE-01",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "config_scope=user",
+        "transport=stdio"
+      ],
+      "identity": "node /root/dev/tools/adr-probe-server.js",
+      "install_method": null,
+      "install_path": "/root/.claude.json",
+      "install_root": "/root/.claude.json",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "MCP server in Claude Code",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "m-site-02",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.config/claude-desktop/claude_desktop_config.json",
+          "proof": "M-SITE-02",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "config_scope=user",
+        "transport=stdio"
+      ],
+      "identity": "node /root/dev/tools/adr-probe-server.js",
+      "install_method": null,
+      "install_path": "/root/.config/claude-desktop/claude_desktop_config.json",
+      "install_root": "/root/.config/claude-desktop/claude_desktop_config.json",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "MCP server in Claude Desktop",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "m-site-03",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.cursor/mcp.json",
+          "proof": "M-SITE-03",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "config_scope=user",
+        "transport=stdio"
+      ],
+      "identity": "node /root/dev/tools/adr-probe-server.js",
+      "install_method": null,
+      "install_path": "/root/.cursor/mcp.json",
+      "install_root": "/root/.cursor/mcp.json",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "MCP server in Cursor",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "m-site-04",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.codeium/windsurf/mcp_config.json",
+          "proof": "M-SITE-04",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "config_scope=user",
+        "transport=stdio"
+      ],
+      "identity": "node /root/dev/tools/adr-probe-server.js",
+      "install_method": null,
+      "install_path": "/root/.codeium/windsurf/mcp_config.json",
+      "install_root": "/root/.codeium/windsurf/mcp_config.json",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "MCP server in Windsurf",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "m-site-05",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.config/code/user/mcp.json",
+          "proof": "M-SITE-05",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "config_scope=user",
+        "transport=stdio"
+      ],
+      "identity": "node /root/dev/tools/adr-probe-server.js",
+      "install_method": null,
+      "install_path": "/root/.config/code/user/mcp.json",
+      "install_root": "/root/.config/code/user/mcp.json",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "MCP server in VS Code",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "m-site-06",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.config/code/user/globalstorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+          "proof": "M-SITE-06",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "config_scope=user",
+        "transport=stdio"
+      ],
+      "identity": "node /root/dev/tools/adr-probe-server.js",
+      "install_method": null,
+      "install_path": "/root/.config/code/user/globalstorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+      "install_root": "/root/.config/code/user/globalstorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "MCP server in Cline",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "m-site-07",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.config/zed/settings.json",
+          "proof": "M-SITE-07",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "config_scope=user",
+        "transport=stdio"
+      ],
+      "identity": "node /root/dev/tools/adr-probe-server.js",
+      "install_method": null,
+      "install_path": "/root/.config/zed/settings.json",
+      "install_root": "/root/.config/zed/settings.json",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "MCP server in Zed",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "m-site-08",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.config/jetbrains/options/mcp.json",
+          "proof": "M-SITE-08",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "config_scope=user",
+        "transport=stdio"
+      ],
+      "identity": "node /root/dev/tools/adr-probe-server.js",
+      "install_method": null,
+      "install_path": "/root/.config/jetbrains/options/mcp.json",
+      "install_root": "/root/.config/jetbrains/options/mcp.json",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "MCP server in JetBrains",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "m-site-09",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.config/opencode/opencode.json",
+          "proof": "M-SITE-09",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "config_scope=user",
+        "transport=stdio"
+      ],
+      "identity": "node /root/dev/tools/adr-probe-server.js",
+      "install_method": null,
+      "install_path": "/root/.config/opencode/opencode.json",
+      "install_root": "/root/.config/opencode/opencode.json",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "MCP server in opencode",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "m-site-10",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.codex/config.toml",
+          "proof": "M-SITE-10",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "config_scope=user",
+        "transport=stdio"
+      ],
+      "identity": "node /root/dev/tools/adr-probe-server.js",
+      "install_method": null,
+      "install_path": "/root/.codex/config.toml",
+      "install_root": "/root/.codex/config.toml",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "MCP server in Codex",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "m-site-11",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.config/goose/config.yaml",
+          "proof": "M-SITE-11",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "config_scope=user",
+        "transport=stdio"
+      ],
+      "identity": "node /root/dev/tools/adr-probe-server.js",
+      "install_method": null,
+      "install_path": "/root/.config/goose/config.yaml",
+      "install_root": "/root/.config/goose/config.yaml",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "MCP server in Goose",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "m-site-12",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/etc/claude-code/managed-settings.json",
+          "proof": "M-SITE-12",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "config_scope=enterprise_managed",
+        "transport=stdio"
+      ],
+      "identity": "node /root/dev/tools/adr-probe-server.js",
+      "install_method": null,
+      "install_path": "/etc/claude-code/managed-settings.json",
+      "install_root": "/etc/claude-code/managed-settings.json",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "MCP server in Managed policy",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "m-site-13",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/etc/adr/managed-mcp.json",
+          "proof": "M-SITE-13",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "config_scope=enterprise_managed",
+        "transport=stdio"
+      ],
+      "identity": "node /root/dev/tools/adr-probe-server.js",
+      "install_method": null,
+      "install_path": "/etc/adr/managed-mcp.json",
+      "install_root": "/etc/adr/managed-mcp.json",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "MCP server in ADR policy",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "m-site-14",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/dev/demo-repo/.mcp.json",
+          "proof": "M-SITE-14",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "config_scope=project",
+        "transport=stdio"
+      ],
+      "identity": "node /root/dev/tools/adr-probe-server.js",
+      "install_method": null,
+      "install_path": "/root/dev/demo-repo/.mcp.json",
+      "install_root": "/root/dev/demo-repo/.mcp.json",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "MCP server in a project checkout",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "m-pin-01",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.claude.json",
+          "proof": "M-PIN-01",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "pinned=True",
+        "transport=stdio"
+      ],
+      "identity": "npx -y @modelcontextprotocol/server-filesystem@2025.8.21 /root/dev",
+      "install_method": null,
+      "install_path": "/root/.claude.json",
+      "install_root": "/root/.claude.json",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "filesystem server",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "m-pin-02",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.claude.json",
+          "proof": "M-PIN-02",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "pinned=False",
+        "transport=stdio"
+      ],
+      "identity": "npx -y @modelcontextprotocol/server-git",
+      "install_method": null,
+      "install_path": "/root/.claude.json",
+      "install_root": "/root/.claude.json",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "git server",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "m-pin-03",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.claude.json",
+          "proof": "M-PIN-03",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "pinned=True",
+        "transport=stdio"
+      ],
+      "identity": "docker run -i --rm ghcr.io/github/github-mcp-server:v0.5.0",
+      "install_method": null,
+      "install_path": "/root/.claude.json",
+      "install_root": "/root/.claude.json",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "github server",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "m-pin-04",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.claude.json",
+          "proof": "M-PIN-04",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "pinned=True",
+        "transport=stdio"
+      ],
+      "identity": "uvx mcp-server-sqlite@0.1.0 --db-path /root/dev/demo.db",
+      "install_method": null,
+      "install_path": "/root/.claude.json",
+      "install_root": "/root/.claude.json",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "sqlite server",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "m-pin-05",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.claude.json",
+          "proof": "M-PIN-05",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "pinned=False",
+        "transport=stdio"
+      ],
+      "identity": "uvx mcp-server-fetch",
+      "install_method": null,
+      "install_path": "/root/.claude.json",
+      "install_root": "/root/.claude.json",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "fetch server",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "m-pin-06",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.claude.json",
+          "proof": "M-PIN-06",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "pinned=False",
+        "transport=stdio"
+      ],
+      "identity": "docker run -i --rm mcp/memory:latest",
+      "install_method": null,
+      "install_path": "/root/.claude.json",
+      "install_root": "/root/.claude.json",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "memory server",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "m-pin-07",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.claude.json",
+          "proof": "M-PIN-07",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "pinned=False",
+        "transport=stdio"
+      ],
+      "identity": "npx @playwright/mcp@1.x",
+      "install_method": null,
+      "install_path": "/root/.claude.json",
+      "install_root": "/root/.claude.json",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "playwright server",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "m-pin-08",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.claude.json",
+          "proof": "M-PIN-08",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "pinned=False",
+        "transport=stdio"
+      ],
+      "identity": "node /root/dev/tools/my-server.js",
+      "install_method": null,
+      "install_path": "/root/.claude.json",
+      "install_root": "/root/.claude.json",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "local script server",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "m-pin-09",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.claude.json",
+          "proof": "M-PIN-09",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "transport=sse"
+      ],
+      "identity": "https://mcp.example.invalid/sse",
+      "install_method": null,
+      "install_path": "/root/.claude.json",
+      "install_root": "/root/.claude.json",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "remote server",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "m-sp-01",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "M-SP-01",
+          "proof": "M-SP-01",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "adr-probe-server",
+      "install_method": "service",
+      "install_path": "/root/.local/bin/m-sp-01",
+      "install_root": null,
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Undeclared server",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "m-sp-02",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/etc/claude-code/managed-settings.json",
+          "proof": "M-SP-02",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "config_scope=enterprise_managed"
+      ],
+      "identity": "node /root/dev/tools/adr-probe-server.js --precedence",
+      "install_method": null,
+      "install_path": "/etc/claude-code/managed-settings.json",
+      "install_root": "/etc/claude-code/managed-settings.json",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Scope precedence",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "m-sp-03",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.claude.json",
+          "proof": "M-SP-03",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "transport=stdio"
+      ],
+      "identity": "node /root/dev/tools/adr-probe-server.js --token {{canary:mcp_token}}",
+      "install_method": null,
+      "install_path": "/root/.claude.json",
+      "install_root": "/root/.claude.json",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Token in argv",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "m-sp-04",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.claude.json",
+          "proof": "M-SP-04",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "transport=sse"
+      ],
+      "identity": "https://mcp.example.invalid/authed",
+      "install_method": null,
+      "install_path": "/root/.claude.json",
+      "install_root": "/root/.claude.json",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Auth header",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "m-sp-05",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.claude.json",
+          "proof": "M-SP-05",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "transport=stdio"
+      ],
+      "identity": "node /root/dev/tools/adr-probe-server.js --env-mode",
+      "install_method": null,
+      "install_path": "/root/.claude.json",
+      "install_root": "/root/.claude.json",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Key in env",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "m-sp-06",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.mcpb/broken-bundle/manifest.json",
+          "proof": "M-SP-06",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "malformed"
+      ],
+      "identity": "/root/.mcpb/broken-bundle/manifest.json",
+      "install_method": null,
+      "install_path": "/root/.mcpb/broken-bundle/manifest.json",
+      "install_root": "/root/.mcpb/broken-bundle/manifest.json",
+      "kind": "mcp_bundle",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Malformed bundle",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "s-01",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.claude/skills/pdf-filler/skill.md",
+          "proof": "S-01",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "/root/.claude/skills/pdf-filler/skill.md",
+      "install_method": "agent_artifact",
+      "install_path": "/root/.claude/skills/pdf-filler/skill.md",
+      "install_root": "/root/.claude/skills/pdf-filler/skill.md",
+      "kind": "skill",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "User skill",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "s-02",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/dev/demo-repo/.claude/skills/deploy-check/skill.md",
+          "proof": "S-02",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "config_scope=project"
+      ],
+      "identity": "/root/dev/demo-repo/.claude/skills/deploy-check/skill.md",
+      "install_method": "agent_artifact",
+      "install_path": "/root/dev/demo-repo/.claude/skills/deploy-check/skill.md",
+      "install_root": "/root/dev/demo-repo/.claude/skills/deploy-check/skill.md",
+      "kind": "skill",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Project skill",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "s-03",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.claude/commands/ship.md",
+          "proof": "S-03",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "/root/.claude/commands/ship.md",
+      "install_method": "agent_artifact",
+      "install_path": "/root/.claude/commands/ship.md",
+      "install_root": "/root/.claude/commands/ship.md",
+      "kind": "skill",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Claude command",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "s-04",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.gemini/commands/review.toml",
+          "proof": "S-04",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "/root/.gemini/commands/review.toml",
+      "install_method": "agent_artifact",
+      "install_path": "/root/.gemini/commands/review.toml",
+      "install_root": "/root/.gemini/commands/review.toml",
+      "kind": "skill",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Gemini command",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "s-05",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.codex/prompts/triage.md",
+          "proof": "S-05",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "/root/.codex/prompts/triage.md",
+      "install_method": "agent_artifact",
+      "install_path": "/root/.codex/prompts/triage.md",
+      "install_root": "/root/.codex/prompts/triage.md",
+      "kind": "skill",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Codex prompt",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "s-06",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/dev/demo-repo/.claude/commands/release.md",
+          "proof": "S-06",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "config_scope=project"
+      ],
+      "identity": "/root/dev/demo-repo/.claude/commands/release.md",
+      "install_method": "agent_artifact",
+      "install_path": "/root/dev/demo-repo/.claude/commands/release.md",
+      "install_root": "/root/dev/demo-repo/.claude/commands/release.md",
+      "kind": "skill",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Project command",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "s-07",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.claude/output-styles/terse.md",
+          "proof": "S-07",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "/root/.claude/output-styles/terse.md",
+      "install_method": "agent_artifact",
+      "install_path": "/root/.claude/output-styles/terse.md",
+      "install_root": "/root/.claude/output-styles/terse.md",
+      "kind": "skill",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Output style",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "s-08",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.claude/agents/reviewer.md",
+          "proof": "S-08",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "/root/.claude/agents/reviewer.md",
+      "install_method": "agent_artifact",
+      "install_path": "/root/.claude/agents/reviewer.md",
+      "install_root": "/root/.claude/agents/reviewer.md",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Claude subagent",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "s-09",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.cursor/agents/refactor.md",
+          "proof": "S-09",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "/root/.cursor/agents/refactor.md",
+      "install_method": "agent_artifact",
+      "install_path": "/root/.cursor/agents/refactor.md",
+      "install_root": "/root/.cursor/agents/refactor.md",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Cursor agent",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "s-10",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.codeium/windsurf/agents/scan.md",
+          "proof": "S-10",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "/root/.codeium/windsurf/agents/scan.md",
+      "install_method": "agent_artifact",
+      "install_path": "/root/.codeium/windsurf/agents/scan.md",
+      "install_root": "/root/.codeium/windsurf/agents/scan.md",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Windsurf agent",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "s-11",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/dev/demo-repo/.claude/agents/tester.md",
+          "proof": "S-11",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "config_scope=project"
+      ],
+      "identity": "/root/dev/demo-repo/.claude/agents/tester.md",
+      "install_method": "agent_artifact",
+      "install_path": "/root/dev/demo-repo/.claude/agents/tester.md",
+      "install_root": "/root/dev/demo-repo/.claude/agents/tester.md",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Project subagent",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "s-12",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.claude/plugins/acme-tools",
+          "proof": "S-12",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "/root/.claude/plugins/acme-tools",
+      "install_method": "agent_artifact",
+      "install_path": "/root/.claude/plugins/acme-tools",
+      "install_root": "/root/.claude/plugins/acme-tools",
+      "kind": "plugin",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Plugin",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "s-13",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.claude/settings.json",
+          "proof": "S-13",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "/root/.claude/settings.json",
+      "install_method": "agent_artifact",
+      "install_path": "/root/.claude/settings.json",
+      "install_root": "/root/.claude/settings.json",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "User hook",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "s-14",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/dev/demo-repo/.claude/settings.json",
+          "proof": "S-14",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "config_scope=project"
+      ],
+      "identity": "/root/dev/demo-repo/.claude/settings.json",
+      "install_method": "agent_artifact",
+      "install_path": "/root/dev/demo-repo/.claude/settings.json",
+      "install_root": "/root/dev/demo-repo/.claude/settings.json",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Project hook",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "s-15",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/dev/demo-repo/.claude/settings.local.json",
+          "proof": "S-15",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [
+        "config_scope=project"
+      ],
+      "identity": "/root/dev/demo-repo/.claude/settings.local.json",
+      "install_method": "agent_artifact",
+      "install_path": "/root/dev/demo-repo/.claude/settings.local.json",
+      "install_root": "/root/dev/demo-repo/.claude/settings.local.json",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Local project hook",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "s-16",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.claude/settings.json",
+          "proof": "S-16",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "/root/.claude/settings.json",
+      "install_method": "agent_artifact",
+      "install_path": "/root/.claude/settings.json",
+      "install_root": "/root/.claude/settings.json",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Hook with a secret",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "s-17",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.claude/claude.md",
+          "proof": "S-17",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "/root/.claude/claude.md",
+      "install_method": "agent_artifact",
+      "install_path": "/root/.claude/claude.md",
+      "install_root": "/root/.claude/claude.md",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Claude instructions",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "s-18",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.codex/agents.md",
+          "proof": "S-18",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "/root/.codex/agents.md",
+      "install_method": "agent_artifact",
+      "install_path": "/root/.codex/agents.md",
+      "install_root": "/root/.codex/agents.md",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Codex instructions",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "s-19",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.gemini/gemini.md",
+          "proof": "S-19",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "/root/.gemini/gemini.md",
+      "install_method": "agent_artifact",
+      "install_path": "/root/.gemini/gemini.md",
+      "install_root": "/root/.gemini/gemini.md",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Gemini instructions",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "ag-01",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "AG-01",
+          "proof": "AG-01",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "claude",
+      "install_method": null,
+      "install_path": "/root/.local/bin/ag-01",
+      "install_root": null,
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "running",
+      "location": "local",
+      "name": "Running agent",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "ag-02",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "AG-02",
+          "proof": "AG-02",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "sleep 3600",
+      "install_method": null,
+      "install_path": "/root/.local/bin/ag-02",
+      "install_root": null,
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Spawned child",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "ag-03",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "AG-03",
+          "proof": "AG-03",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "ollama serve",
+      "install_method": null,
+      "install_path": "/root/.local/bin/ag-03",
+      "install_root": null,
+      "kind": "model_runtime",
+      "last_used": null,
+      "liveness": "running",
+      "location": "local",
+      "name": "Running runtime",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "ag-05",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "AG-05",
+          "proof": "AG-05",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "claude -p 'nightly triage'",
+      "install_method": null,
+      "install_path": "/root/.local/bin/ag-05",
+      "install_root": null,
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "cron job",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "ag-06",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "AG-06",
+          "proof": "AG-06",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "claude -p 'nightly triage'",
+      "install_method": null,
+      "install_path": "/root/.local/bin/ag-06",
+      "install_root": null,
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "systemd user unit",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "ag-12",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "filesystem",
+          "confidence": 0.9,
+          "path": "/root/.bashrc",
+          "proof": "AG-12",
+          "rung": null,
+          "stage": "M3"
+        }
+      ],
+      "flags": [],
+      "identity": "/root/.bashrc",
+      "install_method": null,
+      "install_path": "/root/.bashrc",
+      "install_root": "/root/.bashrc",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Shell-exported key",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    }
+  ],
+  "catalog_version": "2026.08.18",
+  "coverage": {
+    "boundaries_hit": [],
+    "denied": [
+      {
+        "path": "/root/broken-link",
+        "reason": "dangling symlink"
+      }
+    ],
+    "out_of_scope": [
+      "instruction_files",
+      "agent_hooks",
+      "scheduling_mechanisms"
+    ],
+    "probes": [],
+    "roots_swept": [],
+    "truncated": [],
+    "unavailable": []
+  },
+  "findings": [],
+  "hostname": "adr-disco-synthetic",
+  "platform": "linux",
+  "review_queue": [
+    {
+      "evidence": [],
+      "path": "/root/bin/In-house AI wrapper",
+      "score": 0.6,
+      "signals": [
+        "in-house wrapper"
+      ]
+    }
+  ],
+  "schema_version": "1.0",
+  "timestamp": "2026-08-22T00:40:00Z",
+  "username": "root"
+}
