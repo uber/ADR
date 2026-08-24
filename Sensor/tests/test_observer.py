@@ -2,13 +2,10 @@
 
 import json
 from datetime import datetime, timezone
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from adr_sensor.observer import AgentObserver
-from adr_sensor.schemas.agent_event_schema import AgentEvent, ChatMessage, ToolUsage
+from adr_sensor.schemas.agent_event_schema import AgentEvent, ChatMessage
 
 
 class TestAgentObserver:
@@ -16,6 +13,11 @@ class TestAgentObserver:
         """Test default initialization."""
         observer = AgentObserver(output_dir=tmp_path)
         assert observer.output_dir == tmp_path
+
+    def test_init_propagates_max_age_days_to_cline(self, tmp_path):
+        observer = AgentObserver(output_dir=tmp_path, max_age_days=30)
+
+        assert observer.cline_parser.max_age_days == 30
 
     def test_display_summary_empty(self, tmp_path, capsys):
         """Test display summary with no data."""

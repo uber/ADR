@@ -7,7 +7,7 @@ Supports macOS, Linux and Windows paths.
 
 import json
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -18,6 +18,7 @@ from .base_parser import BaseParser
 # Cline stores task history inside the Cursor extension's global storage,
 # relative to the per-platform app-data root.
 _CLINE_TASKS_SUFFIX = "Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks"
+MAX_LOG_AGE_DAYS = 14
 
 
 class ClineParser(BaseParser):
@@ -30,8 +31,9 @@ class ClineParser(BaseParser):
         windows_appdata() / _CLINE_TASKS_SUFFIX,  # Windows (%APPDATA%)
     ]
 
-    def __init__(self):
+    def __init__(self, max_age_days: int = MAX_LOG_AGE_DAYS):
         self.base_path = next((p for p in self.BASE_PATHS if p.exists()), self.BASE_PATHS[0])
+        self.max_age_days = max_age_days
 
     def parse_all(self) -> List[AgentEvent]:
         """Parse all available Cline logs."""
@@ -45,6 +47,34 @@ class ClineParser(BaseParser):
 
         task_dirs = [d for d in self.base_path.iterdir() if d.is_dir()]
         print(f"[CLINE] Found {len(task_dirs)} task directories")
+
+        if self.max_age_days > 0:
+            cutoff_timestamp = (datetime.now(timezone.utc) - timedelta(days=self.max_age_days)).timestamp()
+            recent_task_dirs = []
+            skipped_count = 0
+
+            for task_dir in task_dirs:
+                api_file = task_dir / "api_conversation_history.json"
+                try:
+                    modified_at = api_file.stat().st_mtime
+                except OSError:
+                    try:
+                        modified_at = task_dir.stat().st_mtime
+                    except OSError as e:
+                        print(f"[CLINE] Error checking task {task_dir}: {e}")
+                        recent_task_dirs.append(task_dir)
+                        continue
+
+                if modified_at >= cutoff_timestamp:
+                    recent_task_dirs.append(task_dir)
+                else:
+                    skipped_count += 1
+
+            task_dirs = recent_task_dirs
+            if skipped_count > 0:
+                print(f"[CLINE] Skipped {skipped_count} tasks older than {self.max_age_days} days")
+
+        print(f"[CLINE] Processing {len(task_dirs)} task directories")
 
         for task_dir in task_dirs:
             try:

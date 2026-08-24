@@ -103,6 +103,17 @@ class TestClaudeParser:
 
 
 class TestClineParser:
+    @staticmethod
+    def _write_task(base_path: Path, name: str, text: str = "hello"):
+        task_dir = base_path / name
+        task_dir.mkdir()
+        api_file = task_dir / "api_conversation_history.json"
+        api_file.write_text(
+            json.dumps([{"role": "user", "content": [{"type": "text", "text": text}]}]),
+            encoding="utf-8",
+        )
+        return task_dir, api_file
+
     def test_parse_cline_log(self, tmp_path):
         """Test parsing a Cline task directory."""
         task_dir = tmp_path / "1234567890"
@@ -131,6 +142,76 @@ class TestClineParser:
         assert entry is not None
         assert entry.source == "cline"
         assert len(entry.chat_history) == 2
+
+    def test_parse_all_filters_tasks_by_conversation_mtime(self, tmp_path):
+        recent_task, _ = self._write_task(tmp_path, "recent", "recent task")
+        old_task, old_api_file = self._write_task(tmp_path, "old", "old task")
+        now = datetime.now(timezone.utc).timestamp()
+        old = (datetime.now(timezone.utc) - timedelta(days=30)).timestamp()
+
+        # The conversation file, not its task directory, determines a task's age.
+        os.utime(recent_task, (old, old))
+        os.utime(old_api_file, (old, old))
+        os.utime(old_task, (now, now))
+
+        parser = ClineParser(max_age_days=14)
+        parser.base_path = tmp_path
+        with patch.object(parser, "parse_cline_log", wraps=parser.parse_cline_log) as parse_log:
+            entries = parser.parse_all()
+
+        assert {entry.session_id for entry in entries} == {"cline_recent"}
+        assert [call.args[0] for call in parse_log.call_args_list] == [recent_task]
+
+    def test_parse_all_uses_directory_mtime_when_conversation_is_missing(self, tmp_path):
+        task_dir = tmp_path / "missing-conversation"
+        task_dir.mkdir()
+        old = (datetime.now(timezone.utc) - timedelta(days=30)).timestamp()
+        os.utime(task_dir, (old, old))
+        parser = ClineParser(max_age_days=14)
+        parser.base_path = tmp_path
+
+        with patch.object(parser, "parse_cline_log", wraps=parser.parse_cline_log) as parse_log:
+            entries = parser.parse_all()
+
+        assert entries == []
+        parse_log.assert_not_called()
+
+    def test_parse_all_falls_back_to_task_mtime_after_file_stat_failure(self, tmp_path, monkeypatch):
+        _, failing_api_file = self._write_task(tmp_path, "stat-failure", "recovered task")
+        self._write_task(tmp_path, "healthy", "healthy task")
+        parser = ClineParser(max_age_days=14)
+        parser.base_path = tmp_path
+        original_stat = Path.stat
+        should_fail = True
+
+        def fail_one_stat(path, *args, **kwargs):
+            nonlocal should_fail
+            if path == failing_api_file and should_fail:
+                should_fail = False
+                raise OSError("stat unavailable")
+            return original_stat(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "stat", fail_one_stat)
+
+        entries = parser.parse_all()
+
+        assert {entry.session_id for entry in entries} == {"cline_stat-failure", "cline_healthy"}
+
+    @pytest.mark.parametrize("max_age_days", [0, -1])
+    def test_parse_all_non_positive_max_age_includes_all_history(self, tmp_path, max_age_days):
+        task_dir, api_file = self._write_task(tmp_path, "old", "old task")
+        old = (datetime.now(timezone.utc) - timedelta(days=30)).timestamp()
+        os.utime(api_file, (old, old))
+        os.utime(task_dir, (old, old))
+        parser = ClineParser(max_age_days=max_age_days)
+        parser.base_path = tmp_path
+
+        entries = parser.parse_all()
+
+        assert {entry.session_id for entry in entries} == {"cline_old"}
+
+    def test_default_max_age_days(self):
+        assert ClineParser().max_age_days == 14
 
     def test_extract_mcp_tools(self):
         """Test MCP tool extraction from text."""
