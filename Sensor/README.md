@@ -16,7 +16,7 @@ ADR Sensor is a Python library that collects telemetry from AI coding agents to 
 | **Cursor IDE**             | `cursor`         | SQLite (`state.vscdb`)              | macOS, Linux, Windows  |
 | **Cline (Claude Dev)**     | `cline`          | JSON task files                     | macOS, Linux, Windows  |
 | **Claude Desktop**         | `claude_desktop` | JSONL audit logs                    | macOS, Windows         |
-| **OpenAI Codex CLI**       | `codex`          | JSONL (`~/.codex/sessions/`)        | macOS, Linux, Windows  |
+| **OpenAI Codex CLI**       | `codex`          | JSONL + SQLite path catalogs        | macOS, Linux, Windows  |
 | **Warp Terminal**          | `warp`           | SQLite (`warp.sqlite`)              | macOS, Windows         |
 | **opencode**               | `opencode`       | SQLite (`opencode.db`) or JSON tree | macOS, Linux           |
 
@@ -32,6 +32,23 @@ Both emit `source: "claude_desktop"`. Dispatch sessions get a distinct
 `claude_desktop_dispatch_` session-id prefix and an `is_dispatch: true` flag in
 `session_context`, so detection rules can treat unattended runs differently from
 interactive ones. Interactive session ids are unchanged.
+
+### OpenAI Codex CLI
+
+The Codex parser reads JSONL rollout files from `$CODEX_HOME/sessions/`. It also
+opens every `$CODEX_HOME/state_*.sqlite` catalog in read-only mode and supplements
+filesystem discovery with rollout paths from compatible `threads` tables. A table
+must have `id` and `rollout_path` columns; `updated_at` and `updated_at_ms` are
+optional. Relative rollout paths are resolved from `CODEX_HOME`, and only existing
+regular `.jsonl` files are accepted. Catalog and filesystem paths are deduplicated.
+
+If `CODEX_HOME` is unset or empty, it defaults to `~/.codex`. Rollouts use a 14-day
+lookback by default. Filtering uses the newer of the file modification time and any
+valid catalog update timestamp, so a recently updated catalog entry can retain an
+older file. Corrupt, locked, or incompatible catalogs are skipped without affecting
+files found under `sessions/`; malformed timestamps fall back to file modification
+time. Pass `max_age_days` to `CodexParser` or `AgentObserver` to customize the
+lookback; values less than or equal to zero disable age filtering for `CodexParser`.
 
 ### opencode
 
@@ -298,6 +315,7 @@ cannot run on the current platform are skipped rather than failing.
 
 | Variable          | Read by                    | Effect                                                            |
 | ----------------- | -------------------------- | ----------------------------------------------------------------- |
+| `CODEX_HOME`      | Codex parser               | Codex data root containing `sessions/` and optional `state_*.sqlite` catalogs (default `~/.codex`) |
 | `XDG_CACHE_HOME`  | `AgentObserver`            | Base for `--save-sessions` output (`$XDG_CACHE_HOME/adr_sensor`, default `~/.cache/adr_sensor`) |
 | `XDG_DATA_HOME`   | opencode parser            | Overrides the opencode data directory (default `~/.local/share/opencode`) |
 | `OPENCODE_DB`     | opencode parser            | Overrides the opencode SQLite filename or path (`:memory:` is ignored) |

@@ -17,6 +17,11 @@ class TestAgentObserver:
         observer = AgentObserver(output_dir=tmp_path)
         assert observer.output_dir == tmp_path
 
+    def test_init_passes_max_age_days_to_codex(self, tmp_path):
+        observer = AgentObserver(output_dir=tmp_path, max_age_days=0)
+
+        assert observer.codex_parser.max_age_days == 0
+
     def test_display_summary_empty(self, tmp_path, capsys):
         """Test display summary with no data."""
         observer = AgentObserver(output_dir=tmp_path)
