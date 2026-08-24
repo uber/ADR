@@ -47,6 +47,14 @@ _NON_TEXT_CONTENT_TYPES = frozenset(
 )
 _TEXT_CONTENT_TYPES = frozenset({"input_text", "output_text", "text"})
 MAX_LOG_AGE_DAYS = 14
+_TOKEN_USAGE_FIELDS = (
+    "input_tokens",
+    "cached_input_tokens",
+    "cache_write_input_tokens",
+    "output_tokens",
+    "reasoning_output_tokens",
+    "total_tokens",
+)
 
 
 class CodexParser(BaseParser):
@@ -232,6 +240,7 @@ class CodexParser(BaseParser):
                 "timestamp": None,
                 "cwd": None,
                 "model": None,
+                "token_usage": None,
                 "messages": [],
                 "pending_tool_calls": {},
             }
@@ -291,6 +300,7 @@ class CodexParser(BaseParser):
                 session_id=f"codex_{session_data['id']}",
                 project_path=session_data["cwd"],
                 model=session_data["model"],
+                token_usage=session_data["token_usage"],
                 chat_history=chat_history,
                 raw_log_path=str(file_path),
             )
@@ -530,6 +540,34 @@ class CodexParser(BaseParser):
             return "pending", None
         return default, None
 
+    def _normalize_token_usage(self, info: Any) -> Optional[Dict[str, Any]]:
+        """Normalize a Codex token_count snapshot into the public session shape."""
+        if not isinstance(info, dict):
+            return None
+
+        token_usage: Dict[str, Any] = {}
+        for source_key, target_key in (
+            ("last_token_usage", "last_turn"),
+            ("total_token_usage", "cumulative"),
+        ):
+            raw_counts = info.get(source_key)
+            if not isinstance(raw_counts, dict):
+                continue
+
+            counts = {}
+            for field in _TOKEN_USAGE_FIELDS:
+                value = raw_counts.get(field)
+                if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                    counts[field] = value
+            if counts:
+                token_usage[target_key] = counts
+
+        context_window = info.get("model_context_window")
+        if isinstance(context_window, int) and not isinstance(context_window, bool) and context_window >= 0:
+            token_usage["model_context_window"] = context_window
+
+        return token_usage or None
+
     def _process_event(
         self, event: Mapping[str, Any], payload: Mapping[str, Any], session_data: Dict[str, Any]
     ):
@@ -559,6 +597,12 @@ class CodexParser(BaseParser):
         elif evt_type == "turn_context":
             if payload.get("model"):
                 session_data["model"] = payload.get("model")
+
+        elif evt_type == "event_msg":
+            if isinstance(payload, dict) and payload.get("type") == "token_count":
+                token_usage = self._normalize_token_usage(payload.get("info"))
+                if token_usage is not None:
+                    session_data["token_usage"] = token_usage
 
         elif evt_type == "response_item":
             item_type = payload.get("type")
