@@ -435,6 +435,50 @@ class TestCodexParser:
         assert entries == []
 
 
+class TestCursorParser:
+    def test_parse_closes_real_sqlite_connection(self, tmp_path):
+        db_path = tmp_path / "state.vscdb"
+        setup_connection = sqlite3.connect(db_path)
+        setup_connection.execute("CREATE TABLE cursorDiskKV (key TEXT, value TEXT)")
+        setup_connection.close()
+        parser = CursorParser()
+        parser.db_path = db_path
+        connections = []
+        real_connect = sqlite3.connect
+
+        def capture_connection(path):
+            connection = real_connect(path)
+            connections.append(connection)
+            return connection
+
+        with patch("adr_sensor.parsers.cursor_parser.sqlite3.connect", side_effect=capture_connection):
+            assert parser.parse_conversations_from_bubbles() == []
+
+        with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
+            connections[0].execute("SELECT 1")
+
+    def test_parse_closes_connection_once_on_success(self):
+        parser = CursorParser()
+
+        with patch("adr_sensor.parsers.cursor_parser.sqlite3.connect") as connect:
+            connect.return_value.cursor.return_value.fetchmany.return_value = []
+
+            assert parser.parse_conversations_from_bubbles() == []
+
+        connect.assert_called_once_with(parser.db_path)
+        connect.return_value.close.assert_called_once_with()
+
+    def test_parse_closes_connection_once_after_exception(self):
+        parser = CursorParser()
+
+        with patch("adr_sensor.parsers.cursor_parser.sqlite3.connect") as connect:
+            connect.return_value.cursor.side_effect = RuntimeError("cursor unavailable")
+
+            assert parser.parse_conversations_from_bubbles() == []
+
+        connect.assert_called_once_with(parser.db_path)
+        connect.return_value.close.assert_called_once_with()
+
 def _build_warp_db(db_path: Path, conversations: list) -> None:
     """Create a synthetic warp.sqlite matching the schema WarpParser queries.
 
