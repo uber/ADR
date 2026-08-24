@@ -1,5 +1,6 @@
 """Tests for ADR Sensor parsers."""
 
+import hashlib
 import json
 import os
 import sqlite3
@@ -157,6 +158,19 @@ class TestClineParser:
 
 
 class TestCodexParser:
+    @staticmethod
+    def _parse_events(tmp_path, events):
+        jsonl_file = tmp_path / "rollout-rich.jsonl"
+        records = [{"type": "session_meta", "payload": {"id": "rich-session"}}, *events]
+        jsonl_file.write_text("\n".join(json.dumps(record) for record in records), encoding="utf-8")
+        entry = CodexParser().parse_jsonl_file(jsonl_file)
+        assert entry is not None
+        return entry
+
+    @staticmethod
+    def _tools(entry):
+        return [tool for message in entry.chat_history for tool in message.tools]
+
     def test_parse_jsonl_file(self, tmp_path):
         """Test parsing a Codex CLI JSONL file."""
         jsonl_file = tmp_path / "rollout-001.jsonl"
@@ -210,6 +224,1359 @@ class TestCodexParser:
         assistant_msgs = [m for m in entry.chat_history if m.role == "assistant"]
         has_tools = any(len(m.tools) > 0 for m in assistant_msgs)
         assert has_tools
+
+    def test_standalone_rich_command_is_normalized(self, tmp_path):
+        entry = self._parse_events(
+            tmp_path,
+            [
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "item_completed",
+                        "turn_id": "turn-a",
+                        "item": {
+                            "type": "CommandExecution",
+                            "command": ["sh", "-lc", "printf ready"],
+                            "cwd": "/workspace/sample",
+                            "status": "completed",
+                            "aggregated_output": "ready",
+                            "formatted_output": "secondary output",
+                            "stdout": "fallback output",
+                            "exit_code": 0,
+                            "duration": {"secs": 1, "nanos": 250_000_000},
+                        },
+                    },
+                }
+            ],
+        )
+
+        tool = self._tools(entry)[0]
+        assert tool.tool_name == "exec_command"
+        assert tool.tool_type == "function_call"
+        assert tool.arguments == {
+            "command": ["sh", "-lc", "printf ready"],
+            "cwd": "/workspace/sample",
+            "_codex": {"duration": {"secs": 1, "nanos": 250_000_000}},
+        }
+        assert tool.result == "ready"
+        assert tool.status == "success"
+        assert tool.error is None
+
+    @pytest.mark.parametrize(
+        ("item", "expected_result", "expected_status", "expected_error", "expected_duration"),
+        [
+            (
+                {
+                    "type": "command_execution",
+                    "cmd": "printf waiting",
+                    "workdir": "/workspace/alias",
+                    "state": "inProgress",
+                    "aggregatedOutput": "waiting",
+                    "durationMs": 25,
+                },
+                "waiting",
+                "pending",
+                None,
+                25,
+            ),
+            (
+                {
+                    "type": "commandExecution",
+                    "argv": ["sample-command", "--check"],
+                    "workingDirectory": "/workspace/alias",
+                    "standardOutput": "partial output",
+                    "standardError": "failure detail",
+                    "exitCode": 2,
+                    "duration": "short",
+                },
+                "partial output\nfailure detail",
+                "error",
+                "Exit code: 2",
+                "short",
+            ),
+            (
+                {
+                    "type": "command-execution",
+                    "command": "sample-command --approve",
+                    "status": "declined",
+                    "errorMessage": "approval declined",
+                },
+                None,
+                "error",
+                "approval declined",
+                None,
+            ),
+        ],
+    )
+    def test_rich_command_aliases_outputs_status_and_duration(
+        self,
+        tmp_path,
+        item,
+        expected_result,
+        expected_status,
+        expected_error,
+        expected_duration,
+    ):
+        entry = self._parse_events(
+            tmp_path,
+            [{"type": "eventMsg", "payload": {"type": "itemCompleted", "item": item}}],
+        )
+
+        tool = self._tools(entry)[0]
+        assert tool.result == expected_result
+        assert tool.status == expected_status
+        assert tool.error == expected_error
+        if expected_duration is None:
+            assert "_codex" not in tool.arguments
+        else:
+            assert tool.arguments["_codex"]["duration"] == expected_duration
+
+    def test_standalone_file_change_hashes_private_bodies(self, tmp_path):
+        content = "private body\nwith unicode: café"
+        unified_diff = "@@ -1 +1 @@\n-old\n+new\n"
+        entry = self._parse_events(
+            tmp_path,
+            [
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "item_completed",
+                        "item": {
+                            "type": "FileChange",
+                            "changes": {
+                                "src/added.txt": {"type": "add", "content": content},
+                                "src/current.txt": {
+                                    "type": "update",
+                                    "move_path": "src/moved.txt",
+                                    "unified_diff": unified_diff,
+                                },
+                            },
+                            "status": "completed",
+                            "stdout": "changes applied",
+                        },
+                    },
+                }
+            ],
+        )
+
+        tool = self._tools(entry)[0]
+        assert tool.tool_name == "file_change"
+        assert tool.tool_type == "function_call"
+        assert tool.arguments == {
+            "changes": [
+                {
+                    "path": "src/added.txt",
+                    "type": "add",
+                    "content": {
+                        "utf8_bytes": len(content.encode("utf-8")),
+                        "sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+                    },
+                },
+                {
+                    "path": "src/current.txt",
+                    "type": "update",
+                    "move_path": "src/moved.txt",
+                    "unified_diff": {
+                        "utf8_bytes": len(unified_diff.encode("utf-8")),
+                        "sha256": hashlib.sha256(unified_diff.encode("utf-8")).hexdigest(),
+                    },
+                },
+            ]
+        }
+        serialized_arguments = json.dumps(tool.arguments)
+        assert content not in serialized_arguments
+        assert unified_diff not in serialized_arguments
+        assert tool.result == "changes applied"
+        assert tool.status == "success"
+
+    def test_file_change_aliases_are_canonicalized(self, tmp_path):
+        unified_diff = "@@ sample @@"
+        entry = self._parse_events(
+            tmp_path,
+            [
+                {
+                    "type": "event-msg",
+                    "payload": {
+                        "type": "item-completed",
+                        "item": {
+                            "type": "file_change",
+                            "fileChanges": [
+                                {
+                                    "filePath": "src/original.txt",
+                                    "changeType": "Modified",
+                                    "newPath": "src/renamed.txt",
+                                    "unifiedDiff": unified_diff,
+                                }
+                            ],
+                            "status": "failed",
+                            "standardError": "change rejected",
+                        },
+                    },
+                }
+            ],
+        )
+
+        tool = self._tools(entry)[0]
+        assert tool.arguments["changes"] == [
+            {
+                "path": "src/original.txt",
+                "type": "update",
+                "move_path": "src/renamed.txt",
+                "unified_diff": {
+                    "utf8_bytes": len(unified_diff.encode("utf-8")),
+                    "sha256": hashlib.sha256(unified_diff.encode("utf-8")).hexdigest(),
+                },
+            }
+        ]
+        assert tool.result == "change rejected"
+        assert tool.status == "error"
+        assert tool.error == "change rejected"
+
+    def test_rich_action_collections_and_text_are_bounded(self, tmp_path):
+        long_path = "src/" + "p" * 5000 + ".txt"
+        changes = {
+            long_path: {
+                "type": "update",
+                "move_path": "dst/" + "m" * 5000 + ".txt",
+                "unified_diff": "private diff",
+            }
+        }
+        changes.update(
+            {
+                f"src/file-{index}.txt": {"type": "add", "content": f"body-{index}"}
+                for index in range(104)
+            }
+        )
+        entry = self._parse_events(
+            tmp_path,
+            [
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "item_completed",
+                        "item": {
+                            "type": "CommandExecution",
+                            "command": ["x" * 5000, *[f"arg-{index}" for index in range(104)]],
+                            "cwd": "/workspace/" + "c" * 5000,
+                            "status": "completed",
+                        },
+                    },
+                },
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "item_completed",
+                        "item": {
+                            "type": "FileChange",
+                            "changes": changes,
+                            "status": "completed",
+                        },
+                    },
+                },
+            ],
+        )
+
+        command, file_change = self._tools(entry)
+        assert len(command.arguments["command"]) == 100
+        assert "[truncated" in command.arguments["command"][0]
+        assert "[truncated" in command.arguments["cwd"]
+        assert len(file_change.arguments["changes"]) == 100
+        assert file_change.arguments["_codex"]["truncated_changes"] == 5
+        assert "[truncated" in file_change.arguments["changes"][0]["path"]
+        assert "[truncated" in file_change.arguments["changes"][0]["move_path"]
+
+    def test_malformed_and_unsupported_rich_records_are_skipped(self, tmp_path):
+        entry = self._parse_events(
+            tmp_path,
+            [
+                {"type": "event_msg", "payload": {"type": "item_completed", "item": None}},
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "item_completed",
+                        "item": {"type": "CommandExecution", "command": {"unexpected": "value"}},
+                    },
+                },
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "item_completed",
+                        "item": {"type": "FileChange", "changes": [None, "unsupported"]},
+                    },
+                },
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "item_completed",
+                        "item": {"type": "McpToolCall", "tool": "lookup"},
+                    },
+                },
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "item_completed",
+                        "item": {"type": "CollabAgentToolCall", "tool": "delegate"},
+                    },
+                },
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "item_completed",
+                        "item": {
+                            "type": "CommandExecution",
+                            "command": "printf valid",
+                            "status": "completed",
+                        },
+                    },
+                },
+            ],
+        )
+
+        tools = self._tools(entry)
+        assert len(tools) == 1
+        assert tools[0].arguments["command"] == "printf valid"
+
+    def test_agent_messages_capture_adjacent_trigger_and_plaintext_only(self, tmp_path):
+        def agent_message(text, encrypted_text=None):
+            content = []
+            if text is not None:
+                content.extend(
+                    [
+                        {"type": "input_text", "text": text[0]},
+                        {"type": "output_text", "text": "ignored output"},
+                        {"type": "input_text", "text": text[1]},
+                    ]
+                )
+            if encrypted_text is not None:
+                content.append(
+                    {"type": "encrypted_content", "encrypted_content": encrypted_text}
+                )
+            return {
+                "type": "response_item",
+                "payload": {
+                    "type": "agent_message",
+                    "author": "worker-a",
+                    "recipient": "worker-b",
+                    "content": content,
+                },
+            }
+
+        entry = self._parse_events(
+            tmp_path,
+            [
+                {"type": "inter_agent_communication_metadata", "payload": {"trigger_turn": True}},
+                agent_message(("triggered ", "message"), "encrypted-triggered"),
+                {"type": "inter_agent_communication_metadata", "payload": {"trigger_turn": False}},
+                agent_message(("untriggered ", "message"), "encrypted-untriggered"),
+                {"type": "inter_agent_communication_metadata", "payload": {"trigger_turn": True}},
+                {"type": "event_msg", "payload": {"type": "token_count"}},
+                agent_message(("nonadjacent ", "message")),
+                {"type": "inter_agent_communication_metadata", "payload": {"trigger_turn": True}},
+                "malformed record",
+                agent_message(("after malformed ", "message")),
+                {"type": "inter_agent_communication_metadata", "payload": {"trigger_turn": True}},
+                agent_message(None, "opaque-cipher-only"),
+                agent_message(("after encrypted-only ", "message")),
+            ],
+        )
+
+        assert [(message.role, message.content) for message in entry.chat_history] == [
+            (
+                "user",
+                '[agent_message author="worker-a" recipient="worker-b" trigger_turn=true]\n'
+                "triggered message",
+            ),
+            (
+                "user",
+                '[agent_message author="worker-a" recipient="worker-b" trigger_turn=false]\n'
+                "untriggered message",
+            ),
+            (
+                "user",
+                '[agent_message author="worker-a" recipient="worker-b" trigger_turn=false]\n'
+                "nonadjacent message",
+            ),
+            (
+                "user",
+                '[agent_message author="worker-a" recipient="worker-b" trigger_turn=false]\n'
+                "after malformed message",
+            ),
+            (
+                "user",
+                '[agent_message author="worker-a" recipient="worker-b" trigger_turn=false]\n'
+                "after encrypted-only message",
+            ),
+        ]
+        serialized = entry.to_json()
+        assert "encrypted-triggered" not in serialized
+        assert "encrypted-untriggered" not in serialized
+        assert "opaque-cipher-only" not in serialized
+        assert "ignored output" not in serialized
+
+    def test_agent_message_parties_are_bounded_and_malformed_values_use_null(self, tmp_path):
+        long_author = "a" * 5000
+        long_recipient = "r" * 5000
+        entry = self._parse_events(
+            tmp_path,
+            [
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "agent_message",
+                        "author": long_author,
+                        "recipient": long_recipient,
+                        "content": [{"type": "input_text", "text": "bounded parties"}],
+                    },
+                },
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "agent_message",
+                        "author": {"unexpected": "mapping"},
+                        "recipient": ["unexpected", "list"],
+                        "content": [{"type": "input_text", "text": "malformed parties"}],
+                    },
+                },
+            ],
+        )
+
+        prefix = entry.chat_history[0].content.split("\n", 1)[0]
+        author_json = prefix[len("[agent_message author=") : prefix.index(" recipient=")]
+        recipient_start = prefix.index(" recipient=") + len(" recipient=")
+        recipient_json = prefix[recipient_start : prefix.index(" trigger_turn=")]
+        assert len(json.loads(author_json)) <= 100
+        assert len(json.loads(recipient_json)) <= 100
+        assert "[truncated" in json.loads(author_json)
+        assert "[truncated" in json.loads(recipient_json)
+        assert entry.chat_history[1].content == (
+            "[agent_message author=null recipient=null trigger_turn=false]\nmalformed parties"
+        )
+
+    def test_subagent_activity_enriches_pending_function_call_without_duplicate(self, tmp_path):
+        entry = self._parse_events(
+            tmp_path,
+            [
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "function_call",
+                        "toolCallID": "activity-call",
+                        "name": "delegate_work",
+                        "arguments": {"task": "inspect sample"},
+                    },
+                },
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "item_completed",
+                        "item": {
+                            "type": "SubAgentActivity",
+                            "call_id": "activity-call",
+                            "kind": "started",
+                            "agent_thread_id": "thread-child",
+                            "agent_path": "/worker/child",
+                            "encrypted_content": "not-retained",
+                        },
+                    },
+                },
+            ],
+        )
+
+        tools = self._tools(entry)
+        assert len(tools) == 1
+        assert tools[0].tool_name == "delegate_work"
+        assert tools[0].status == "success"
+        assert tools[0].arguments == {
+            "task": "inspect sample",
+            "_codex": {
+                "subagent_activity": {
+                    "kind": "started",
+                    "agent_thread_id": "thread-child",
+                    "agent_path": "/worker/child",
+                }
+            },
+        }
+        assert "not-retained" not in entry.to_json()
+
+    def test_legacy_top_level_subagent_activity_uses_event_id(self, tmp_path):
+        entry = self._parse_events(
+            tmp_path,
+            [
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "function_call",
+                        "call_id": "legacy-activity",
+                        "name": "delegate_work",
+                        "arguments": {"task": "inspect sample"},
+                    },
+                },
+                {
+                    "type": "sub_agent_activity",
+                    "event_id": "legacy-activity",
+                    "payload": {
+                        "kind": "started",
+                        "agent_thread_id": "thread-child",
+                        "agent_path": "/worker/child",
+                    },
+                },
+            ],
+        )
+
+        tools = self._tools(entry)
+
+        assert len(tools) == 1
+        assert tools[0].tool_name == "delegate_work"
+        assert tools[0].status == "success"
+        assert tools[0].arguments["_codex"]["subagent_activity"] == {
+            "kind": "started",
+            "agent_thread_id": "thread-child",
+            "agent_path": "/worker/child",
+        }
+
+    def test_unmatched_subagent_activity_emits_standalone_tool(self, tmp_path):
+        entry = self._parse_events(
+            tmp_path,
+            [
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "item_completed",
+                        "item": {
+                            "type": "sub_agent_activity",
+                            "itemId": "standalone-activity",
+                            "kind": "interacted",
+                            "agent_thread_id": "thread-standalone",
+                            "agent_path": "/worker/standalone",
+                        },
+                    },
+                }
+            ],
+        )
+
+        assert entry.source == "codex"
+        assert entry.session_id == "codex_rich-session"
+        tool = self._tools(entry)[0]
+        assert tool.tool_name == "subagent_activity"
+        assert tool.tool_type == "function_call"
+        assert tool.status == "success"
+        assert tool.result is None
+        assert tool.error is None
+        assert tool.arguments == {
+            "_codex": {
+                "subagent_activity": {
+                    "kind": "interacted",
+                    "agent_thread_id": "thread-standalone",
+                    "agent_path": "/worker/standalone",
+                }
+            }
+        }
+
+    def test_top_level_rich_mcp_success_preserves_metadata(self, tmp_path):
+        entry = self._parse_events(
+            tmp_path,
+            [
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "mcp_tool_call_end",
+                        "call_id": "direct-call",
+                        "invocation": {
+                            "server": "catalog-server",
+                            "tool": "lookup_record",
+                            "arguments": {"record_id": "record-1"},
+                        },
+                        "connector_id": "connector-1",
+                        "link_id": "link-1",
+                        "app_name": "Catalog",
+                        "action_name": "Lookup",
+                        "read_only_hint": True,
+                        "duration": {"secs": 1, "nanos": 5},
+                        "result": {
+                            "Ok": {
+                                "content": [{"type": "text", "text": '{"found":true}'}],
+                                "isError": False,
+                            }
+                        },
+                    },
+                }
+            ],
+        )
+
+        tool = self._tools(entry)[0]
+        assert (tool.server_name, tool.tool_name, tool.tool_type) == (
+            "catalog-server",
+            "lookup_record",
+            "mcp_tool",
+        )
+        assert tool.arguments == {
+            "record_id": "record-1",
+            "_codex": {
+                "duration": {"secs": 1, "nanos": 5},
+                "read_only_hint": True,
+                "connector": {
+                    "connector_id": "connector-1",
+                    "link_id": "link-1",
+                    "app_name": "Catalog",
+                    "action_name": "Lookup",
+                },
+            },
+        }
+        assert tool.result == '{"found":true}'
+        assert tool.status == "success"
+        assert tool.error is None
+
+    def test_item_completed_rich_mcp_structured_error(self, tmp_path):
+        entry = self._parse_events(
+            tmp_path,
+            [
+                {
+                    "type": "eventMsg",
+                    "payload": {
+                        "type": "itemCompleted",
+                        "item": {
+                            "type": "McpToolCallEnd",
+                            "id": "failed-call",
+                            "toolCall": {
+                                "serverName": "records-server",
+                                "toolName": "update_record",
+                                "args": '{"record_id":"record-2"}',
+                            },
+                            "status": "failed",
+                            "result": {
+                                "content": [{"type": "text", "text": "request rejected"}],
+                                "isError": True,
+                            },
+                            "error": {"message": "request rejected", "code": "denied"},
+                        },
+                    },
+                }
+            ],
+        )
+
+        tool = self._tools(entry)[0]
+        assert (tool.server_name, tool.tool_name) == ("records-server", "update_record")
+        assert tool.arguments == {"record_id": "record-2"}
+        assert tool.result == "request rejected"
+        assert tool.status == "error"
+        assert tool.error == "request rejected"
+
+    @pytest.mark.parametrize(
+        ("argument_key", "raw_arguments", "expected"),
+        [
+            ("arguments", {"record_id": "record-3"}, {"record_id": "record-3"}),
+            ("args", '{"record_id":"record-4"}', {"record_id": "record-4"}),
+            ("input", ["record-5", 5], {"raw": ["record-5", 5]}),
+            ("params", "opaque input", {"raw": "opaque input"}),
+            ("parameters", None, {}),
+        ],
+    )
+    def test_rich_mcp_argument_shapes_are_normalized(
+        self, tmp_path, argument_key, raw_arguments, expected
+    ):
+        invocation = {
+            "server_name": "shape-server",
+            "tool_name": "inspect_record",
+            argument_key: raw_arguments,
+        }
+        entry = self._parse_events(
+            tmp_path,
+            [
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "mcp_tool_call_end",
+                        "call": invocation,
+                        "result": {"Ok": {"content": []}},
+                    },
+                }
+            ],
+        )
+
+        assert self._tools(entry)[0].arguments == expected
+
+    def test_rich_mcp_metadata_is_scalar_only_and_bounded(self, tmp_path):
+        entry = self._parse_events(
+            tmp_path,
+            [
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "item_completed",
+                        "item": {
+                            "type": "McpToolCall",
+                            "id": "bounded-call",
+                            "server": "metadata-server",
+                            "tool": "inspect_record",
+                            "arguments": {},
+                            "connectorId": "c" * 5000,
+                            "linkId": {"unsupported": "mapping"},
+                            "appName": 7,
+                            "actionName": False,
+                            "readOnlyHint": False,
+                            "durationMs": {
+                                "samples": list(range(150)),
+                                "detail": "d" * 5000,
+                            },
+                            "status": "completed",
+                            "result": {
+                                "content": [{"type": "text", "text": "inspection complete"}],
+                                "isError": False,
+                            },
+                        },
+                    },
+                }
+            ],
+        )
+
+        tool = self._tools(entry)[0]
+        metadata = tool.arguments["_codex"]
+        assert len(metadata["duration"]["samples"]) == 100
+        assert "[truncated" in metadata["duration"]["detail"]
+        assert metadata["read_only_hint"] is False
+        assert "[truncated" in metadata["connector"]["connector_id"]
+        assert metadata["connector"]["app_name"] == 7
+        assert metadata["connector"]["action_name"] is False
+        assert "link_id" not in metadata["connector"]
+        assert tool.result == "inspection complete"
+        assert tool.status == "success"
+        assert tool.error is None
+
+    @pytest.mark.parametrize("wrapper_server", ["bridge-alpha", "bridge-beta"])
+    def test_rich_mcp_structural_wrapper_reports_effective_target(
+        self, tmp_path, wrapper_server
+    ):
+        entry = self._parse_events(
+            tmp_path,
+            [
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "mcp_tool_call_end",
+                        "call_id": "wrapped-call",
+                        "invocation": {
+                            "server": wrapper_server,
+                            "tool": "invokeTool",
+                            "arguments": {
+                                "targetServer": "effective-server",
+                                "targetTool": "inspect_record",
+                                "params": '{"record_id":"record-6"}',
+                            },
+                        },
+                        "result": {"Err": {"message": "inspection denied"}},
+                    },
+                }
+            ],
+        )
+
+        tool = self._tools(entry)[0]
+        assert (tool.server_name, tool.tool_name) == ("effective-server", "inspect_record")
+        assert tool.arguments == {
+            "record_id": "record-6",
+            "_codex_mcp_wrapper": {
+                "server_name": wrapper_server,
+                "tool_name": "invokeTool",
+            },
+        }
+        assert tool.status == "error"
+        assert tool.error == "inspection denied"
+
+    def test_invoke_tool_without_nested_arguments_is_not_unwrapped(self, tmp_path):
+        entry = self._parse_events(
+            tmp_path,
+            [
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "mcp_tool_call_end",
+                        "invocation": {
+                            "server": "bridge-server",
+                            "tool": "invoke_tool",
+                            "arguments": {
+                                "target_server": "effective-server",
+                                "target_tool": "inspect_record",
+                            },
+                        },
+                        "result": {"Ok": {"content": []}},
+                    },
+                }
+            ],
+        )
+
+        tool = self._tools(entry)[0]
+        assert (tool.server_name, tool.tool_name) == ("bridge-server", "invoke_tool")
+        assert "_codex_mcp_wrapper" not in tool.arguments
+
+    def test_malformed_rich_mcp_records_are_skipped(self, tmp_path):
+        entry = self._parse_events(
+            tmp_path,
+            [
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "mcp_tool_call_end",
+                        "invocation": {"server": " ", "tool": "inspect_record"},
+                    },
+                },
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "mcp_tool_call_end",
+                        "server": "records-server",
+                        "tool": "",
+                    },
+                },
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "item_completed",
+                        "item": {
+                            "type": "McpToolCall",
+                            "server": "records-server",
+                            "tool": ["unsupported"],
+                        },
+                    },
+                },
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "item_completed",
+                        "item": {
+                            "type": "CollabAgentToolCall",
+                            "server": "ignored-server",
+                            "tool": "ignored_tool",
+                        },
+                    },
+                },
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "mcp_tool_call_end",
+                        "serverName": "valid-server",
+                        "toolName": "valid_tool",
+                        "arguments": {},
+                        "result": {"Ok": {"content": []}},
+                    },
+                },
+            ],
+        )
+
+        tools = self._tools(entry)
+        assert len(tools) == 1
+        assert (tools[0].server_name, tools[0].tool_name) == ("valid-server", "valid_tool")
+
+    def test_shared_call_id_reconciles_classic_mcp_in_place(self, tmp_path):
+        entry = self._parse_events(
+            tmp_path,
+            [
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "function_call",
+                        "call_id": "before-call",
+                        "name": "before_tool",
+                        "arguments": {},
+                    },
+                },
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "function_call",
+                        "toolCallID": "shared-call",
+                        "name": "mcp__legacy-server__lookup_record",
+                        "arguments": {"record_id": "classic"},
+                    },
+                },
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "function_call",
+                        "call_id": "after-call",
+                        "name": "after_tool",
+                        "arguments": {},
+                    },
+                },
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "mcp_tool_call_end",
+                        "id": "shared-call",
+                        "invocation": {
+                            "server": "effective-server",
+                            "tool": "lookup_record",
+                            "arguments": {"record_id": "rich"},
+                        },
+                        "result": {"Ok": {"content": [{"type": "text", "text": "found"}]}},
+                    },
+                },
+            ],
+        )
+
+        tools = self._tools(entry)
+        assert [tool.tool_name for tool in tools] == [
+            "before_tool",
+            "lookup_record",
+            "after_tool",
+        ]
+        assert tools[1].server_name == "effective-server"
+        assert tools[1].arguments == {"record_id": "rich"}
+        assert tools[1].result == "found"
+        assert tools[1].status == "success"
+
+    def test_exact_signature_reconciles_rich_mcp_without_call_id(self, tmp_path):
+        entry = self._parse_events(
+            tmp_path,
+            [
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "function_call",
+                        "call_id": "classic-only-id",
+                        "name": "mcp__records-server__lookup_record",
+                        "arguments": {"record_id": "sample"},
+                    },
+                },
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "mcp_tool_call_end",
+                        "invocation": {
+                            "server": "records-server",
+                            "tool": "lookup_record",
+                            "arguments": {"record_id": "sample"},
+                        },
+                        "result": {"Ok": {"content": [{"type": "text", "text": "found"}]}},
+                    },
+                },
+            ],
+        )
+
+        tools = self._tools(entry)
+
+        assert len(tools) == 1
+        assert tools[0].tool_name == "lookup_record"
+        assert tools[0].server_name == "records-server"
+        assert tools[0].result == "found"
+
+    def test_namespace_classic_mcp_reconciles_with_rich_record(self, tmp_path):
+        entry = self._parse_events(
+            tmp_path,
+            [
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "function_call",
+                        "call_id": "classic-only-id",
+                        "namespace": "mcp__queryrunner_mcp",
+                        "name": "run_query",
+                        "arguments": {"query": "SELECT 1"},
+                    },
+                },
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "mcp_tool_call_end",
+                        "invocation": {
+                            "server": "queryrunner_mcp",
+                            "tool": "run_query",
+                            "arguments": {"query": "SELECT 1"},
+                        },
+                        "result": {"Ok": {"content": [{"type": "text", "text": "one"}]}},
+                    },
+                },
+            ],
+        )
+
+        tools = self._tools(entry)
+
+        assert len(tools) == 1
+        assert (tools[0].server_name, tools[0].tool_name) == ("queryrunner_mcp", "run_query")
+        assert tools[0].result == "one"
+
+    def test_signature_fallback_does_not_cross_a_later_call_boundary(self, tmp_path):
+        entry = self._parse_events(
+            tmp_path,
+            [
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "function_call",
+                        "call_id": "classic-only-id",
+                        "name": "mcp__records-server__lookup_record",
+                        "arguments": {"record_id": "sample"},
+                    },
+                },
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "function_call",
+                        "call_id": "later-call",
+                        "name": "other_tool",
+                        "arguments": {},
+                    },
+                },
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "mcp_tool_call_end",
+                        "invocation": {
+                            "server": "records-server",
+                            "tool": "lookup_record",
+                            "arguments": {"record_id": "sample"},
+                        },
+                        "result": {"Ok": {"content": []}},
+                    },
+                },
+            ],
+        )
+
+        assert [tool.tool_name for tool in self._tools(entry)] == [
+            "mcp__records-server__lookup_record",
+            "other_tool",
+            "lookup_record",
+        ]
+
+    def test_unrelated_classic_and_rich_mcp_calls_remain_separate(self, tmp_path):
+        entry = self._parse_events(
+            tmp_path,
+            [
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "function_call",
+                        "call_id": "classic-call",
+                        "name": "mcp__records-server__lookup_record",
+                        "arguments": {"record_id": "classic"},
+                    },
+                },
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "mcp_tool_call_end",
+                        "call_id": "rich-call",
+                        "invocation": {
+                            "server": "records-server",
+                            "tool": "lookup_record",
+                            "arguments": {"record_id": "rich"},
+                        },
+                        "result": {"Ok": {"content": []}},
+                    },
+                },
+            ],
+        )
+
+        tools = self._tools(entry)
+        assert [tool.tool_name for tool in tools] == [
+            "mcp__records-server__lookup_record",
+            "lookup_record",
+        ]
+        assert [tool.arguments["record_id"] for tool in tools] == ["classic", "rich"]
+
+    def test_signature_fallback_preserves_mcp_name_punctuation(self, tmp_path):
+        entry = self._parse_events(
+            tmp_path,
+            [
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "function_call",
+                        "call_id": "classic-only-id",
+                        "name": "mcp__a-b__lookup_record",
+                        "arguments": {"record_id": "sample"},
+                    },
+                },
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "mcp_tool_call_end",
+                        "invocation": {
+                            "server": "ab",
+                            "tool": "lookup_record",
+                            "arguments": {"record_id": "sample"},
+                        },
+                        "result": {"Ok": {"content": []}},
+                    },
+                },
+            ],
+        )
+
+        tools = self._tools(entry)
+
+        assert len(tools) == 2
+        assert [tool.server_name for tool in tools] == ["a-b", "ab"]
+
+    def test_rich_command_replaces_matching_custom_wrapper(self, tmp_path):
+        entry = self._parse_events(
+            tmp_path,
+            [
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "custom_tool_call",
+                        "call_id": "wrapper-call",
+                        "name": "exec",
+                        "input": "printf ready",
+                        "internal_chat_message_metadata_passthrough": {"turn_id": "turn-a"},
+                    },
+                },
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "item_completed",
+                        "turn_id": "turn-a",
+                        "item": {
+                            "type": "CommandExecution",
+                            "command": ["sh", "-lc", "printf ready"],
+                            "status": "completed",
+                            "aggregated_output": "rich output",
+                        },
+                    },
+                },
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "custom_tool_call_output",
+                        "call_id": "wrapper-call",
+                        "output": "wrapper output",
+                    },
+                },
+            ],
+        )
+
+        tools = self._tools(entry)
+        assert len(tools) == 1
+        assert tools[0].tool_name == "exec_command"
+        assert tools[0].result == "rich output"
+
+    @pytest.mark.parametrize(
+        ("wrapper_name", "wrapper_input", "wrapper_turn", "rich_turn", "rich_command"),
+        [
+            ("exec", "printf first", "turn-a", "turn-a", "printf second"),
+            ("fetch", "printf same", "turn-a", "turn-a", "printf same"),
+            ("exec", "printf same", "turn-a", "turn-b", "printf same"),
+            ("apply_patch", "printf same", "turn-a", "turn-a", "printf same"),
+        ],
+    )
+    def test_unrelated_wrappers_are_preserved(
+        self,
+        tmp_path,
+        wrapper_name,
+        wrapper_input,
+        wrapper_turn,
+        rich_turn,
+        rich_command,
+    ):
+        entry = self._parse_events(
+            tmp_path,
+            [
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "custom_tool_call",
+                        "call_id": "wrapper-call",
+                        "name": wrapper_name,
+                        "input": wrapper_input,
+                        "internal_chat_message_metadata_passthrough": {"turn_id": wrapper_turn},
+                    },
+                },
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "item_completed",
+                        "turn_id": rich_turn,
+                        "item": {
+                            "type": "CommandExecution",
+                            "command": rich_command,
+                            "status": "completed",
+                        },
+                    },
+                },
+            ],
+        )
+
+        assert [tool.tool_name for tool in self._tools(entry)] == [wrapper_name, "exec_command"]
+
+    def test_command_wrapper_is_not_replaced_by_unrelated_file_change(self, tmp_path):
+        entry = self._parse_events(
+            tmp_path,
+            [
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "custom_tool_call",
+                        "call_id": "command-call",
+                        "name": "exec",
+                        "input": "printf unchanged",
+                    },
+                },
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "item_completed",
+                        "item": {
+                            "type": "FileChange",
+                            "changes": {"src/sample.txt": {"type": "add", "content": "private"}},
+                            "status": "completed",
+                        },
+                    },
+                },
+            ],
+        )
+
+        assert [tool.tool_name for tool in self._tools(entry)] == ["exec", "file_change"]
+
+    def test_late_rich_command_replaces_completed_wrapper(self, tmp_path):
+        entry = self._parse_events(
+            tmp_path,
+            [
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "custom_tool_call",
+                        "call_id": "late-call",
+                        "name": "exec_command",
+                        "input": '{"command":"printf late"}',
+                    },
+                },
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "custom_tool_call_output",
+                        "call_id": "late-call",
+                        "output": "wrapper output",
+                    },
+                },
+                {"type": "event_msg", "payload": {"type": "token_count", "info": {}}},
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "item_completed",
+                        "item": {
+                            "type": "CommandExecution",
+                            "command": "printf late",
+                            "status": "completed",
+                            "aggregated_output": "late output",
+                        },
+                    },
+                },
+            ],
+        )
+
+        tools = self._tools(entry)
+        assert len(tools) == 1
+        assert tools[0].tool_name == "exec_command"
+        assert tools[0].result == "late output"
+
+    def test_identical_rich_command_does_not_cross_a_later_call_boundary(self, tmp_path):
+        entry = self._parse_events(
+            tmp_path,
+            [
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "custom_tool_call",
+                        "call_id": "first-call",
+                        "name": "exec",
+                        "input": "printf same",
+                    },
+                },
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "function_call",
+                        "call_id": "later-call",
+                        "name": "other_tool",
+                        "arguments": {},
+                    },
+                },
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "item_completed",
+                        "item": {
+                            "type": "CommandExecution",
+                            "command": "printf same",
+                            "status": "completed",
+                        },
+                    },
+                },
+            ],
+        )
+
+        assert [tool.tool_name for tool in self._tools(entry)] == [
+            "exec",
+            "other_tool",
+            "exec_command",
+        ]
+
+    def test_one_wrapper_can_expand_to_multiple_rich_actions(self, tmp_path):
+        entry = self._parse_events(
+            tmp_path,
+            [
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "custom_tool_call",
+                        "call_id": "multi-call",
+                        "name": "exec",
+                        "input": "const opaque = true;",
+                    },
+                },
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "item_completed",
+                        "item": {
+                            "type": "FileChange",
+                            "changes": {"src/sample.txt": {"type": "add", "content": "private"}},
+                            "status": "completed",
+                        },
+                    },
+                },
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "item_completed",
+                        "item": {
+                            "type": "CommandExecution",
+                            "command": "printf first",
+                            "status": "completed",
+                            "aggregated_output": "first",
+                        },
+                    },
+                },
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "item_completed",
+                        "item": {
+                            "type": "CommandExecution",
+                            "command": "printf second",
+                            "status": "failed",
+                            "stderr": "second failed",
+                        },
+                    },
+                },
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "custom_tool_call_output",
+                        "call_id": "multi-call",
+                        "output": "wrapper output",
+                    },
+                },
+            ],
+        )
+
+        assert len(entry.chat_history) == 1
+        tools = self._tools(entry)
+        assert [tool.tool_name for tool in tools] == [
+            "file_change",
+            "exec_command",
+            "exec_command",
+        ]
+        assert [tool.status for tool in tools] == ["success", "success", "error"]
+        assert [tool.result for tool in tools] == [None, "first", "second failed"]
 
     def test_parses_custom_tool_call(self, tmp_path):
         """custom_tool_call records must yield tools with their arguments intact.
@@ -866,16 +2233,39 @@ class TestCodexParser:
         events = [
             {
                 "type": "session_meta",
-                "payload": {"timestamp": "2024-01-01T00:00:00Z", "cwd": str(tmp_path / "missing-id")},
+                "payload": {
+                    "timestamp": "2024-01-01T00:00:00Z",
+                    "cwd": str(tmp_path / "missing-id"),
+                    "originator": "ignored-originator",
+                },
             },
             {
                 "type": "session_meta",
-                "payload": {"id": "physical-session", "timestamp": "2025-01-02T03:04:05Z", "cwd": first_cwd},
+                "payload": {
+                    "id": "physical-session",
+                    "timestamp": "2025-01-02T03:04:05Z",
+                    "cwd": first_cwd,
+                    "originator": "first-originator",
+                },
             },
             {
                 "type": "session_meta",
-                "payload": {"id": "later-session", "timestamp": "2026-02-03T04:05:06Z", "cwd": later_cwd},
+                "payload": {
+                    "id": "later-session",
+                    "timestamp": "2026-02-03T04:05:06Z",
+                    "cwd": later_cwd,
+                    "originator": "later-originator",
+                },
             },
+            {
+                "type": "session_meta",
+                "payload": {"id": "later-session", "cwd": "/duplicate"},
+            },
+            {
+                "type": "session_meta",
+                "payload": {"id": "physical-session", "cwd": "/same-session"},
+            },
+            {"type": "session_meta", "payload": {"id": 42}},
             {
                 "type": "response_item",
                 "payload": {"type": "message", "role": "user", "content": "identity check"},
@@ -888,6 +2278,116 @@ class TestCodexParser:
         assert entry.session_id == "codex_physical-session"
         assert entry.project_path == first_cwd
         assert entry.timestamp == datetime(2025, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
+        assert entry.session_context == {
+            "originator": "first-originator",
+            "inherited_session_ids": ["later-session", "42"],
+        }
+
+    def test_captures_codex_session_provenance_without_changing_identity(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-context.jsonl"
+        long_originator = "origin-start-" + ("x" * 1200) + "-origin-end"
+        events = [
+            {
+                "type": "session_meta",
+                "payload": {
+                    "id": "physical-session",
+                    "session_id": "root-session",
+                    "timestamp": "2025-01-02T03:04:05Z",
+                    "cwd": "/workspace/example",
+                    "originator": long_originator,
+                    "cli_version": "1.2.3",
+                    "model_provider": "provider-name",
+                    "git": {"branch": "feature/session-context"},
+                    "parent_thread_id": "parent-thread",
+                    "forked_from_id": "forked-thread",
+                    "agent_path": "root/worker",
+                    "agent_nickname": "worker-name",
+                    "agent_role": "reviewer",
+                    "subagent_history_start_ordinal": 4,
+                    "thread_source": "subagent",
+                },
+            },
+            {
+                "type": "response_item",
+                "payload": {"type": "message", "role": "user", "content": "provenance check"},
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        entry = CodexParser().parse_jsonl_file(jsonl_file)
+
+        assert entry.source == "codex"
+        assert entry.session_id == "codex_physical-session"
+        assert entry.project_path == "/workspace/example"
+        assert entry.user_id is None
+        assert entry.session_context == {
+            "originator": entry.session_context["originator"],
+            "cli_version": "1.2.3",
+            "model_provider": "provider-name",
+            "parent_thread_id": "parent-thread",
+            "forked_from_id": "forked-thread",
+            "agent_path": "root/worker",
+            "agent_nickname": "worker-name",
+            "agent_role": "reviewer",
+            "subagent_history_start_ordinal": 4,
+            "thread_source": "subagent",
+            "git_branch": "feature/session-context",
+            "root_session_id": "root-session",
+        }
+        assert entry.session_context["originator"].startswith("origin-start-")
+        assert entry.session_context["originator"].endswith("-origin-end")
+        assert "[truncated" in entry.session_context["originator"]
+        assert len(entry.session_context["originator"]) < 1000
+
+    def test_captures_nested_subagent_provenance_and_ignores_structured_values(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-subagent-context.jsonl"
+        events = [
+            {
+                "type": "session_meta",
+                "payload": {
+                    "id": "child-session",
+                    "session_id": {"not": "scalar"},
+                    "originator": ["not", "scalar"],
+                    "cli_version": {"not": "scalar"},
+                    "model_provider": ["not", "scalar"],
+                    "git": {"branch": {"not": "scalar"}},
+                    "parent_thread_id": {"not": "scalar"},
+                    "agent_path": ["not", "scalar"],
+                    "agent_nickname": {"not": "scalar"},
+                    "agent_role": "planner",
+                    "forked_from_id": ["not", "scalar"],
+                    "subagent_history_start_ordinal": {"not": "scalar"},
+                    "thread_source": ["not", "scalar"],
+                    "source": {
+                        "subagent": {
+                            "thread_spawn": {
+                                "parent_thread_id": "parent-session",
+                                "agent_path": "root/child",
+                                "agent_nickname": "child-name",
+                                "depth": 2,
+                                "agent_role": "reviewer",
+                            }
+                        }
+                    },
+                },
+            },
+            {"type": "session_meta", "payload": {"id": ["not", "scalar"]}},
+            {
+                "type": "response_item",
+                "payload": {"type": "message", "role": "user", "content": "nested provenance"},
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        entry = CodexParser().parse_jsonl_file(jsonl_file)
+
+        assert entry.session_context == {
+            "parent_thread_id": "parent-session",
+            "agent_path": "root/child",
+            "agent_nickname": "child-name",
+            "agent_depth": 2,
+            "agent_role": "planner",
+        }
 
     def test_parse_no_directory(self):
         """Test parse_all when directory doesn't exist."""

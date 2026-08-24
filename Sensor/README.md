@@ -233,6 +233,33 @@ agent mode populates the richest version:
 }
 ```
 
+Codex emits bounded provenance as optional, flat keys in the same object:
+
+```json
+{
+  "session_context": {
+    "originator": "client-name",
+    "cli_version": "1.2.3",
+    "model_provider": "provider-name",
+    "git_branch": "feature/example",
+    "parent_thread_id": "parent-id",
+    "forked_from_id": "fork-id",
+    "agent_path": "root/worker",
+    "agent_nickname": "worker-name",
+    "subagent_history_start_ordinal": 4,
+    "thread_source": "subagent",
+    "agent_depth": 1,
+    "agent_role": "reviewer",
+    "root_session_id": "root-id",
+    "inherited_session_ids": ["inherited-id"]
+  }
+}
+```
+
+Only scalar Codex metadata is retained, and long strings are middle-truncated.
+Later `session_meta` records contribute unique inherited IDs without changing the
+physical session's `source`, `session_id`, `project_path`, or `user_id`.
+
 ## Adding a New Parser
 
 ADR Sensor is designed to be extensible. To add support for a new AI agent:
