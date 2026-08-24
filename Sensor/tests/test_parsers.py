@@ -435,6 +435,47 @@ class TestCodexParser:
         assert entries == []
 
 
+class TestCursorParser:
+    @pytest.mark.parametrize("tool_name", ["list_dir", "read_file", "run_command"])
+    def test_extracts_result_for_every_tool(self, tool_name):
+        tools = CursorParser().extract_tools_from_bubble(
+            {"toolFormerData": {"name": tool_name, "params": {}, "result": "completed"}}
+        )
+
+        assert len(tools) == 1
+        assert tools[0].tool_name == tool_name
+        assert tools[0].result == "completed"
+
+    def test_absent_result_remains_none(self):
+        tools = CursorParser().extract_tools_from_bubble(
+            {"toolFormerData": {"name": "read_file", "params": {}}}
+        )
+
+        assert tools[0].result is None
+
+    def test_result_whitespace_is_preserved(self):
+        tools = CursorParser().extract_tools_from_bubble(
+            {"toolFormerData": {"name": "search", "params": {}, "result": " \n  first\nsecond\t "}}
+        )
+
+        assert tools[0].result == " \n  first\nsecond\t "
+
+    def test_non_string_result_is_converted_to_string(self):
+        tools = CursorParser().extract_tools_from_bubble(
+            {"toolFormerData": {"name": "count", "params": {}, "result": 3}}
+        )
+
+        assert tools[0].result == "3"
+
+    def test_result_is_middle_truncated_at_1000_characters(self):
+        result = "a" * 600 + "z" * 600
+        tools = CursorParser().extract_tools_from_bubble(
+            {"toolFormerData": {"name": "read_file", "params": {}, "result": result}}
+        )
+
+        assert tools[0].result == "a" * 400 + "... [truncated 400 chars] ..." + "z" * 400
+
+
 def _build_warp_db(db_path: Path, conversations: list) -> None:
     """Create a synthetic warp.sqlite matching the schema WarpParser queries.
 

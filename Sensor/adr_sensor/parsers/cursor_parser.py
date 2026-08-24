@@ -286,11 +286,9 @@ class CursorParser(BaseParser):
                 status = tool_data.get("status", "unknown")
                 error = tool_data.get("error", "")
 
-                result = None
-                if tool_name == "list_dir":
-                    result = tool_data.get("result", "")
-                    if result and isinstance(result, str):
-                        result = truncate_middle(result.strip(), max_length=1000, edge_chars=400)
+                result = tool_data.get("result")
+                if result is not None:
+                    result = truncate_middle(str(result), max_length=1000, edge_chars=400)
 
                 tool = ToolUsage(
                     tool_name=tool_name,
