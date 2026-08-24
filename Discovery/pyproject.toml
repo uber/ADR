@@ -1,0 +1,40 @@
+[project]
+name = "adr-discovery"
+version = "0.2.0"
+description = "Inventory the AI binaries, agents, MCP servers and skills present on an employee endpoint"
+readme = "adr_discovery/README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.6"]
+
+[project.scripts]
+adr-discovery = "adr_discovery.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["adr_discovery"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "adr_discovery/tests_unit"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+# Correctness and import hygiene. Style beyond this is not worth a build
+# gate; the rule that actually guards this package is the import test in
+# adr_discovery/tests_unit/test_import_rules.py.
+select = ["E", "F", "I", "B", "SIM"]
+ignore = ["E501", "SIM105", "B008"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B011"]
+"adr_discovery/tests_unit/**" = ["B011"]
