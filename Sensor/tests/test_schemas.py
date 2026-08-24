@@ -1,7 +1,9 @@
 """Tests for ADR Sensor schemas."""
 
-import pytest
+import json
 from datetime import datetime, timezone
+
+import pytest
 
 from adr_sensor.schemas.agent_event_schema import AgentEvent, ChatMessage, ToolUsage
 
@@ -58,6 +60,7 @@ class TestAgentEvent:
         )
         assert event.source == "claude"
         assert event.session_id == "test_session_1"
+        assert event.token_usage is None
         assert event.uuid is not None
         assert len(event.uuid) == 64  # SHA-256 hex
 
@@ -73,6 +76,32 @@ class TestAgentEvent:
         event1 = AgentEvent(**kwargs)
         event2 = AgentEvent(**kwargs)
         assert event1.uuid == event2.uuid
+
+    def test_new_fields_preserve_existing_positional_arguments(self):
+        event = AgentEvent(
+            datetime(2025, 1, 1, tzinfo=timezone.utc),
+            "codex",
+            "test-session",
+            [],
+            "user-id",
+            "/workspace",
+            "model-id",
+            "test-host",
+            "test-user",
+            "/logs/session.jsonl",
+            {"originator": "cli"},
+            True,
+            3,
+            2,
+            True,
+        )
+
+        assert event.session_context == {"originator": "cli"}
+        assert event.is_chunked is True
+        assert event.total_chunks == 3
+        assert event.chunk_sequence == 2
+        assert event.is_truncated is True
+        assert event.token_usage is None
 
     def test_uuid_unique_for_different_sessions(self):
         event1 = AgentEvent(
@@ -151,6 +180,24 @@ class TestAgentEvent:
         d = event.to_dict()
         assert d["source"] == "claude"
         assert d["timestamp"] == "2025-01-01T00:00:00+00:00"
+
+    def test_token_usage_serialization(self):
+        token_usage = {
+            "last_turn": {"input_tokens": 12, "output_tokens": 3, "total_tokens": 15},
+            "cumulative": {"input_tokens": 30, "output_tokens": 8, "total_tokens": 38},
+            "model_context_window": 128000,
+        }
+        event = AgentEvent(
+            timestamp=datetime(2025, 1, 1, tzinfo=timezone.utc),
+            source="codex",
+            session_id="test",
+            hostname="test-host",
+            username="test-user",
+            token_usage=token_usage,
+        )
+
+        assert event.to_dict()["token_usage"] == token_usage
+        assert json.loads(event.to_json())["token_usage"] == token_usage
 
     def test_to_json(self):
         event = AgentEvent(
