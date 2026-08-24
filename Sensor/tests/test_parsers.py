@@ -316,6 +316,316 @@ class TestCodexParser:
         assert tool.arguments == {"path": "main.py"}
         assert tool.result == "def main(): pass"
 
+    def test_mcp_function_call_is_strictly_classified(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-mcp.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "mcp-session"}},
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "function_call",
+                    "call_id": "mcp-call",
+                    "name": "mcp__sample-server__lookup_item",
+                    "arguments": {"item": "example"},
+                },
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        tool = CodexParser().parse_jsonl_file(jsonl_file).chat_history[0].tools[0]
+
+        assert tool.tool_name == "mcp__sample-server__lookup_item"
+        assert tool.tool_type == "mcp_tool"
+        assert tool.server_name == "sample-server"
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "mcp__sample-server",
+            "mcp____lookup_item",
+            "mcp__sample-server__",
+            "mcp__sample-server__lookup_item__extra",
+            "mcp__sample server__lookup_item",
+            "prefix__sample-server__lookup_item",
+        ],
+    )
+    def test_malformed_mcp_names_keep_their_classic_type(self, name):
+        assert CodexParser._classify_tool(name, "custom_tool_call") == ("custom_tool_call", None)
+
+    def test_tool_arguments_are_normalized_and_recursively_bounded(self):
+        parser = CodexParser()
+        nested = {"leaf": "kept"}
+        for _ in range(12):
+            nested = {"next": nested}
+
+        arguments = parser._parse_tool_arguments(
+            {
+                "items": list(range(150)),
+                "mapping": {f"key-{index}": index for index in range(150)},
+                "long": "x" * 5000,
+                "nested": nested,
+            }
+        )
+
+        assert len(arguments["items"]) == 100
+        assert len(arguments["mapping"]) == 100
+        assert len(arguments["long"]) < 1200
+        assert "[truncated" in arguments["long"]
+        assert "maximum depth" in json.dumps(arguments["nested"])
+        assert parser._parse_tool_arguments('[1, {"key": "value"}]') == {
+            "raw": [1, {"key": "value"}]
+        }
+        assert parser._parse_tool_arguments("") == {}
+        assert parser._parse_tool_arguments(None) == {}
+        assert parser._parse_tool_arguments("false") == {"raw": False}
+        assert parser._parse_tool_arguments(7) == {"raw": 7}
+        assert parser._parse_tool_arguments('"text"') == {"raw": "text"}
+
+    def test_oversized_json_arguments_are_not_decoded(self):
+        raw_arguments = json.dumps({"value": "x" * 100_100})
+
+        arguments = CodexParser()._parse_tool_arguments(raw_arguments)
+
+        assert list(arguments) == ["raw"]
+        assert isinstance(arguments["raw"], str)
+        assert len(arguments["raw"]) < 1200
+        assert "[truncated" in arguments["raw"]
+
+    def test_output_correlates_across_id_aliases_and_flattens_content(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-alias.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "alias-session"}},
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "function_call",
+                    "id": "shared-id",
+                    "name": "lookup",
+                    "arguments": [],
+                },
+            },
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "function_call_output",
+                    "toolCallId": "shared-id",
+                    "output": {
+                        "content": [
+                            {"type": "text", "text": "first"},
+                            {"content": "second"},
+                        ]
+                    },
+                },
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        tool = CodexParser().parse_jsonl_file(jsonl_file).chat_history[0].tools[0]
+
+        assert tool.arguments == {"raw": []}
+        assert tool.result == "first\nsecond"
+        assert tool.status == "success"
+        assert tool.error is None
+
+    @pytest.mark.parametrize(
+        ("output", "expected_status", "expected_result", "expected_error"),
+        [
+            ({"Ok": {"content": [{"text": "complete"}]}}, "success", "complete", None),
+            (
+                {"Ok": {"isError": True, "content": [{"text": "not completed"}]}},
+                "error",
+                "not completed",
+                "not completed",
+            ),
+            (json.dumps({"Err": {"message": "rejected"}}), "error", "rejected", "rejected"),
+            (
+                {"isError": True, "content": [{"type": "text", "text": "not completed"}]},
+                "error",
+                "not completed",
+                "not completed",
+            ),
+            ({"is_error": False, "content": "complete"}, "success", "complete", None),
+            ({"status": "failed", "message": "not completed"}, "error", "not completed", "not completed"),
+            ({"state": "in_progress", "message": "waiting"}, "pending", "waiting", None),
+            ({"state": "completed", "content": "finished"}, "success", "finished", None),
+            ({"exit_code": 3, "stderr": "process detail"}, "error", "process detail", "Exit code: 3"),
+            ({"exitCode": 0, "stdout": "complete"}, "success", "complete", None),
+            ("ERROR: ordinary returned text", "success", "ERROR: ordinary returned text", None),
+        ],
+    )
+    def test_tool_output_uses_structural_outcome_signals(
+        self, tmp_path, output, expected_status, expected_result, expected_error
+    ):
+        jsonl_file = tmp_path / "rollout-outcome.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "outcome-session"}},
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "custom_tool_call",
+                    "callId": "outcome-call",
+                    "name": "run_task",
+                    "input": {"value": 1},
+                },
+            },
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "custom_tool_call_output",
+                    "tool_call_id": "outcome-call",
+                    "output": output,
+                },
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        tool = CodexParser().parse_jsonl_file(jsonl_file).chat_history[0].tools[0]
+
+        assert tool.status == expected_status
+        assert tool.result == expected_result
+        assert tool.error == expected_error
+
+    def test_nested_domain_status_does_not_mark_tool_as_failed(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-domain-status.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "domain-status-session"}},
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "function_call",
+                    "call_id": "domain-status-call",
+                    "name": "lookup_record",
+                    "arguments": {},
+                },
+            },
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "function_call_output",
+                    "call_id": "domain-status-call",
+                    "output": {
+                        "content": [
+                            {"type": "record", "id": "sample-record", "status": "failed"}
+                        ]
+                    },
+                },
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        tool = CodexParser().parse_jsonl_file(jsonl_file).chat_history[0].tools[0]
+
+        assert tool.status == "success"
+        assert tool.result == '{"type":"record","id":"sample-record","status":"failed"}'
+        assert tool.error is None
+
+    def test_unknown_typed_result_item_is_retained(self):
+        result = CodexParser()._normalize_tool_output(
+            [{"type": "artifact", "path": "sample.txt", "state": "ready", "message": "created"}]
+        )
+
+        assert result == '{"type":"artifact","path":"sample.txt","state":"ready","message":"created"}'
+
+    @pytest.mark.parametrize(
+        "output",
+        [
+            {"type": "artifact", "path": "sample.txt", "message": "created"},
+            {"content": {"type": "artifact", "path": "sample.txt", "message": "created"}},
+        ],
+    )
+    def test_unknown_typed_result_mapping_is_retained_outside_lists(self, output):
+        result = CodexParser()._normalize_tool_output(output)
+
+        assert result == '{"type":"artifact","path":"sample.txt","message":"created"}'
+
+    def test_explicit_mcp_namespace_classifies_plain_tool_name(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-mcp-namespace.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "mcp-namespace-session"}},
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "function_call",
+                    "call_id": "mcp-call",
+                    "namespace": "mcp__queryrunner_mcp",
+                    "name": "run_query",
+                    "arguments": {"query": "SELECT 1"},
+                },
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        tool = CodexParser().parse_jsonl_file(jsonl_file).chat_history[0].tools[0]
+
+        assert tool.tool_type == "mcp_tool"
+        assert tool.server_name == "queryrunner_mcp"
+        assert tool.tool_name == "run_query"
+
+    def test_nested_outcome_like_fields_remain_domain_data(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-nested-domain-outcome.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "nested-domain-session"}},
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "function_call",
+                    "call_id": "nested-domain-call",
+                    "name": "lookup_record",
+                    "arguments": {},
+                },
+            },
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "function_call_output",
+                    "call_id": "nested-domain-call",
+                    "output": {
+                        "isError": False,
+                        "content": [
+                            {
+                                "type": "record",
+                                "result": {"status": "failed", "error": "domain value"},
+                                "exit_code": 7,
+                            }
+                        ],
+                    },
+                },
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        tool = CodexParser().parse_jsonl_file(jsonl_file).chat_history[0].tools[0]
+
+        assert tool.status == "success"
+        assert '"status":"failed"' in tool.result
+        assert tool.error is None
+
+    @pytest.mark.parametrize(
+        ("status", "expected"),
+        [("completed", "success"), ("failed", "error"), ("running", "pending")],
+    )
+    def test_call_status_is_canonicalized_without_output(self, tmp_path, status, expected):
+        jsonl_file = tmp_path / f"rollout-{status}.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": f"{status}-session"}},
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "function_call",
+                    "call_id": f"{status}-call",
+                    "name": "sample_tool",
+                    "arguments": {},
+                    "status": status,
+                },
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        tool = CodexParser().parse_jsonl_file(jsonl_file).chat_history[0].tools[0]
+
+        assert tool.status == expected
+        assert tool.result is None
+
     def test_mixed_tool_types_in_one_session(self, tmp_path):
         """Both record shapes can appear in the same session and must both survive."""
         jsonl_file = tmp_path / "rollout-mixed.jsonl"
@@ -426,6 +736,158 @@ class TestCodexParser:
         entry = CodexParser().parse_jsonl_file(jsonl_file)
         assert len(entry.chat_history) == 2  # user message + assistant tool turn
         assert len([t for m in entry.chat_history for t in m.tools]) == 1
+
+    def test_skips_malformed_decoded_records(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-malformed.jsonl"
+        records = [
+            None,
+            ["unsupported-record"],
+            {"type": "response_item"},
+            {"type": "response_item", "payload": "unsupported-payload"},
+            {
+                "type": "session_meta",
+                "payload": {"id": {"unexpected": "value"}, "timestamp": {"unexpected": "value"}},
+            },
+            {
+                "type": "session_meta",
+                "payload": {"id": "valid-session", "timestamp": "2025-01-02T03:04:05Z"},
+            },
+            {
+                "type": "response_item",
+                "payload": {"type": "message", "role": "user", "content": "kept message"},
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(record) for record in records))
+
+        entry = CodexParser().parse_jsonl_file(jsonl_file)
+
+        assert entry is not None
+        assert entry.session_id == "codex_valid-session"
+        assert [message.content for message in entry.chat_history] == ["kept message"]
+
+    def test_invalid_session_timestamp_keeps_valid_session_identity(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-invalid-timestamp.jsonl"
+        events = [
+            {
+                "type": "session_meta",
+                "payload": {"id": "valid-session", "timestamp": {"unexpected": "value"}},
+            },
+            {
+                "type": "response_item",
+                "payload": {"type": "message", "role": "user", "content": "kept message"},
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        entry = CodexParser().parse_jsonl_file(jsonl_file)
+
+        assert entry is not None
+        assert entry.session_id == "codex_valid-session"
+        assert [message.content for message in entry.chat_history] == ["kept message"]
+
+    def test_supports_message_content_shapes(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-content.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "content-session"}},
+            {
+                "type": "response_item",
+                "payload": {"type": "message", "role": "user", "content": "string content"},
+            },
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": {"type": "output_text", "text": "mapping content"},
+                },
+            },
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "user",
+                    "content": [
+                        "mixed ",
+                        {"type": "input_text", "text": "content"},
+                        None,
+                        7,
+                        {"type": "input_text", "text": {"unexpected": "value"}},
+                        {"type": "image", "text": "ignored"},
+                        {"type": "output_text", "text": " list"},
+                    ],
+                },
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        entry = CodexParser().parse_jsonl_file(jsonl_file)
+
+        assert [(message.role, message.content) for message in entry.chat_history] == [
+            ("user", "string content"),
+            ("assistant", "mapping content"),
+            ("user", "mixed content list"),
+        ]
+
+    def test_tolerates_malformed_reasoning_summary_items(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-reasoning.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "reasoning-session"}},
+            {
+                "type": "response_item",
+                "payload": {"type": "message", "role": "user", "content": "review this"},
+            },
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "reasoning",
+                    "summary": [
+                        None,
+                        "unsupported-item",
+                        {"type": "summary_text", "text": {"unexpected": "value"}},
+                        {"type": "other", "text": "ignored"},
+                        {"type": "summary_text", "text": "valid summary"},
+                    ],
+                },
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        entry = CodexParser().parse_jsonl_file(jsonl_file)
+
+        assert [message.content for message in entry.chat_history] == [
+            "review this",
+            "[Reasoning]\nvalid summary\n",
+        ]
+
+    def test_first_valid_session_meta_defines_physical_identity(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-identity.jsonl"
+        first_cwd = str(tmp_path / "first-project")
+        later_cwd = str(tmp_path / "later-project")
+        events = [
+            {
+                "type": "session_meta",
+                "payload": {"timestamp": "2024-01-01T00:00:00Z", "cwd": str(tmp_path / "missing-id")},
+            },
+            {
+                "type": "session_meta",
+                "payload": {"id": "physical-session", "timestamp": "2025-01-02T03:04:05Z", "cwd": first_cwd},
+            },
+            {
+                "type": "session_meta",
+                "payload": {"id": "later-session", "timestamp": "2026-02-03T04:05:06Z", "cwd": later_cwd},
+            },
+            {
+                "type": "response_item",
+                "payload": {"type": "message", "role": "user", "content": "identity check"},
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        entry = CodexParser().parse_jsonl_file(jsonl_file)
+
+        assert entry.session_id == "codex_physical-session"
+        assert entry.project_path == first_cwd
+        assert entry.timestamp == datetime(2025, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
 
     def test_parse_no_directory(self):
         """Test parse_all when directory doesn't exist."""
