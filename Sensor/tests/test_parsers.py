@@ -402,20 +402,36 @@ class TestCodexParser:
         tool = [t for m in CodexParser().parse_jsonl_file(jsonl_file).chat_history for t in m.tools][0]
         assert tool.result == "bare string\nkept"
 
-    def test_event_msg_records_are_ignored(self, tmp_path):
-        """event_msg records (token_count, web_search_end, ...) must not break parsing.
-
-        They are currently unparsed; this pins that they are skipped cleanly rather
-        than raising or polluting chat_history.
-        """
+    def test_event_msg_token_count_is_normalized(self, tmp_path):
+        """The latest valid token_count snapshot is attached to the session."""
         jsonl_file = tmp_path / "rollout-eventmsg.jsonl"
         events = [
             {"type": "session_meta", "payload": {"id": "s-em", "timestamp": "2026-08-08T17:00:00.000Z"}},
-            {"type": "event_msg", "payload": {"type": "token_count",
-                                              "info": {"total_token_usage": {"input_tokens": 10}}}},
+            {
+                "type": "event_msg",
+                "payload": {
+                    "type": "token_count",
+                    "info": {
+                        "last_token_usage": {"input_tokens": 5, "output_tokens": 2, "total_tokens": 7},
+                        "total_token_usage": {"input_tokens": 10, "output_tokens": 4, "total_tokens": 14},
+                        "model_context_window": 64000,
+                    },
+                },
+            },
+            {
+                "type": "event_msg",
+                "payload": {
+                    "type": "token_count",
+                    "info": {
+                        "last_token_usage": {"input_tokens": 8, "output_tokens": 3, "total_tokens": 11},
+                        "total_token_usage": {"input_tokens": 18, "output_tokens": 7, "total_tokens": 25},
+                        "model_context_window": 128000,
+                    },
+                },
+            },
             {"type": "event_msg", "payload": {"type": "web_search_end", "call_id": "w1", "query": "anything"}},
             {"type": "response_item", "payload": {"type": "message", "role": "user",
-                                                  "content": [{"type": "input_text", "text": "hello there"}]}},
+                                                   "content": [{"type": "input_text", "text": "hello there"}]}},
             {"type": "response_item", "payload": {"type": "custom_tool_call", "call_id": "c1",
                                                   "name": "exec", "input": "true"}},
         ]
@@ -424,8 +440,93 @@ class TestCodexParser:
                 f.write(json.dumps(e) + "\n")
 
         entry = CodexParser().parse_jsonl_file(jsonl_file)
+        assert entry.token_usage == {
+            "last_turn": {"input_tokens": 8, "output_tokens": 3, "total_tokens": 11},
+            "cumulative": {"input_tokens": 18, "output_tokens": 7, "total_tokens": 25},
+            "model_context_window": 128000,
+        }
         assert len(entry.chat_history) == 2  # user message + assistant tool turn
         assert len([t for m in entry.chat_history for t in m.tools]) == 1
+
+    def test_token_count_filters_invalid_values_and_ignores_malformed_snapshots(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-token-validation.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "s-tokens", "timestamp": "2026-08-08T17:00:00Z"}},
+            {
+                "type": "event_msg",
+                "payload": {
+                    "type": "token_count",
+                    "info": {
+                        "last_token_usage": {
+                            "input_tokens": 0,
+                            "cached_input_tokens": True,
+                            "cache_write_input_tokens": -1,
+                            "output_tokens": 2.5,
+                            "reasoning_output_tokens": "3",
+                            "total_tokens": 4,
+                            "unknown_tokens": 99,
+                        },
+                        "total_token_usage": {
+                            "input_tokens": 20,
+                            "cached_input_tokens": 5,
+                            "cache_write_input_tokens": 2,
+                            "output_tokens": 6,
+                            "reasoning_output_tokens": 1,
+                            "total_tokens": 27,
+                        },
+                        "model_context_window": 128000,
+                    },
+                },
+            },
+            {"type": "event_msg", "payload": {"type": "token_count", "info": None}},
+            {
+                "type": "event_msg",
+                "payload": {
+                    "type": "token_count",
+                    "info": {
+                        "last_token_usage": [],
+                        "total_token_usage": {"input_tokens": False, "output_tokens": -2},
+                        "model_context_window": True,
+                    },
+                },
+            },
+        ]
+        with open(jsonl_file, "w") as f:
+            for event in events:
+                f.write(json.dumps(event) + "\n")
+
+        entry = CodexParser().parse_jsonl_file(jsonl_file)
+
+        assert entry.token_usage == {
+            "last_turn": {"input_tokens": 0, "total_tokens": 4},
+            "cumulative": {
+                "input_tokens": 20,
+                "cached_input_tokens": 5,
+                "cache_write_input_tokens": 2,
+                "output_tokens": 6,
+                "reasoning_output_tokens": 1,
+                "total_tokens": 27,
+            },
+            "model_context_window": 128000,
+        }
+
+    def test_token_count_accepts_context_window_only_snapshot(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-context-window.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "s-context-window"}},
+            {
+                "type": "event_msg",
+                "payload": {
+                    "type": "token_count",
+                    "info": {"model_context_window": 128000},
+                },
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events), encoding="utf-8")
+
+        entry = CodexParser().parse_jsonl_file(jsonl_file)
+
+        assert entry.token_usage == {"model_context_window": 128000}
 
     def test_parse_no_directory(self):
         """Test parse_all when directory doesn't exist."""

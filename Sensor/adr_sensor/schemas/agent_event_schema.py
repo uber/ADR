@@ -69,6 +69,9 @@ class AgentEvent:
     chunk_sequence: Optional[int] = None
     is_truncated: bool = False
 
+    # Normalized token accounting (populated by some parsers)
+    token_usage: Optional[Dict[str, Any]] = None
+
     # UUID for this log entry
     uuid: str = field(init=False)
 

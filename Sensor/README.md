@@ -233,6 +233,34 @@ agent mode populates the richest version:
 }
 ```
 
+### `token_usage`
+
+Parsers may attach normalized per-turn and cumulative token counters to an
+`AgentEvent`. Only counters reported as nonnegative integers are included:
+
+```json
+{
+  "token_usage": {
+    "last_turn": {
+      "input_tokens": 120,
+      "cached_input_tokens": 80,
+      "output_tokens": 30,
+      "reasoning_output_tokens": 10,
+      "total_tokens": 150
+    },
+    "cumulative": {
+      "input_tokens": 420,
+      "cached_input_tokens": 200,
+      "cache_write_input_tokens": 40,
+      "output_tokens": 90,
+      "reasoning_output_tokens": 25,
+      "total_tokens": 510
+    },
+    "model_context_window": 128000
+  }
+}
+```
+
 ## Adding a New Parser
 
 ADR Sensor is designed to be extensible. To add support for a new AI agent:
