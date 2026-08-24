@@ -1,0 +1,3633 @@
+{
+  "assets": [
+    {
+      "asset_id": "de0daebcd4feae4cb66ad69f7f36a370",
+      "catalog_id": "claude-code",
+      "confidence": {
+        "channels": [
+          "filesystem",
+          "package",
+          "runtime"
+        ],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "package",
+          "confidence": 0.95,
+          "path": "/home/pengyuzhang.guest/.npm-global/lib/node_modules/@anthropic-ai/claude-code",
+          "proof": "npm owns @anthropic-ai/claude-code",
+          "rung": "provenance",
+          "stage": "identifier"
+        },
+        {
+          "channel": "filesystem",
+          "confidence": 0.4,
+          "path": "/home/pengyuzhang.guest/.npm-global/bin/claude",
+          "proof": "elf executable",
+          "rung": "content",
+          "stage": "identifier"
+        },
+        {
+          "channel": "runtime",
+          "confidence": 0.8,
+          "path": "/home/pengyuzhang.guest/.npm-global/bin/claude",
+          "proof": "probe output matched '^\\\\d+\\\\.\\\\d+\\\\.\\\\d+'",
+          "rung": "behaviour",
+          "stage": "identifier"
+        },
+        {
+          "channel": "filesystem",
+          "confidence": 0.4,
+          "path": "/home/pengyuzhang.guest/.npm-global/bin/claude",
+          "proof": "elf executable",
+          "rung": "content",
+          "stage": "identifier"
+        },
+        {
+          "channel": "runtime",
+          "confidence": 0.8,
+          "path": "/home/pengyuzhang.guest/.npm-global/bin/claude",
+          "proof": "probe output matched '^\\\\d+\\\\.\\\\d+\\\\.\\\\d+'",
+          "rung": "behaviour",
+          "stage": "identifier"
+        }
+      ],
+      "flags": [
+        "merged_3"
+      ],
+      "identity": "claude-code",
+      "install_method": "npm",
+      "install_path": "/home/pengyuzhang.guest/.npm-global/lib/node_modules/@anthropic-ai/claude-code",
+      "install_root": "/home/pengyuzhang.guest/.npm-global/lib/node_modules/@anthropic-ai",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Claude Code",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": "Anthropic",
+      "verification": [
+        "behaviour",
+        "content",
+        "provenance"
+      ],
+      "version": "2.1.235"
+    },
+    {
+      "asset_id": "d069b37cf24a9b606268ca2fbb666795",
+      "catalog_id": "github-copilot-cli",
+      "confidence": {
+        "channels": [
+          "package"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "package",
+          "confidence": 0.95,
+          "path": "/home/pengyuzhang.guest/.npm-global/lib/node_modules/@github/copilot",
+          "proof": "npm owns @github/copilot",
+          "rung": "provenance",
+          "stage": "identifier"
+        }
+      ],
+      "flags": [],
+      "identity": "github-copilot-cli",
+      "install_method": "npm",
+      "install_path": "/home/pengyuzhang.guest/.npm-global/lib/node_modules/@github/copilot",
+      "install_root": "/home/pengyuzhang.guest/.npm-global/lib/node_modules/@github",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "GitHub Copilot CLI",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": "GitHub",
+      "verification": [
+        "provenance"
+      ],
+      "version": "1.0.80"
+    },
+    {
+      "asset_id": "7d2cd0c61e911b3b95ee241360d6c220",
+      "catalog_id": "gemini-cli",
+      "confidence": {
+        "channels": [
+          "package",
+          "runtime"
+        ],
+        "label": "medium"
+      },
+      "evidence": [
+        {
+          "channel": "package",
+          "confidence": 0.95,
+          "path": "/home/pengyuzhang.guest/.npm-global/lib/node_modules/@google/gemini-cli",
+          "proof": "npm owns @google/gemini-cli",
+          "rung": "provenance",
+          "stage": "identifier"
+        },
+        {
+          "channel": "runtime",
+          "confidence": 0.8,
+          "path": "/home/pengyuzhang.guest/.npm-global/bin/gemini",
+          "proof": "probe output matched '^\\\\d+\\\\.\\\\d+\\\\.\\\\d+$'",
+          "rung": "behaviour",
+          "stage": "identifier"
+        },
+        {
+          "channel": "runtime",
+          "confidence": 0.8,
+          "path": "/home/pengyuzhang.guest/.npm-global/bin/gemini",
+          "proof": "probe output matched '^\\\\d+\\\\.\\\\d+\\\\.\\\\d+$'",
+          "rung": "behaviour",
+          "stage": "identifier"
+        }
+      ],
+      "flags": [
+        "merged_3"
+      ],
+      "identity": "gemini-cli",
+      "install_method": "npm",
+      "install_path": "/home/pengyuzhang.guest/.npm-global/lib/node_modules/@google/gemini-cli",
+      "install_root": "/home/pengyuzhang.guest/.npm-global/lib/node_modules/@google",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Gemini CLI",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": "Google",
+      "verification": [
+        "behaviour",
+        "provenance"
+      ],
+      "version": "0.12.0"
+    },
+    {
+      "asset_id": "eb16baea9703507a874a9e14be597029",
+      "catalog_id": "kilo-cli",
+      "confidence": {
+        "channels": [
+          "package",
+          "runtime"
+        ],
+        "label": "medium"
+      },
+      "evidence": [
+        {
+          "channel": "package",
+          "confidence": 0.95,
+          "path": "/home/pengyuzhang.guest/.npm-global/lib/node_modules/@kilocode/cli",
+          "proof": "npm owns @kilocode/cli",
+          "rung": "provenance",
+          "stage": "identifier"
+        },
+        {
+          "channel": "runtime",
+          "confidence": 0.8,
+          "path": "/home/pengyuzhang.guest/.npm-global/bin/kilo",
+          "proof": "probe output matched '^\\\\d+\\\\.\\\\d+\\\\.\\\\d+'",
+          "rung": "behaviour",
+          "stage": "identifier"
+        },
+        {
+          "channel": "runtime",
+          "confidence": 0.8,
+          "path": "/home/pengyuzhang.guest/.npm-global/bin/kilo",
+          "proof": "probe output matched '^\\\\d+\\\\.\\\\d+\\\\.\\\\d+'",
+          "rung": "behaviour",
+          "stage": "identifier"
+        }
+      ],
+      "flags": [
+        "merged_3"
+      ],
+      "identity": "kilo-cli",
+      "install_method": "npm",
+      "install_path": "/home/pengyuzhang.guest/.npm-global/lib/node_modules/@kilocode/cli",
+      "install_root": "/home/pengyuzhang.guest/.npm-global/lib/node_modules/@kilocode",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Kilo CLI",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": "Kilo Code",
+      "verification": [
+        "behaviour",
+        "provenance"
+      ],
+      "version": "7.4.23"
+    },
+    {
+      "asset_id": "f263ea631d445f103e7f904926a22b0e",
+      "catalog_id": "codex-cli",
+      "confidence": {
+        "channels": [
+          "package",
+          "runtime"
+        ],
+        "label": "medium"
+      },
+      "evidence": [
+        {
+          "channel": "package",
+          "confidence": 0.95,
+          "path": "/home/pengyuzhang.guest/.npm-global/lib/node_modules/@openai/codex",
+          "proof": "npm owns @openai/codex",
+          "rung": "provenance",
+          "stage": "identifier"
+        },
+        {
+          "channel": "runtime",
+          "confidence": 0.8,
+          "path": "/home/pengyuzhang.guest/.npm-global/bin/codex",
+          "proof": "probe output matched '^codex-cli \\\\d+\\\\.\\\\d+\\\\.\\\\d+|^\\\\d+\\\\.\\\\d+\\\\.\\\\d+'",
+          "rung": "behaviour",
+          "stage": "identifier"
+        },
+        {
+          "channel": "runtime",
+          "confidence": 0.8,
+          "path": "/home/pengyuzhang.guest/.npm-global/bin/codex",
+          "proof": "probe output matched '^codex-cli \\\\d+\\\\.\\\\d+\\\\.\\\\d+|^\\\\d+\\\\.\\\\d+\\\\.\\\\d+'",
+          "rung": "behaviour",
+          "stage": "identifier"
+        }
+      ],
+      "flags": [
+        "merged_3"
+      ],
+      "identity": "codex-cli",
+      "install_method": "npm",
+      "install_path": "/home/pengyuzhang.guest/.npm-global/lib/node_modules/@openai/codex",
+      "install_root": "/home/pengyuzhang.guest/.npm-global/lib/node_modules/@openai",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Codex CLI",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": "OpenAI",
+      "verification": [
+        "behaviour",
+        "provenance"
+      ],
+      "version": "0.58.0"
+    },
+    {
+      "asset_id": "32dffb17000a491daa1cc90960c9225e",
+      "catalog_id": "qwen-code",
+      "confidence": {
+        "channels": [
+          "package"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "package",
+          "confidence": 0.95,
+          "path": "/home/pengyuzhang.guest/.npm-global/lib/node_modules/@qwen-code/qwen-code",
+          "proof": "npm owns @qwen-code/qwen-code",
+          "rung": "provenance",
+          "stage": "identifier"
+        }
+      ],
+      "flags": [],
+      "identity": "qwen-code",
+      "install_method": "npm",
+      "install_path": "/home/pengyuzhang.guest/.npm-global/lib/node_modules/@qwen-code/qwen-code",
+      "install_root": "/home/pengyuzhang.guest/.npm-global/lib/node_modules/@qwen-code",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Qwen Code",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": "Alibaba",
+      "verification": [
+        "provenance"
+      ],
+      "version": "0.22.0"
+    },
+    {
+      "asset_id": "e5a1b5f5ce9f7627be859954b665b9ea",
+      "catalog_id": "amp",
+      "confidence": {
+        "channels": [
+          "package"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "package",
+          "confidence": 0.95,
+          "path": "/home/pengyuzhang.guest/.npm-global/lib/node_modules/@sourcegraph/amp",
+          "proof": "npm owns @sourcegraph/amp",
+          "rung": "provenance",
+          "stage": "identifier"
+        }
+      ],
+      "flags": [],
+      "identity": "amp",
+      "install_method": "npm",
+      "install_path": "/home/pengyuzhang.guest/.npm-global/lib/node_modules/@sourcegraph/amp",
+      "install_root": "/home/pengyuzhang.guest/.npm-global/lib/node_modules/@sourcegraph",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Amp",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": "Sourcegraph",
+      "verification": [
+        "provenance"
+      ],
+      "version": "0.0.1787428878-gebb20a"
+    },
+    {
+      "asset_id": "9a9b0acb8e9cbcf87ccc65cbb638f5bc",
+      "catalog_id": "opencode",
+      "confidence": {
+        "channels": [
+          "filesystem",
+          "package",
+          "runtime"
+        ],
+        "label": "high"
+      },
+      "evidence": [
+        {
+          "channel": "package",
+          "confidence": 0.95,
+          "path": "/home/pengyuzhang.guest/.npm-global/lib/node_modules/opencode-ai",
+          "proof": "npm owns opencode-ai",
+          "rung": "provenance",
+          "stage": "identifier"
+        },
+        {
+          "channel": "filesystem",
+          "confidence": 0.4,
+          "path": "/home/pengyuzhang.guest/.npm-global/bin/opencode",
+          "proof": "elf executable",
+          "rung": "content",
+          "stage": "identifier"
+        },
+        {
+          "channel": "runtime",
+          "confidence": 0.8,
+          "path": "/home/pengyuzhang.guest/.npm-global/bin/opencode",
+          "proof": "probe output matched '^\\\\d+\\\\.\\\\d+\\\\.\\\\d+'",
+          "rung": "behaviour",
+          "stage": "identifier"
+        },
+        {
+          "channel": "filesystem",
+          "confidence": 0.4,
+          "path": "/home/pengyuzhang.guest/.npm-global/bin/opencode",
+          "proof": "elf executable",
+          "rung": "content",
+          "stage": "identifier"
+        },
+        {
+          "channel": "runtime",
+          "confidence": 0.8,
+          "path": "/home/pengyuzhang.guest/.npm-global/bin/opencode",
+          "proof": "probe output matched '^\\\\d+\\\\.\\\\d+\\\\.\\\\d+'",
+          "rung": "behaviour",
+          "stage": "identifier"
+        }
+      ],
+      "flags": [
+        "merged_3"
+      ],
+      "identity": "opencode",
+      "install_method": "npm",
+      "install_path": "/home/pengyuzhang.guest/.npm-global/lib/node_modules/opencode-ai",
+      "install_root": "/home/pengyuzhang.guest/.npm-global/lib/node_modules",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "opencode",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": "opencode",
+      "verification": [
+        "behaviour",
+        "content",
+        "provenance"
+      ],
+      "version": "0.5.29"
+    },
+    {
+      "asset_id": "c7e870075467f18e3cdcab7a55ea14a3",
+      "catalog_id": "aider",
+      "confidence": {
+        "channels": [
+          "package",
+          "runtime"
+        ],
+        "label": "medium"
+      },
+      "evidence": [
+        {
+          "channel": "package",
+          "confidence": 0.95,
+          "path": "/home/pengyuzhang.guest/.local/share/pipx/venvs/aider-chat",
+          "proof": "pipx owns aider-chat",
+          "rung": "provenance",
+          "stage": "identifier"
+        },
+        {
+          "channel": "runtime",
+          "confidence": 0.8,
+          "path": "/home/pengyuzhang.guest/.local/bin/aider",
+          "proof": "probe output matched '^aider \\\\d+\\\\.\\\\d+'",
+          "rung": "behaviour",
+          "stage": "identifier"
+        },
+        {
+          "channel": "runtime",
+          "confidence": 0.8,
+          "path": "/home/pengyuzhang.guest/.local/bin/aider",
+          "proof": "probe output matched '^aider \\\\d+\\\\.\\\\d+'",
+          "rung": "behaviour",
+          "stage": "identifier"
+        }
+      ],
+      "flags": [
+        "merged_3"
+      ],
+      "identity": "aider",
+      "install_method": "pipx",
+      "install_path": "/home/pengyuzhang.guest/.local/share/pipx/venvs/aider-chat",
+      "install_root": "/home/pengyuzhang.guest/.local/share/pipx/venvs",
+      "kind": "cli_agent",
+      "last_used": null,
+      "liveness": "installed",
+      "location": "local",
+      "name": "Aider",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [],
+        "destinations": [],
+        "env_names": [],
+        "factors": [],
+        "pinned": null,
+        "transport": null,
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": "Aider AI",
+      "verification": [
+        "behaviour",
+        "provenance"
+      ],
+      "version": "0.86.1"
+    },
+    {
+      "asset_id": "2b51ba042b060cd82ec09cdeafbde2d8",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.claude.json",
+          "proof": "declared in user scope",
+          "rung": null,
+          "stage": "extractor"
+        },
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.claude.json",
+          "proof": "declared in user scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=user",
+        "merged_2"
+      ],
+      "identity": "mcp_server:adr-probe-env-key",
+      "install_method": null,
+      "install_path": "/home/pengyuzhang.guest/.claude.json",
+      "install_root": "/home/pengyuzhang.guest",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "adr-probe-env-key",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "anthropic",
+          "openai"
+        ],
+        "destinations": [],
+        "env_names": [
+          "ANTHROPIC_API_KEY",
+          "OPENAI_API_KEY"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "76d76f6f83ffa310ae15dad1042e1b60",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.config/claude-desktop/claude_desktop_config.json",
+          "proof": "declared in user scope",
+          "rung": null,
+          "stage": "extractor"
+        },
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.config/claude-desktop/claude_desktop_config.json",
+          "proof": "declared in user scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=user",
+        "merged_2"
+      ],
+      "identity": "mcp_server:adr-probe-cd",
+      "install_method": null,
+      "install_path": "/home/pengyuzhang.guest/.config/claude-desktop/claude_desktop_config.json",
+      "install_root": "/home/pengyuzhang.guest/.config/claude-desktop",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "adr-probe-cd",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "89055f95b53e1285ecd1d740e2b27009",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.cursor/mcp.json",
+          "proof": "declared in plugin scope",
+          "rung": null,
+          "stage": "extractor"
+        },
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.cursor/mcp.json",
+          "proof": "declared in plugin scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=plugin",
+        "merged_2"
+      ],
+      "identity": "mcp_server:adr-probe-cursor",
+      "install_method": null,
+      "install_path": "/home/pengyuzhang.guest/.cursor/mcp.json",
+      "install_root": "/home/pengyuzhang.guest/.cursor",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "adr-probe-cursor",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "2cc3f61753c09e6f0f66d617f3974ee8",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.codeium/windsurf/mcp_config.json",
+          "proof": "declared in project scope",
+          "rung": null,
+          "stage": "extractor"
+        },
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.codeium/windsurf/mcp_config.json",
+          "proof": "declared in project scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=project",
+        "merged_2"
+      ],
+      "identity": "mcp_server:adr-probe-windsurf",
+      "install_method": null,
+      "install_path": "/home/pengyuzhang.guest/.codeium/windsurf/mcp_config.json",
+      "install_root": "/home/pengyuzhang.guest/.codeium/windsurf",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "adr-probe-windsurf",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "e0e23e25abe7201b80840c450ecfb3df",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.config/Code/User/mcp.json",
+          "proof": "declared in plugin scope",
+          "rung": null,
+          "stage": "extractor"
+        },
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.config/Code/User/mcp.json",
+          "proof": "declared in plugin scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=plugin",
+        "merged_2"
+      ],
+      "identity": "mcp_server:adr-probe-vscode",
+      "install_method": null,
+      "install_path": "/home/pengyuzhang.guest/.config/Code/User/mcp.json",
+      "install_root": "/home/pengyuzhang.guest/.config/Code/User",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "adr-probe-vscode",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "2f25a212084b7c4355fd2abb218e40d4",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+          "proof": "declared in user scope",
+          "rung": null,
+          "stage": "extractor"
+        },
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+          "proof": "declared in user scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=user",
+        "merged_2"
+      ],
+      "identity": "mcp_server:adr-probe-cline",
+      "install_method": null,
+      "install_path": "/home/pengyuzhang.guest/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+      "install_root": "/home/pengyuzhang.guest/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "adr-probe-cline",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "6c9b19fd83a8a728edcddc6b88cca7d6",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.config/zed/settings.json",
+          "proof": "declared in user scope",
+          "rung": null,
+          "stage": "extractor"
+        },
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.config/zed/settings.json",
+          "proof": "declared in user scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=user",
+        "merged_2"
+      ],
+      "identity": "mcp_server:adr-probe-zed",
+      "install_method": null,
+      "install_path": "/home/pengyuzhang.guest/.config/zed/settings.json",
+      "install_root": "/home/pengyuzhang.guest/.config/zed",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "adr-probe-zed",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "5fe8ed5d063aee076a6589740f21b62e",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.config/JetBrains/options/mcp.json",
+          "proof": "declared in plugin scope",
+          "rung": null,
+          "stage": "extractor"
+        },
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.config/JetBrains/options/mcp.json",
+          "proof": "declared in plugin scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=plugin",
+        "merged_2"
+      ],
+      "identity": "mcp_server:adr-probe-jetbrains",
+      "install_method": null,
+      "install_path": "/home/pengyuzhang.guest/.config/JetBrains/options/mcp.json",
+      "install_root": "/home/pengyuzhang.guest/.config/JetBrains/options",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "adr-probe-jetbrains",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "397670d3b792ca3c33b2ea42ea1405c6",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.config/opencode/opencode.json",
+          "proof": "declared in user scope",
+          "rung": null,
+          "stage": "extractor"
+        },
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.config/opencode/opencode.json",
+          "proof": "declared in user scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=user",
+        "merged_2"
+      ],
+      "identity": "mcp_server:adr-probe-opencode",
+      "install_method": null,
+      "install_path": "/home/pengyuzhang.guest/.config/opencode/opencode.json",
+      "install_root": "/home/pengyuzhang.guest/.config/opencode",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "adr-probe-opencode",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "ded707420af2a31eca53694f110fc080",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.config/goose/config.yaml",
+          "proof": "declared in user scope",
+          "rung": null,
+          "stage": "extractor"
+        },
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.config/goose/config.yaml",
+          "proof": "declared in user scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=user",
+        "merged_2"
+      ],
+      "identity": "mcp_server:adr-probe-goose",
+      "install_method": null,
+      "install_path": "/home/pengyuzhang.guest/.config/goose/config.yaml",
+      "install_root": "/home/pengyuzhang.guest/.config/goose",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "adr-probe-goose",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "cdad1eb3dcf7f53944898951649772d7",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.bashrc",
+          "proof": "declared in user scope",
+          "rung": null,
+          "stage": "extractor"
+        },
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.bashrc",
+          "proof": "declared in user scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=user",
+        "merged_2"
+      ],
+      "identity": "agent_platform:AI credential environment",
+      "install_method": "agent_artifact",
+      "install_path": "/home/pengyuzhang.guest/.bashrc",
+      "install_root": "/home/pengyuzhang.guest",
+      "kind": "agent_platform",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "AI credential environment",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "anthropic"
+        ],
+        "destinations": [],
+        "env_names": [
+          "ANTHROPIC_API_KEY"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "dffd3a2d9db079211bb37be73f27c7ef",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/etc/claude-code/managed-settings.json",
+          "proof": "declared in enterprise_managed scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=enterprise_managed"
+      ],
+      "identity": "mcp_server:adr-probe-precedence",
+      "install_method": null,
+      "install_path": "/etc/claude-code/managed-settings.json",
+      "install_root": "/etc/claude-code",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "adr-probe-precedence",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "37d932297cc1d6a106ebf7769944f5ff",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/etc/adr/managed-mcp.json",
+          "proof": "declared in enterprise_managed scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=enterprise_managed"
+      ],
+      "identity": "mcp_server:adr-probe-adr-policy",
+      "install_method": null,
+      "install_path": "/etc/adr/managed-mcp.json",
+      "install_root": "/etc/adr",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "adr-probe-adr-policy",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "6e14371b4aaeb7d7e9623e645ae17870",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.claude/CLAUDE.md",
+          "proof": "declared in project scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=project"
+      ],
+      "identity": "instructions:CLAUDE.md",
+      "install_method": "agent_artifact",
+      "install_path": "/home/pengyuzhang.guest/.claude/CLAUDE.md",
+      "install_root": "/home/pengyuzhang.guest/.claude",
+      "kind": "instructions",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "CLAUDE.md",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "ba9994cb52e2ffb5029345ccdf60e764",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.claude/agents/reviewer.md",
+          "proof": "declared in project scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=project"
+      ],
+      "identity": "agent_definition:claude-subagent",
+      "install_method": "agent_artifact",
+      "install_path": "/home/pengyuzhang.guest/.claude/agents/reviewer.md",
+      "install_root": "/home/pengyuzhang.guest/.claude/agents",
+      "kind": "agent_definition",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "claude-subagent",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "1cef6ada1e5eca279275521a65fc70dd",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.claude/commands/ship.md",
+          "proof": "declared in project scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=project"
+      ],
+      "identity": "command:ship",
+      "install_method": "agent_artifact",
+      "install_path": "/home/pengyuzhang.guest/.claude/commands/ship.md",
+      "install_root": "/home/pengyuzhang.guest/.claude/commands",
+      "kind": "command",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "ship",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "07d7cdb51dad127ceeab34550d57af7a",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.claude/output-styles/terse.md",
+          "proof": "declared in project scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=project"
+      ],
+      "identity": "output_style:output-style",
+      "install_method": "agent_artifact",
+      "install_path": "/home/pengyuzhang.guest/.claude/output-styles/terse.md",
+      "install_root": "/home/pengyuzhang.guest/.claude/output-styles",
+      "kind": "output_style",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "output-style",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "33e6674c54e18bcb52aaab9325fd282c",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.claude/plugins/acme-tools",
+          "proof": "declared in project scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=project"
+      ],
+      "identity": "plugin:acme-tools",
+      "install_method": "agent_artifact",
+      "install_path": "/home/pengyuzhang.guest/.claude/plugins/acme-tools",
+      "install_root": "/home/pengyuzhang.guest/.claude/plugins",
+      "kind": "plugin",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "acme-tools",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "42b739e730833441f63d3419d26db3a0",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.claude/settings.json",
+          "proof": "declared in user scope",
+          "rung": null,
+          "stage": "extractor"
+        },
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/dev/demo-repo/.claude/settings.json",
+          "proof": "declared in user scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=user",
+        "merged_2"
+      ],
+      "identity": "hook:PreToolUse hook 1",
+      "install_method": "agent_artifact",
+      "install_path": "/home/pengyuzhang.guest/.claude/settings.json",
+      "install_root": "/home/pengyuzhang.guest/.claude",
+      "kind": "hook",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "PreToolUse hook 1",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "49c29648310b60c8e37333cc1d85243d",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.claude/settings.json",
+          "proof": "declared in user scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=user"
+      ],
+      "identity": "hook:PreToolUse hook 2",
+      "install_method": "agent_artifact",
+      "install_path": "/home/pengyuzhang.guest/.claude/settings.json",
+      "install_root": "/home/pengyuzhang.guest/.claude",
+      "kind": "hook",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "PreToolUse hook 2",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "1937ca3d2d39f87293b634ac057f429b",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.claude/settings.json",
+          "proof": "declared in user scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=user"
+      ],
+      "identity": "hook:PreToolUse hook 3",
+      "install_method": "agent_artifact",
+      "install_path": "/home/pengyuzhang.guest/.claude/settings.json",
+      "install_root": "/home/pengyuzhang.guest/.claude",
+      "kind": "hook",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "PreToolUse hook 3",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "4a20b1205a7c3bf4355cc14fbd46c95a",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.claude/skills/pdf-filler",
+          "proof": "declared in project scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=project"
+      ],
+      "identity": "skill:user-skill",
+      "install_method": "agent_artifact",
+      "install_path": "/home/pengyuzhang.guest/.claude/skills/pdf-filler",
+      "install_root": "/home/pengyuzhang.guest/.claude/skills",
+      "kind": "skill",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "user-skill",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "4e0cb20cc96a003c32a6d746b9cd8eb2",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.codex/AGENTS.md",
+          "proof": "declared in project scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=project"
+      ],
+      "identity": "instructions:AGENTS.md",
+      "install_method": "agent_artifact",
+      "install_path": "/home/pengyuzhang.guest/.codex/AGENTS.md",
+      "install_root": "/home/pengyuzhang.guest/.codex",
+      "kind": "instructions",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "AGENTS.md",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "e7472c4f7f36d01bec12466a1e494819",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.codex/prompts/triage.md",
+          "proof": "declared in project scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=project"
+      ],
+      "identity": "command:triage",
+      "install_method": "agent_artifact",
+      "install_path": "/home/pengyuzhang.guest/.codex/prompts/triage.md",
+      "install_root": "/home/pengyuzhang.guest/.codex/prompts",
+      "kind": "command",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "triage",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "8db9068d0d7638fb0c1eefcf111ff307",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.cursor/agents/refactor.md",
+          "proof": "declared in project scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=project"
+      ],
+      "identity": "agent_definition:cursor-agent",
+      "install_method": "agent_artifact",
+      "install_path": "/home/pengyuzhang.guest/.cursor/agents/refactor.md",
+      "install_root": "/home/pengyuzhang.guest/.cursor/agents",
+      "kind": "agent_definition",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "cursor-agent",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "07146aced9414f052de250a877aeca5a",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.gemini/GEMINI.md",
+          "proof": "declared in project scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=project"
+      ],
+      "identity": "instructions:GEMINI.md",
+      "install_method": "agent_artifact",
+      "install_path": "/home/pengyuzhang.guest/.gemini/GEMINI.md",
+      "install_root": "/home/pengyuzhang.guest/.gemini",
+      "kind": "instructions",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "GEMINI.md",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "6d1efa8704758a3096d1c151c935fba2",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.gemini/commands/review.toml",
+          "proof": "declared in project scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=project"
+      ],
+      "identity": "command:review.toml",
+      "install_method": "agent_artifact",
+      "install_path": "/home/pengyuzhang.guest/.gemini/commands/review.toml",
+      "install_root": "/home/pengyuzhang.guest/.gemini/commands",
+      "kind": "command",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "review.toml",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "551560e79fe26e1f975d8ac86de728a3",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.codeium/windsurf/agents/scan.md",
+          "proof": "declared in project scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=project"
+      ],
+      "identity": "agent_definition:windsurf-agent",
+      "install_method": "agent_artifact",
+      "install_path": "/home/pengyuzhang.guest/.codeium/windsurf/agents/scan.md",
+      "install_root": "/home/pengyuzhang.guest/.codeium/windsurf/agents",
+      "kind": "agent_definition",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "windsurf-agent",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "c7d09bd7b052debfbf090098eeed5174",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/.mcpb/broken-bundle/manifest.json",
+          "proof": "declared in project scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=project",
+        "malformed"
+      ],
+      "identity": "mcp_bundle:broken-bundle",
+      "install_method": "agent_artifact",
+      "install_path": "/home/pengyuzhang.guest/.mcpb/broken-bundle/manifest.json",
+      "install_root": "/home/pengyuzhang.guest/.mcpb/broken-bundle",
+      "kind": "mcp_bundle",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "broken-bundle",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "fa5155708b83dc5db679eed8705bbef8",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/dev/demo-repo/.mcp.json",
+          "proof": "declared in project scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=project"
+      ],
+      "identity": "mcp_server:adr-probe-project",
+      "install_method": null,
+      "install_path": "/home/pengyuzhang.guest/dev/demo-repo/.mcp.json",
+      "install_root": "/home/pengyuzhang.guest/dev/demo-repo",
+      "kind": "mcp_server",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "adr-probe-project",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "fc63fceac3e3d33da9105857386bf283",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/dev/demo-repo/.claude/agents/tester.md",
+          "proof": "declared in project scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=project"
+      ],
+      "identity": "agent_definition:project-subagent",
+      "install_method": "agent_artifact",
+      "install_path": "/home/pengyuzhang.guest/dev/demo-repo/.claude/agents/tester.md",
+      "install_root": "/home/pengyuzhang.guest/dev/demo-repo/.claude/agents",
+      "kind": "agent_definition",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "project-subagent",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "3a015a37e2ea477f138c5cd785247743",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/dev/demo-repo/.claude/commands/release.md",
+          "proof": "declared in project scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=project"
+      ],
+      "identity": "command:release",
+      "install_method": "agent_artifact",
+      "install_path": "/home/pengyuzhang.guest/dev/demo-repo/.claude/commands/release.md",
+      "install_root": "/home/pengyuzhang.guest/dev/demo-repo/.claude/commands",
+      "kind": "command",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "release",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "a0938c81cf0346dd502d0a72ea1b41f0",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/dev/demo-repo/.claude/settings.local.json",
+          "proof": "declared in project_local scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=project_local"
+      ],
+      "identity": "hook:PostToolUse hook 1",
+      "install_method": "agent_artifact",
+      "install_path": "/home/pengyuzhang.guest/dev/demo-repo/.claude/settings.local.json",
+      "install_root": "/home/pengyuzhang.guest/dev/demo-repo/.claude",
+      "kind": "hook",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "PostToolUse hook 1",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    },
+    {
+      "asset_id": "87395a39de79c112765a6ca61c5e58e2",
+      "catalog_id": null,
+      "confidence": {
+        "channels": [
+          "config"
+        ],
+        "label": "low"
+      },
+      "evidence": [
+        {
+          "channel": "config",
+          "confidence": 0.85,
+          "path": "/home/pengyuzhang.guest/dev/demo-repo/.claude/skills/deploy-check",
+          "proof": "declared in project scope",
+          "rung": null,
+          "stage": "extractor"
+        }
+      ],
+      "flags": [
+        "config_scope=project"
+      ],
+      "identity": "skill:project-skill",
+      "install_method": "agent_artifact",
+      "install_path": "/home/pengyuzhang.guest/dev/demo-repo/.claude/skills/deploy-check",
+      "install_root": "/home/pengyuzhang.guest/dev/demo-repo/.claude/skills",
+      "kind": "skill",
+      "last_used": null,
+      "liveness": "declared_only",
+      "location": "local",
+      "name": "project-skill",
+      "owner": "system",
+      "risk": {
+        "credential_kinds": [
+          "inherited"
+        ],
+        "destinations": [],
+        "env_names": [
+          "<inherits parent environment>"
+        ],
+        "factors": [],
+        "pinned": null,
+        "transport": "stdio",
+        "unattended": false
+      },
+      "sanction": "unknown",
+      "vendor": null,
+      "verification": [],
+      "version": null
+    }
+  ],
+  "catalog_version": "2026.08.22",
+  "coverage": {
+    "boundaries_hit": [
+      {
+        "boundary": "budget_exhausted",
+        "detail": "cap 10000",
+        "path": "/home/pengyuzhang.guest/.npm/_cacache/content-v2/sha512/17/c8"
+      },
+      {
+        "boundary": "budget_exhausted",
+        "detail": "root not swept",
+        "path": "/home/pengyuzhang.guest/Projects"
+      },
+      {
+        "boundary": "budget_exhausted",
+        "detail": "root not swept",
+        "path": "/home/pengyuzhang.guest/src"
+      },
+      {
+        "boundary": "budget_exhausted",
+        "detail": "root not swept",
+        "path": "/home/pengyuzhang.guest/code"
+      },
+      {
+        "boundary": "budget_exhausted",
+        "detail": "root not swept",
+        "path": "/home/pengyuzhang.guest/work"
+      },
+      {
+        "boundary": "budget_exhausted",
+        "detail": "root not swept",
+        "path": "/home/pengyuzhang.guest/dev"
+      },
+      {
+        "boundary": "budget_exhausted",
+        "detail": "root not swept",
+        "path": "/home/pengyuzhang.guest/git"
+      },
+      {
+        "boundary": "budget_exhausted",
+        "detail": "root not swept",
+        "path": "/home/pengyuzhang.guest/repos"
+      },
+      {
+        "boundary": "budget_exhausted",
+        "detail": "root not swept",
+        "path": "/opt"
+      },
+      {
+        "boundary": "budget_exhausted",
+        "detail": "root not swept",
+        "path": "/srv"
+      },
+      {
+        "boundary": "budget_exhausted",
+        "detail": "root not swept",
+        "path": "/usr/local"
+      },
+      {
+        "boundary": "budget_exhausted",
+        "detail": "root not swept",
+        "path": "/workspace"
+      },
+      {
+        "boundary": "budget_exhausted",
+        "detail": "root not swept",
+        "path": "/Users"
+      },
+      {
+        "boundary": "budget_exhausted",
+        "detail": "root not swept",
+        "path": "/home"
+      }
+    ],
+    "denied": [
+      {
+        "path": "/root",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/1/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/111/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/114/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/115/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/12/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/13/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/139/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/14/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/1430/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/14623/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/15/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/1584/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/16/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/1658/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/17/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/1726/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/18/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/189/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/19/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/2/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/20/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/21/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/22/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/228/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/229/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/23/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/24/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/26/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/26080/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/26081/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/26094/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/26095/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/26110/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/26130/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/27/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/27467/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/27475/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/27476/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/27479/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/27485/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/28/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/29/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/3/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/30/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/32/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/324/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/326/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/33/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/33540/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/34/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/34749/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/35/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/36/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/38/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/39/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/4/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/40/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/41/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/42/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/439/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/44/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/440/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/45/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/46/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/47/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/49/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/49328/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/49888/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/5/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/50/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/50079/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/50083/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/50119/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/50213/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/50227/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/50245/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/51/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/52/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/53/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/54/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/55/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/56/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/57/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/58/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/59/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/6/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/60/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/60672/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/60679/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/60687/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/61/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/62/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/63/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/64/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/65/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/65026/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/65027/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/67/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/68/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/69/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/7/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/76/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/80/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/821/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/832/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/84/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/85/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/8656/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/879/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/881/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/8923/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/9/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/911/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/1/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/111/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/114/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/115/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/12/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/13/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/139/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/14/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/1430/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/14623/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/15/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/1584/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/16/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/1658/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/17/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/1726/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/18/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/189/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/19/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/2/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/20/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/21/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/22/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/228/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/229/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/23/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/24/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/26/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/26080/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/26081/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/26094/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/26095/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/26110/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/26130/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/27/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/27467/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/27475/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/27476/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/27479/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/27485/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/28/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/29/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/3/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/30/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/32/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/324/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/326/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/33/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/33540/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/34/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/34749/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/35/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/36/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/38/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/39/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/4/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/40/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/41/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/42/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/439/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/44/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/440/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/45/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/46/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/47/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/49/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/49328/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/49888/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/5/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/50/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/50079/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/50083/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/50119/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/50213/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/50227/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/50245/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/51/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/52/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/53/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/54/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/55/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/56/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/57/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/58/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/59/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/6/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/60/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/60672/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/60679/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/60687/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/61/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/62/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/63/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/64/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/65/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/65026/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/65027/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/67/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/68/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/69/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/7/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/76/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/80/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/821/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/832/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/84/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/85/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/8656/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/879/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/881/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/8923/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/9/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/proc/911/fd",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/root",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/root",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/root",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/root",
+        "reason": "Permission denied"
+      },
+      {
+        "path": "/home/pengyuzhang.guest/.ssh",
+        "reason": "personal_path"
+      }
+    ],
+    "out_of_scope": [
+      "instruction_files",
+      "agent_hooks",
+      "scheduling_mechanisms"
+    ],
+    "probes": [
+      {
+        "detail": "[Errno 2] No such file or directory: 'rpm'",
+        "name": "rpm",
+        "status": "failed"
+      },
+      {
+        "detail": "1107 records",
+        "name": "packages",
+        "status": "ran"
+      },
+      {
+        "detail": "8 records",
+        "name": "applications",
+        "status": "ran"
+      },
+      {
+        "detail": "10 pids",
+        "name": "processes",
+        "status": "ran"
+      },
+      {
+        "detail": "7 sockets",
+        "name": "sockets",
+        "status": "ran"
+      },
+      {
+        "detail": "unavailable",
+        "name": "exec_journal",
+        "status": "degraded"
+      },
+      {
+        "detail": "4943 candidates; 3739 entries before the sweep",
+        "name": "enumerator",
+        "status": "ran"
+      },
+      {
+        "detail": "/home/pengyuzhang.guest/.mcpb/broken-bundle/manifest.json: JSONDecodeError: Expecting value: line 2 column 1 (char 73)",
+        "name": "extractor",
+        "status": "degraded"
+      },
+      {
+        "detail": "/home/pengyuzhang.guest/.npm-global/bin/amp: no version probe declared",
+        "name": "version_probe",
+        "status": "degraded"
+      },
+      {
+        "detail": "/home/pengyuzhang.guest/.npm-global/bin/qwen: no version probe declared",
+        "name": "version_probe",
+        "status": "degraded"
+      },
+      {
+        "detail": "/home/pengyuzhang.guest/.npm-global/bin/amp: no version probe declared",
+        "name": "version_probe",
+        "status": "degraded"
+      },
+      {
+        "detail": "/home/pengyuzhang.guest/.npm-global/bin/qwen: no version probe declared",
+        "name": "version_probe",
+        "status": "degraded"
+      },
+      {
+        "detail": "2 bridging merge(s) refused",
+        "name": "resolver",
+        "status": "ran"
+      },
+      {
+        "detail": "unreadable launch shape: adr-probe-env-key",
+        "name": "judge",
+        "status": "degraded"
+      },
+      {
+        "detail": "unreadable launch shape: adr-probe-cd",
+        "name": "judge",
+        "status": "degraded"
+      },
+      {
+        "detail": "unreadable launch shape: adr-probe-cursor",
+        "name": "judge",
+        "status": "degraded"
+      },
+      {
+        "detail": "unreadable launch shape: adr-probe-windsurf",
+        "name": "judge",
+        "status": "degraded"
+      },
+      {
+        "detail": "unreadable launch shape: adr-probe-vscode",
+        "name": "judge",
+        "status": "degraded"
+      },
+      {
+        "detail": "unreadable launch shape: adr-probe-cline",
+        "name": "judge",
+        "status": "degraded"
+      },
+      {
+        "detail": "unreadable launch shape: adr-probe-zed",
+        "name": "judge",
+        "status": "degraded"
+      },
+      {
+        "detail": "unreadable launch shape: adr-probe-jetbrains",
+        "name": "judge",
+        "status": "degraded"
+      },
+      {
+        "detail": "unreadable launch shape: adr-probe-opencode",
+        "name": "judge",
+        "status": "degraded"
+      },
+      {
+        "detail": "unreadable launch shape: adr-probe-goose",
+        "name": "judge",
+        "status": "degraded"
+      },
+      {
+        "detail": "unreadable launch shape: adr-probe-precedence",
+        "name": "judge",
+        "status": "degraded"
+      },
+      {
+        "detail": "unreadable launch shape: adr-probe-adr-policy",
+        "name": "judge",
+        "status": "degraded"
+      },
+      {
+        "detail": "unreadable launch shape: PreToolUse hook 1",
+        "name": "judge",
+        "status": "degraded"
+      },
+      {
+        "detail": "unreadable launch shape: PreToolUse hook 2",
+        "name": "judge",
+        "status": "degraded"
+      },
+      {
+        "detail": "unreadable launch shape: PreToolUse hook 3",
+        "name": "judge",
+        "status": "degraded"
+      },
+      {
+        "detail": "unreadable launch shape: adr-probe-project",
+        "name": "judge",
+        "status": "degraded"
+      },
+      {
+        "detail": "unreadable launch shape: PostToolUse hook 1",
+        "name": "judge",
+        "status": "degraded"
+      }
+    ],
+    "roots_swept": [
+      {
+        "depth_reached": 6,
+        "entries": 6261,
+        "path": "/home/pengyuzhang.guest"
+      }
+    ],
+    "truncated": [
+      {
+        "kept": 64,
+        "path": "/home/pengyuzhang.guest/.local/bin/aider",
+        "true_count": 210
+      },
+      {
+        "kept": 64,
+        "path": "/home/pengyuzhang.guest/.npm-global/bin/claude",
+        "true_count": 328063208
+      },
+      {
+        "kept": 64,
+        "path": "/home/pengyuzhang.guest/.npm-global/bin/codex",
+        "true_count": 5009
+      },
+      {
+        "kept": 64,
+        "path": "/home/pengyuzhang.guest/.npm-global/bin/gemini",
+        "true_count": 836
+      },
+      {
+        "kept": 64,
+        "path": "/home/pengyuzhang.guest/.npm-global/bin/kilo",
+        "true_count": 6309
+      },
+      {
+        "kept": 64,
+        "path": "/home/pengyuzhang.guest/.npm-global/bin/opencode",
+        "true_count": 122036400
+      },
+      {
+        "kept": 64,
+        "path": "/home/pengyuzhang.guest/.local/bin/aider",
+        "true_count": 210
+      },
+      {
+        "kept": 64,
+        "path": "/home/pengyuzhang.guest/.npm-global/bin/claude",
+        "true_count": 328063208
+      },
+      {
+        "kept": 64,
+        "path": "/home/pengyuzhang.guest/.npm-global/bin/codex",
+        "true_count": 5009
+      },
+      {
+        "kept": 64,
+        "path": "/home/pengyuzhang.guest/.npm-global/bin/gemini",
+        "true_count": 836
+      },
+      {
+        "kept": 64,
+        "path": "/home/pengyuzhang.guest/.npm-global/bin/kilo",
+        "true_count": 6309
+      },
+      {
+        "kept": 64,
+        "path": "/home/pengyuzhang.guest/.npm-global/bin/opencode",
+        "true_count": 122036400
+      }
+    ],
+    "unavailable": [
+      {
+        "provider": "dns_cache",
+        "reason": "resolvectl exposes counters, not cache entries"
+      },
+      {
+        "provider": "exec_journal",
+        "reason": "not readable on this host"
+      }
+    ]
+  },
+  "findings": [],
+  "hostname": "lima-adr-disco-linux",
+  "platform": "linux",
+  "review_queue": [],
+  "schema_version": "1.0",
+  "timestamp": "2026-08-24T02:13:24+00:00",
+  "username": "pengyuzhang"
+}
