@@ -1,11 +1,17 @@
 """
 Parser for OpenAI Codex CLI logs.
-Reads JSONL files from ~/.codex/sessions/
+Discovers JSONL files from $CODEX_HOME/sessions/ and read-only state catalogs.
+
+Performance-optimized: Skips rollout files older than 2 weeks by default.
 """
 
 import json
+import math
+import os
+import sqlite3
+import stat
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -14,25 +20,47 @@ from ..utils.string_utils import truncate_middle
 from ..utils.timestamp_utils import normalize_timestamp
 from .base_parser import BaseParser
 
+MAX_LOG_AGE_DAYS = 14
+
 
 class CodexParser(BaseParser):
     """Parser for OpenAI Codex CLI JSONL log files."""
 
-    def __init__(self):
-        self.base_path = Path.home() / ".codex/sessions"
+    def __init__(self, max_age_days: int = MAX_LOG_AGE_DAYS):
+        codex_home_env = os.environ.get("CODEX_HOME")
+        self.codex_home = Path(codex_home_env).expanduser() if codex_home_env else Path.home() / ".codex"
+        self.base_path = self.codex_home / "sessions"
+        self.max_age_days = max_age_days
 
     def parse_all(self) -> List[AgentEvent]:
         """Parse all available Codex logs."""
         entries = []
 
-        if not self.base_path.exists():
-            print(f"[CODEX] No logs found at {self.base_path}")
+        rollout_candidates = self._discover_rollout_files()
+        if not rollout_candidates:
+            print(f"[CODEX] No logs found under {self.codex_home}")
             return entries
 
-        jsonl_files = list(self.base_path.glob("**/*.jsonl"))
-        print(f"[CODEX] Found {len(jsonl_files)} JSONL files")
+        print(f"[CODEX] Found {len(rollout_candidates)} JSONL files")
 
-        for jsonl_file in jsonl_files:
+        rollout_files = list(rollout_candidates)
+        if self.max_age_days > 0:
+            cutoff_time = datetime.now(timezone.utc) - timedelta(days=self.max_age_days)
+            rollout_files = []
+            skipped_count = 0
+
+            for jsonl_file, activity_time in rollout_candidates.items():
+                if activity_time >= cutoff_time:
+                    rollout_files.append(jsonl_file)
+                else:
+                    skipped_count += 1
+
+            if skipped_count > 0:
+                print(f"[CODEX] Skipped {skipped_count} files older than {self.max_age_days} days")
+
+        print(f"[CODEX] Processing {len(rollout_files)} files")
+
+        for jsonl_file in rollout_files:
             try:
                 entry = self.parse_jsonl_file(jsonl_file)
                 if entry and entry.has_meaningful_content():
@@ -41,6 +69,134 @@ class CodexParser(BaseParser):
                 print(f"[CODEX] Error parsing {jsonl_file}: {e}")
 
         return entries
+
+    def _discover_rollout_files(self) -> Dict[Path, datetime]:
+        """Return valid rollout paths and their latest known activity times."""
+        candidates: Dict[Path, datetime] = {}
+
+        try:
+            for rollout_path in self.base_path.glob("**/*.jsonl"):
+                self._add_rollout_candidate(candidates, rollout_path)
+        except OSError as e:
+            # Keep any files yielded before an inaccessible directory interrupted discovery.
+            print(f"[CODEX] Error discovering logs under {self.base_path}: {e}")
+
+        try:
+            for catalog_path in self.codex_home.glob("state_*.sqlite"):
+                self._add_catalog_rollouts(candidates, catalog_path)
+        except OSError as e:
+            print(f"[CODEX] Error discovering state catalogs under {self.codex_home}: {e}")
+
+        return candidates
+
+    @staticmethod
+    def _add_rollout_candidate(
+        candidates: Dict[Path, datetime],
+        rollout_path: Path,
+        catalog_timestamp: Optional[datetime] = None,
+    ) -> None:
+        """Add one existing regular JSONL file, merging duplicate activity times."""
+        try:
+            if rollout_path.suffix != ".jsonl":
+                return
+
+            resolved_path = rollout_path.resolve()
+            file_stat = resolved_path.stat()
+            if not stat.S_ISREG(file_stat.st_mode):
+                return
+            file_mtime = datetime.fromtimestamp(file_stat.st_mtime, tz=timezone.utc)
+        except (OSError, RuntimeError, ValueError, OverflowError):
+            return
+
+        activity_time = file_mtime
+        if catalog_timestamp is not None and catalog_timestamp > activity_time:
+            activity_time = catalog_timestamp
+
+        previous_activity = candidates.get(resolved_path)
+        if previous_activity is None or activity_time > previous_activity:
+            candidates[resolved_path] = activity_time
+
+    def _add_catalog_rollouts(self, candidates: Dict[Path, datetime], catalog_path: Path) -> None:
+        """Read rollout paths from one compatible Codex state catalog."""
+        connection = None
+        try:
+            if not catalog_path.is_file():
+                return
+
+            catalog_uri = f"{catalog_path.resolve().as_uri()}?mode=ro"
+            connection = sqlite3.connect(catalog_uri, uri=True, timeout=0)
+
+            columns = {str(row[1]).lower() for row in connection.execute("PRAGMA table_info(threads)")}
+            if not {"id", "rollout_path"}.issubset(columns):
+                return
+
+            timestamp_columns = [name for name in ("updated_at", "updated_at_ms") if name in columns]
+            selected_columns = ['"id"', '"rollout_path"', *(f'"{name}"' for name in timestamp_columns)]
+            query = f'SELECT {", ".join(selected_columns)} FROM "threads"'
+
+            for row in connection.execute(query):
+                raw_rollout_path = row[1]
+                if not isinstance(raw_rollout_path, str) or not raw_rollout_path:
+                    continue
+
+                rollout_path = Path(raw_rollout_path)
+                if not rollout_path.is_absolute():
+                    rollout_path = self.codex_home / rollout_path
+
+                catalog_timestamp = None
+                for column_name, value in zip(timestamp_columns, row[2:]):
+                    timestamp = self._parse_catalog_timestamp(value, milliseconds=column_name == "updated_at_ms")
+                    if timestamp is not None and (catalog_timestamp is None or timestamp > catalog_timestamp):
+                        catalog_timestamp = timestamp
+
+                self._add_rollout_candidate(candidates, rollout_path, catalog_timestamp)
+        except (OSError, sqlite3.Error, ValueError) as e:
+            print(f"[CODEX] Error reading state catalog {catalog_path}: {e}")
+        finally:
+            if connection is not None:
+                try:
+                    connection.close()
+                except sqlite3.Error:
+                    pass
+
+    @staticmethod
+    def _parse_catalog_timestamp(value: Any, milliseconds: bool = False) -> Optional[datetime]:
+        """Parse a catalog timestamp, returning None when the value is malformed."""
+        if value is None or isinstance(value, bool):
+            return None
+
+        if isinstance(value, str):
+            raw_value = value.strip()
+            if not raw_value:
+                return None
+            try:
+                numeric_value = float(raw_value)
+            except ValueError:
+                try:
+                    iso_value = raw_value[:-1] + "+00:00" if raw_value.endswith(("Z", "z")) else raw_value
+                    parsed = datetime.fromisoformat(iso_value)
+                    if parsed.tzinfo is None:
+                        parsed = parsed.replace(tzinfo=timezone.utc)
+                    return parsed.astimezone(timezone.utc)
+                except (OSError, ValueError, OverflowError):
+                    return None
+        elif isinstance(value, (int, float)):
+            try:
+                numeric_value = float(value)
+            except (OverflowError, ValueError):
+                return None
+        else:
+            return None
+
+        if not math.isfinite(numeric_value):
+            return None
+        if milliseconds or abs(numeric_value) >= 1e12:
+            numeric_value /= 1000
+
+        try:
+            return datetime.fromtimestamp(numeric_value, tz=timezone.utc)
+        except (OSError, ValueError, OverflowError):
+            return None
 
     def parse_jsonl_file(self, file_path: Path) -> Optional[AgentEvent]:
         """Parse a single JSONL file."""

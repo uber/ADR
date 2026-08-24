@@ -157,6 +157,54 @@ class TestClineParser:
 
 
 class TestCodexParser:
+    @staticmethod
+    def _write_rollout(file_path: Path, session_id: str) -> None:
+        """Write a minimal synthetic Codex rollout with meaningful content."""
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        events = [
+            {
+                "type": "session_meta",
+                "payload": {
+                    "id": session_id,
+                    "timestamp": "2025-01-15T10:00:00Z",
+                    "cwd": "/tmp/example-project",
+                },
+            },
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "Review this example"}],
+                },
+            },
+        ]
+        file_path.write_text("".join(f"{json.dumps(event)}\n" for event in events), encoding="utf-8")
+
+    @staticmethod
+    def _write_catalog(catalog_path: Path, rows: list, timestamp_columns: tuple = ()) -> None:
+        """Write a minimal Codex-shaped state catalog."""
+        catalog_path.parent.mkdir(parents=True, exist_ok=True)
+        columns = ["id TEXT", "rollout_path TEXT", *(f"{name}" for name in timestamp_columns)]
+        connection = sqlite3.connect(str(catalog_path))
+        try:
+            connection.execute(f"CREATE TABLE threads ({', '.join(columns)})")
+            placeholders = ", ".join("?" for _ in columns)
+            for row in rows:
+                values = [row.get("id"), row.get("rollout_path")]
+                values.extend(row.get(name) for name in timestamp_columns)
+                connection.execute(f"INSERT INTO threads VALUES ({placeholders})", values)
+            connection.commit()
+        finally:
+            connection.close()
+
+    @staticmethod
+    def _parser_for_home(codex_home: Path, max_age_days: int = 14) -> CodexParser:
+        parser = CodexParser(max_age_days=max_age_days)
+        parser.codex_home = codex_home
+        parser.base_path = codex_home / "sessions"
+        return parser
+
     def test_parse_jsonl_file(self, tmp_path):
         """Test parsing a Codex CLI JSONL file."""
         jsonl_file = tmp_path / "rollout-001.jsonl"
@@ -427,12 +475,314 @@ class TestCodexParser:
         assert len(entry.chat_history) == 2  # user message + assistant tool turn
         assert len([t for m in entry.chat_history for t in m.tools]) == 1
 
-    def test_parse_no_directory(self):
+    def test_parse_no_directory(self, tmp_path):
         """Test parse_all when directory doesn't exist."""
         parser = CodexParser()
-        parser.base_path = Path("/nonexistent/path")
+        parser.codex_home = tmp_path / "missing-codex-home"
+        parser.base_path = parser.codex_home / "sessions"
         entries = parser.parse_all()
         assert entries == []
+
+    def test_default_max_age_days(self):
+        assert CodexParser().max_age_days == 14
+
+    def test_uses_codex_home(self, tmp_path):
+        codex_home = tmp_path / "custom-codex-home"
+
+        with patch.dict(os.environ, {"CODEX_HOME": str(codex_home)}):
+            parser = CodexParser()
+
+        assert parser.codex_home == codex_home
+        assert parser.base_path == codex_home / "sessions"
+
+    def test_defaults_to_dot_codex_under_home(self, tmp_path):
+        with patch.dict(os.environ, {"CODEX_HOME": ""}):
+            with patch("adr_sensor.parsers.codex_parser.Path.home", return_value=tmp_path):
+                parser = CodexParser()
+
+        assert parser.codex_home == tmp_path / ".codex"
+        assert parser.base_path == tmp_path / ".codex/sessions"
+
+    def test_parse_all_filters_old_rollouts_by_mtime(self, tmp_path):
+        recent_rollout = tmp_path / "2025/01/15/rollout-recent.jsonl"
+        old_rollout = tmp_path / "2024/01/15/rollout-old.jsonl"
+        self._write_rollout(recent_rollout, "recent")
+        self._write_rollout(old_rollout, "old")
+
+        now = datetime.now(timezone.utc).timestamp()
+        os.utime(recent_rollout, (now, now))
+        old_mtime = now - timedelta(days=30).total_seconds()
+        os.utime(old_rollout, (old_mtime, old_mtime))
+
+        parser = CodexParser(max_age_days=14)
+        parser.codex_home = tmp_path
+        parser.base_path = tmp_path
+
+        entries = parser.parse_all()
+
+        assert [entry.session_id for entry in entries] == ["codex_recent"]
+
+    @pytest.mark.parametrize("max_age_days", [0, -1])
+    def test_non_positive_max_age_days_includes_all_history(self, tmp_path, max_age_days):
+        rollout = tmp_path / "rollout-history.jsonl"
+        self._write_rollout(rollout, "history")
+        old_mtime = datetime.now(timezone.utc).timestamp() - timedelta(days=365).total_seconds()
+        os.utime(rollout, (old_mtime, old_mtime))
+
+        parser = CodexParser(max_age_days=max_age_days)
+        parser.codex_home = tmp_path
+        parser.base_path = tmp_path
+
+        assert [entry.session_id for entry in parser.parse_all()] == ["codex_history"]
+
+    def test_stat_failure_skips_only_inaccessible_rollout(self, tmp_path):
+        inaccessible_rollout = tmp_path / "rollout-inaccessible.jsonl"
+        readable_rollout = tmp_path / "rollout-readable.jsonl"
+        self._write_rollout(inaccessible_rollout, "inaccessible")
+        self._write_rollout(readable_rollout, "readable")
+
+        parser = CodexParser()
+        parser.codex_home = tmp_path
+        parser.base_path = tmp_path
+        original_stat = Path.stat
+
+        def selective_stat(path, *args, **kwargs):
+            if path == inaccessible_rollout:
+                raise PermissionError("metadata unavailable")
+            return original_stat(path, *args, **kwargs)
+
+        with patch.object(Path, "stat", selective_stat):
+            entries = parser.parse_all()
+
+        assert [entry.session_id for entry in entries] == ["codex_readable"]
+
+    def test_glob_failure_keeps_already_discovered_rollouts(self, tmp_path):
+        rollout = tmp_path / "rollout-discovered.jsonl"
+        self._write_rollout(rollout, "discovered")
+
+        parser = CodexParser()
+        parser.codex_home = tmp_path
+        parser.base_path = tmp_path
+
+        def interrupted_glob(path, pattern):
+            if pattern == "state_*.sqlite":
+                assert path == tmp_path
+                return
+            assert path == tmp_path
+            assert pattern == "**/*.jsonl"
+            yield rollout
+            raise OSError("directory scan interrupted")
+
+        with patch.object(Path, "glob", interrupted_glob):
+            entries = parser.parse_all()
+
+        assert [entry.session_id for entry in entries] == ["codex_discovered"]
+
+    def test_discovers_every_compatible_catalog_without_modifying_them(self, tmp_path):
+        codex_home = tmp_path / "codex home #1"
+        relative_rollout = codex_home / "archived" / "relative.jsonl"
+        absolute_rollout = tmp_path / "external" / "absolute.jsonl"
+        ignored_rollout = codex_home / "archived" / "ignored.jsonl"
+        self._write_rollout(relative_rollout, "relative")
+        self._write_rollout(absolute_rollout, "absolute")
+        self._write_rollout(ignored_rollout, "ignored")
+
+        first_catalog = codex_home / "state_1.sqlite"
+        second_catalog = codex_home / "state_2.sqlite"
+        ignored_catalog = codex_home / "other.sqlite"
+        self._write_catalog(
+            first_catalog,
+            [{"id": "thread-relative", "rollout_path": str(relative_rollout.relative_to(codex_home))}],
+        )
+        self._write_catalog(
+            second_catalog,
+            [{"id": "thread-absolute", "rollout_path": str(absolute_rollout)}],
+        )
+        self._write_catalog(
+            ignored_catalog,
+            [{"id": "thread-ignored", "rollout_path": str(ignored_rollout)}],
+        )
+        catalog_snapshots = {
+            path: (path.read_bytes(), path.stat().st_mtime_ns) for path in (first_catalog, second_catalog)
+        }
+
+        entries = self._parser_for_home(codex_home, max_age_days=0).parse_all()
+
+        assert {entry.session_id for entry in entries} == {"codex_relative", "codex_absolute"}
+        for path, (content, mtime_ns) in catalog_snapshots.items():
+            assert path.read_bytes() == content
+            assert path.stat().st_mtime_ns == mtime_ns
+
+    @pytest.mark.parametrize(("timestamp_column", "multiplier"), [("updated_at", 1), ("updated_at_ms", 1000)])
+    def test_catalog_timestamp_can_keep_old_rollout_in_lookback(self, tmp_path, timestamp_column, multiplier):
+        codex_home = tmp_path / "codex-home"
+        rollout = codex_home / "archived" / f"{timestamp_column}.jsonl"
+        self._write_rollout(rollout, timestamp_column)
+
+        now = datetime.now(timezone.utc).timestamp()
+        old_timestamp = now - timedelta(days=30).total_seconds()
+        os.utime(rollout, (old_timestamp, old_timestamp))
+        self._write_catalog(
+            codex_home / f"state_{timestamp_column}.sqlite",
+            [
+                {
+                    "id": f"thread-{timestamp_column}",
+                    "rollout_path": str(rollout.relative_to(codex_home)),
+                    timestamp_column: int(now * multiplier),
+                }
+            ],
+            timestamp_columns=(timestamp_column,),
+        )
+
+        entries = self._parser_for_home(codex_home).parse_all()
+
+        assert [entry.session_id for entry in entries] == [f"codex_{timestamp_column}"]
+
+    def test_lookback_uses_newest_timestamp_and_deduplicates_paths(self, tmp_path):
+        codex_home = tmp_path / "codex-home"
+        catalog_recent = codex_home / "sessions" / "catalog-recent.jsonl"
+        file_recent = codex_home / "sessions" / "file-recent.jsonl"
+        both_old = codex_home / "sessions" / "both-old.jsonl"
+        malformed_recent = codex_home / "sessions" / "malformed-recent.jsonl"
+        malformed_old = codex_home / "archived" / "malformed-old.jsonl"
+
+        for path, session_id in (
+            (catalog_recent, "catalog-recent"),
+            (file_recent, "file-recent"),
+            (both_old, "both-old"),
+            (malformed_recent, "malformed-recent"),
+            (malformed_old, "malformed-old"),
+        ):
+            self._write_rollout(path, session_id)
+
+        now = datetime.now(timezone.utc).timestamp()
+        old_timestamp = now - timedelta(days=30).total_seconds()
+        for path in (catalog_recent, both_old, malformed_old):
+            os.utime(path, (old_timestamp, old_timestamp))
+
+        self._write_catalog(
+            codex_home / "state_seconds.sqlite",
+            [
+                {
+                    "id": "catalog-recent-old-copy",
+                    "rollout_path": str(catalog_recent.relative_to(codex_home)),
+                    "updated_at": int(old_timestamp),
+                },
+                {
+                    "id": "file-recent",
+                    "rollout_path": str(file_recent.relative_to(codex_home)),
+                    "updated_at": int(old_timestamp),
+                },
+                {
+                    "id": "both-old",
+                    "rollout_path": str(both_old.relative_to(codex_home)),
+                    "updated_at": int(old_timestamp),
+                },
+                {
+                    "id": "malformed-recent",
+                    "rollout_path": str(malformed_recent.relative_to(codex_home)),
+                    "updated_at": "not-a-timestamp",
+                },
+                {
+                    "id": "malformed-old",
+                    "rollout_path": str(malformed_old.relative_to(codex_home)),
+                    "updated_at": "not-a-timestamp",
+                },
+            ],
+            timestamp_columns=("updated_at",),
+        )
+        self._write_catalog(
+            codex_home / "state_milliseconds.sqlite",
+            [
+                {
+                    "id": "catalog-recent-new-copy",
+                    "rollout_path": str(catalog_recent.resolve()),
+                    "updated_at_ms": int(now * 1000),
+                }
+            ],
+            timestamp_columns=("updated_at_ms",),
+        )
+
+        entries = self._parser_for_home(codex_home).parse_all()
+
+        assert {entry.session_id for entry in entries} == {
+            "codex_catalog-recent",
+            "codex_file-recent",
+            "codex_malformed-recent",
+        }
+        assert len(entries) == 3
+
+    def test_catalog_rejects_incompatible_schemas_and_non_jsonl_files(self, tmp_path):
+        codex_home = tmp_path / "codex-home"
+        valid_rollout = codex_home / "archived" / "valid.jsonl"
+        wrong_extension = codex_home / "archived" / "wrong.txt"
+        directory_path = codex_home / "archived" / "directory.jsonl"
+        self._write_rollout(valid_rollout, "valid")
+        self._write_rollout(wrong_extension, "wrong-extension")
+        directory_path.mkdir(parents=True)
+
+        self._write_catalog(
+            codex_home / "state_valid.sqlite",
+            [
+                {"id": "valid", "rollout_path": str(valid_rollout)},
+                {"id": "wrong-extension", "rollout_path": str(wrong_extension)},
+                {"id": "directory", "rollout_path": str(directory_path)},
+                {"id": "missing", "rollout_path": str(codex_home / "missing.jsonl")},
+                {"id": "empty", "rollout_path": ""},
+                {"id": "wrong-type", "rollout_path": 42},
+            ],
+        )
+
+        incompatible_schemas = {
+            "state_missing_id.sqlite": "CREATE TABLE threads (rollout_path TEXT)",
+            "state_missing_path.sqlite": "CREATE TABLE threads (id TEXT)",
+            "state_no_threads.sqlite": "CREATE TABLE metadata (id TEXT, rollout_path TEXT)",
+        }
+        for name, statement in incompatible_schemas.items():
+            connection = sqlite3.connect(str(codex_home / name))
+            try:
+                connection.execute(statement)
+                connection.commit()
+            finally:
+                connection.close()
+
+        entries = self._parser_for_home(codex_home, max_age_days=0).parse_all()
+
+        assert [entry.session_id for entry in entries] == ["codex_valid"]
+
+    def test_corrupt_and_locked_catalogs_do_not_hide_other_candidates(self, tmp_path):
+        codex_home = tmp_path / "codex-home"
+        filesystem_rollout = codex_home / "sessions" / "filesystem.jsonl"
+        valid_catalog_rollout = codex_home / "archived" / "valid-catalog.jsonl"
+        locked_catalog_rollout = codex_home / "archived" / "locked-catalog.jsonl"
+        self._write_rollout(filesystem_rollout, "filesystem")
+        self._write_rollout(valid_catalog_rollout, "valid-catalog")
+        self._write_rollout(locked_catalog_rollout, "locked-catalog")
+
+        corrupt_catalog = codex_home / "state_corrupt.sqlite"
+        corrupt_catalog.write_bytes(b"not a sqlite database")
+        corrupt_snapshot = (corrupt_catalog.read_bytes(), corrupt_catalog.stat().st_mtime_ns)
+        self._write_catalog(
+            codex_home / "state_valid.sqlite",
+            [{"id": "valid", "rollout_path": str(valid_catalog_rollout)}],
+        )
+        locked_catalog = codex_home / "state_locked.sqlite"
+        self._write_catalog(
+            locked_catalog,
+            [{"id": "locked", "rollout_path": str(locked_catalog_rollout)}],
+        )
+
+        locking_connection = sqlite3.connect(str(locked_catalog), timeout=0)
+        locking_connection.execute("BEGIN EXCLUSIVE")
+        try:
+            entries = self._parser_for_home(codex_home, max_age_days=0).parse_all()
+        finally:
+            locking_connection.rollback()
+            locking_connection.close()
+
+        assert {entry.session_id for entry in entries} == {"codex_filesystem", "codex_valid-catalog"}
+        assert corrupt_catalog.read_bytes() == corrupt_snapshot[0]
+        assert corrupt_catalog.stat().st_mtime_ns == corrupt_snapshot[1]
 
 
 def _build_warp_db(db_path: Path, conversations: list) -> None:
