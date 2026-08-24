@@ -202,6 +202,10 @@ Each parsed session produces an `AgentEvent` with the following structure:
 }
 ```
 
+Tool arguments and results can contain source code, credentials, or other sensitive
+content copied from the local environment. Treat sensor output as sensitive data and
+review it before sharing.
+
 ### `session_context`
 
 Parsers that can recover session-level configuration attach it under
