@@ -8,15 +8,38 @@ This is Plane A of ADR Discovery: the endpoint collector. It is standard-library
 
 ## Status
 
-This README is the specification for the collector. The implementation is not in this repository yet — read the module boundaries and the code layout below as the target, not as a description of code you can import today.
+The endpoint collector is implemented in this repository. Its seven-stage pipeline, typed contracts, coverage ledger, evidence ladder, resolver, policy judge, snapshot/delta reporter and command-line entry point are usable today. The implementation is standard-library-only; `pytest` and `ruff` are development dependencies only.
 
 | | |
 | --- | --- |
-| **Design of record** | `adr-discovery-design.html` — the full argument, the module contracts, and the evidence behind each decision |
-| **Measured against** | An existing ~4,900-line pipeline whose behaviour this design responds to |
-| **In this repository** | This specification, and the test plan in [../tests/README.md](../tests/README.md) |
+| **Design of record** | `adr-discovery-design.html` — the full argument, module contracts and complete target corpus |
+| **Implementation** | This package: M1–M7, the cross-cutting catalog/redaction/coverage concerns, and the `adr-discovery` CLI |
+| **Verification** | The fast module and pipeline suite under `tests_unit/`, plus the black-box endpoint harness in [../tests/README.md](../tests/README.md) |
+| **Current maturity** | Core architecture complete; production source coverage and the three-OS golden-endpoint corpus remain incomplete |
 
 The rewrite exists because the old layout had no boundary a linter could check. Five probes each carried their own copy of `PROJECT_ROOTS`; a filename match was enough to become an asset; and a suite of 490 checks derived from the catalog passed while real placement failures went undetected. The sections below are organized around not repeating that.
+
+### Current limitations
+
+- Execution journals are modeled but no production ESF, eBPF or ETW/Sysmon collector is bundled. Their absence is reported in coverage.
+- DNS-cache enumeration is unavailable on the current macOS and Linux providers. Live outbound TCP connections are still collected.
+- Listening sockets are enumerated, but protocol-level HTTP, MCP and model-runtime verification is not implemented.
+- WSL, containers, remote/cloud agents, scheduled agents, account identity and code-signature collection are not implemented.
+- Fleet aggregation, fan-out and trend tracking belong to the central plane and are not part of this endpoint package.
+- The black-box harness is operational for a subset of the manifest. Vendor applications, authenticated sessions, services and model-weight scenarios still need additional install recipes and golden guests.
+- `coverage.out_of_scope` still names instruction files and hooks even though the collector now inventories them. The snapshot vocabulary must be corrected before treating that field as authoritative.
+
+### Run it
+
+From the repository root:
+
+```sh
+uv run adr-discovery --dry-run --json
+uv run adr-discovery --dry-run --explain
+UV_CACHE_DIR=/tmp/adr-discovery-uv-cache uv run pytest -q
+```
+
+A scan that encounters an unreadable, unavailable or truncated surface still emits a snapshot and exits with status `2`; that status means partial coverage, not a failed scan.
 
 ## What it has to find
 
@@ -29,12 +52,11 @@ Four targets. They are not variations on one search — each lives somewhere dif
 | **MCP servers** — stdio, SSE, HTTP, containerized | Config files across a dozen host applications, policy stores, bundles | A declaration, and sometimes a running child process. Often nothing on disk at all |
 | **Skills** — skills, slash commands, output styles, plugins | Agent state directories, plugins, repositories | A file in a structure an agent knows how to load |
 
-### Deliberately out of scope
+### Programmable surfaces and deliberate exclusions
 
-Two categories are excluded on purpose rather than by omission, and both are named in `coverage.out_of_scope` so a reader can tell a clean machine from an unasked question.
+The implementation inventories programmable surfaces that change what an agent can do: skills, commands, output styles, plugins, agent definitions, hooks and instruction files. It records structure and allowlisted metadata, never instruction or skill bodies. This is broader than the original design decision that treated hooks and instruction files only as repository markers.
 
-- **Instruction and rules files** — `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, Cursor and Windsurf rules. These are prose that steers an agent, not software that runs. Their *filenames* remain markers that locate a repository where an agent works; no instruction file becomes an asset.
-- **Scripts the agent executes** — hooks, and the mechanisms that start an agent unattended: launchd plists, cron entries, systemd timers, scheduled tasks, login items. Discovery reports the agent, not the mechanism that starts it.
+Scheduling mechanisms remain deliberately out of scope: launchd plists, cron entries, systemd timers, scheduled tasks and login items do not become assets. The agent they launch may still be found through the process table or an optional execution journal.
 
 ## Architecture
 
@@ -84,7 +106,7 @@ The last two sources answer a different question from the first four. Listening 
 | M4 | Identifier | Deciding what a candidate actually is, and how sure | Renamed tools vanishing; decoys becoming assets |
 | M5 | Resolver | Merging observations into assets; confidence; liveness | False splits and false merges |
 | M6 | Judge | Risk verdicts, sanction state, findings | Findings the operator learns to dismiss |
-| M7 | Reporter | Snapshot, coverage, delta, fleet drift | A partial inventory reading as a complete one |
+| M7 | Reporter | Endpoint snapshot, coverage and delta | A partial inventory reading as a complete one |
 
 Three concerns cut across rather than sitting in the line: **C1 Catalog** is data, not code, so the landscape's weekly churn is not on the release train. **C2 Redaction** happens inside whichever stage touches risky text, never as a pass at the end. **C3 Coverage** is written by every stage, because every stage can fail to see something.
 
@@ -109,17 +131,19 @@ adr_discovery/
 │       └── darwin.py · linux.py · windows.py
 │
 ├── enumerator/           M2 · where to look
-│   ├── sources/            one file per source above — add a source, add a file
-│   │   ├── packages.py · appreg.py · kernel.py · appstate.py
+│   ├── sources/            registry, filesystem, state and runtime sources
+│   │   ├── registries.py   packages · applications · kernel
+│   │   ├── appstate.py · binaries.py · modelstores.py
 │   │   ├── network.py      outbound connections · resolver cache
-│   │   └── execjournal.py  ESF · eBPF · ETW/Sysmon — optional
+│   │   └── execjournal.py  optional historical execution source
 │   ├── sweep.py            marker traversal, breadth-ordered, under the shared budget
 │   ├── markers.py          the marker set, as data
 │   └── roots.py            priority roots — one definition
 │
 ├── extractor/            M3 · what is declared
 │   ├── isolate.py          the per-record try boundary, written once
-│   └── formats/            json.py · toml.py · yaml.py · plist.py · workflow.py
+│   ├── surfaces.py         skills · commands · plugins · agent definitions
+│   └── formats/            JSON · TOML · plist · guarded YAML · front matter · workflows
 │
 ├── identifier/           M4 · what it really is
 │   ├── ladder.py           provenance → content → behaviour → convention, stop at proof
@@ -163,11 +187,12 @@ One normalized record per asset, keyed so policy can act on it and a delta can t
 asset_id      stable across version upgrades, store rebuilds, credential rotation
 kind          cli_agent · app · ai_browser · model_runtime · model_weights
               extension · mcp_server · mcp_bundle · skill · command
-              plugin · output_style · agent_definition · ci_agent · cloud_agent
+              plugin · output_style · agent_definition · hook · instructions
+              ci_agent · cloud_agent · agent_platform
 identity      catalog id, or a content-derived identity for the uncatalogued
               name · vendor · version · install_path · install_root · install_method
 owner         a person, or "system" — never whoever ran the scan
-location      local · wsl:<distro> · container · remote:<host>
+location      local today; the schema reserves wsl:<distro> · container · remote:<host>
 evidence[]    {stage, channel, path, proof, confidence}   ← why we believe it
 verification  how identity was established: provenance · content · behaviour
 confidence    derived from channel count, reported as a band
@@ -204,7 +229,7 @@ This runs on employee laptops in a jurisdictionally messy fleet. The constraints
 - **Applied at collection**, inside the stage that touches the risky text — not as a filter afterwards, which is something a new probe can be added behind.
 - **Both directions are measured.** A leak is obvious; over-redaction is not. A dropped flag name is an undetected permission bypass, so signal retention is measured alongside leak count.
 - **Personal paths are denied centrally**, enforced at M1, so a stage added tomorrow inherits it.
-- **`--dry-run --explain` prints exactly what would leave the machine**, per stage and per field. The collector is open source; an employee can read it and check.
+- **`--explain` prints the collection and redaction rules.** `--dry-run --json` emits the resulting snapshot without writing it to disk. A future explain mode should join these into a per-stage, per-field payload trace.
 
 The tension worth naming: M4's content and provenance evidence is stronger than name matching precisely because it looks harder at the machine. The line held here is *hash and identify, never transmit content; report that a credential is reachable, never which one it is.*
 
@@ -228,24 +253,24 @@ The fast per-commit suite is a separate instrument, documented alongside it: syn
 
 The two are complementary and neither replaces the other. The fixture suite has a perfect oracle — it built the machine — but can only contain situations somebody imagined, so it catches regressions. The VM run has real input nobody predicted but a slower, costlier oracle, so it discovers defects. Every defect a VM run finds should be reduced to a fixture case, which is the intended flow of work between them.
 
-Automating that VM run — provision, install a manifest, scan, score, and replay the scoring over recorded runs without touching a VM — is in progress under `tests/`.
+The harness under `tests/` can validate manifests, synthesize and replay recorded runs, provision through its current guest drivers, and generate JSON and HTML scorecards. Only part of the install manifest currently has executable recipes; see [HARNESS.md](../tests/HARNESS.md) for current counts and known guest limitations.
 
 Unit tests mirror the package tree — one directory per module, importing only that module. The arrangement is the assertion: a module that cannot be tested without standing up three others does not have a boundary, whatever the directory listing says.
 
-## Build order
+## Implementation progress
 
-Sequenced by how much of the measured failure each step removes, not by module number.
+The original build order is now a progress checklist.
 
-| Step | Work | Closes |
+| Status | Work | Notes |
 | --- | --- | --- |
-| 1 | Extract every hard-coded root into M2; single sweep, single budget, boundaries reported | 4 of 5 in-scope placement misses; duplicated tuples in five files |
-| 2 | Kernel and registry sources; all browser profiles | Wrong-path attribution; extensions on non-default profiles; provenance for M4 |
-| 3 | M4 evidence ladder with verified version shapes; catalog gains its `proofs` block | The fabricated asset; the renamed agent; missing versions |
-| 4 | Content identity in M5; attributes bind to installs | The Ollama split, and its whole class |
-| 5 | Coverage ledger as a first-class snapshot field | Every silent boundary, including the ones not yet found |
-| 6 | Golden-endpoint corpus and a placement matrix per target, in CI | The circularity that let all of the above pass |
+| Complete | Single M2 sweep, priority roots, shared budget and reported boundaries | Removes duplicated root lists and makes partial traversal visible |
+| Partial | Kernel, package/application registry and per-profile application-state sources | Core providers exist; DNS history, execution journals and several platform-specific surfaces remain |
+| Complete | Evidence ladder, verified version shapes and schema-validated catalog proofs | Convention alone never concludes identity |
+| Complete | Content/installation identity, conflict-safe merging and stable asset IDs | Covered by resolver and delta regressions |
+| Complete | First-class coverage, privacy constructors, snapshot round trip and endpoint delta | Partial scans are emitted and return a distinct CLI status |
+| Partial | Golden-endpoint corpus and placement matrices | Scorer and subset recipes exist; full macOS/Linux/Windows execution remains |
 
-Steps 1 and 2 are mechanical and remove most of the measured miss rate. Step 3 changes the module's character and is the one to be careful with: it must not cost precision.
+The next work should prioritize production protocol verification and source coverage, then finish the golden-endpoint recipes. More fixture tests alone cannot establish real precision or recall.
 
 ## License
 
