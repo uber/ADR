@@ -1331,27 +1331,27 @@ class TestWindowsAppDataResolution:
         monkeypatch.delenv("LOCALAPPDATA", raising=False)
         assert windows_local_appdata() == Path.home() / "AppData/Local"
 
-    def test_redirected_appdata_end_to_end(self, tmp_path):
+    def test_redirected_appdata_end_to_end(self, tmp_path, monkeypatch):
         """A Cursor DB under a redirected %APPDATA% (outside the profile) is found."""
-        import importlib
-        import os as os_mod
-
-        from adr_sensor.parsers import cursor_parser as cursor_parser_module
-
         redirected = tmp_path / "fileserver/profiles$/alice/AppData/Roaming"
         db = redirected / "Cursor/User/globalStorage/state.vscdb"
         db.parent.mkdir(parents=True)
         db.touch()
 
-        original = os_mod.environ.get("APPDATA")
-        os_mod.environ["APPDATA"] = str(redirected)
-        try:
-            # DB_PATHS is built at import time, so reload under the redirected env.
-            importlib.reload(cursor_parser_module)
-            assert cursor_parser_module.CursorParser().db_path == db
-        finally:
-            if original is None:
-                os_mod.environ.pop("APPDATA", None)
-            else:
-                os_mod.environ["APPDATA"] = original
-            importlib.reload(cursor_parser_module)
+        monkeypatch.setenv("APPDATA", str(redirected))
+
+        windows_db = windows_appdata() / "Cursor/User/globalStorage/state.vscdb"
+        assert windows_db == db
+
+        # Isolate this Windows-path test from real Cursor installations on the host.
+        monkeypatch.setattr(
+            CursorParser,
+            "DB_PATHS",
+            [
+                tmp_path / "missing-macos/state.vscdb",
+                tmp_path / "missing-linux/state.vscdb",
+                windows_db,
+            ],
+        )
+
+        assert CursorParser().db_path == db
