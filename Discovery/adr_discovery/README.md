@@ -146,8 +146,8 @@ adr_discovery/
 │   └── formats/            JSON · TOML · plist · guarded YAML · front matter · workflows
 │
 ├── identifier/           M4 · what it really is
-│   ├── ladder.py           provenance → content → behaviour → convention, stop at proof
-│   ├── verify.py           run the version probe, then check the shape of the answer
+│   ├── ladder.py           provenance → content → convention, stop at proof
+│   ├── verify.py           compatibility refusal for executable probes
 │   └── openworld.py        score the uncatalogued on properties, never on names
 │
 ├── resolver/             M5 · one thing, one asset
@@ -194,14 +194,14 @@ identity      catalog id, or a content-derived identity for the uncatalogued
 owner         a person, or "system" — never whoever ran the scan
 location      local today; the schema reserves wsl:<distro> · container · remote:<host>
 evidence[]    {stage, channel, path, proof, confidence}   ← why we believe it
-verification  how identity was established: provenance · content · behaviour
+verification  how identity was established: provenance · content
 confidence    derived from channel count, reported as a band
 liveness      running · installed · declared_only
 last_used     from Sensor session telemetry
 risk          {pinned, factors[], credential_kinds[], env_names[], …}
 ```
 
-`evidence` makes every claim checkable, and `verification` says which rung of the ladder established identity — so a reader can tell a package-owned binary from a filename that looked right.
+`evidence` makes every claim checkable, and `verification` says which rung of the ladder established identity — so a reader can tell a package-owned binary from a filename that looked right. Discovered executables are never run. OS inventory helpers use fixed absolute paths through a separate bounded-output interface; they cannot be selected through the scanner's inherited `PATH`.
 
 ### Coverage travels with it
 

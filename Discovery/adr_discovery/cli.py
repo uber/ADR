@@ -14,6 +14,7 @@ import os
 import platform
 import socket
 import sys
+import unicodedata
 from datetime import datetime, timezone
 
 from .catalog.load import CatalogError
@@ -29,6 +30,7 @@ from .world.gate import Gate
 from .world.platform import for_host
 
 EXIT_OK, EXIT_ERROR, EXIT_PARTIAL = 0, 1, 2
+MAX_JSON_INPUT = 16 * 1024 * 1024
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -45,7 +47,6 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--allow-cross-endpoint", action="store_true",
                    help="permit a diff between two different hosts")
     p.add_argument("--max-entries", type=int, default=200_000, help="shared sweep ceiling")
-    p.add_argument("--no-subprocess", action="store_true", help="refuse the behaviour rung")
     return p
 
 
@@ -70,13 +71,19 @@ def main(argv: list[str] | None = None) -> int:
 
     policy = Policy()
     if args.policy:
-        with open(args.policy, encoding="utf-8") as fh:
-            policy = Policy.from_dict(json.load(fh))
+        try:
+            policy = Policy.from_dict(_load_json_mapping(args.policy, "policy"))
+        except (OSError, ValueError, TypeError) as exc:
+            print(f"cannot read policy: {_terminal(exc)}", file=sys.stderr)
+            return EXIT_ERROR
 
     telemetry = None
     if args.telemetry:
-        with open(args.telemetry, encoding="utf-8") as fh:
-            telemetry = json.load(fh)
+        try:
+            telemetry = _telemetry(_load_json_mapping(args.telemetry, "telemetry"))
+        except (OSError, ValueError, TypeError) as exc:
+            print(f"cannot read telemetry: {_terminal(exc)}", file=sys.stderr)
+            return EXIT_ERROR
 
     gate = Gate(
         root=args.root,
@@ -84,7 +91,6 @@ def main(argv: list[str] | None = None) -> int:
         budget=Budget(max_entries=args.max_entries),
         providers=for_host() if args.root == "/" else None,
         env=dict(os.environ),
-        allow_subprocess=not args.no_subprocess,
     )
 
     snapshot = discover(
@@ -102,10 +108,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.diff:
         try:
-            with open(args.diff, encoding="utf-8") as fh:
-                previous = from_dict(json.load(fh))
-        except (OSError, ValueError, KeyError) as exc:
-            print(f"cannot read {args.diff}: {exc}", file=sys.stderr)
+            previous = from_dict(_load_json_mapping(args.diff, "snapshot"))
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            print(f"cannot read {_terminal(args.diff)}: {_terminal(exc)}", file=sys.stderr)
             return EXIT_ERROR
         try:
             _delta(diff(previous, snapshot, args.allow_cross_endpoint))
@@ -114,11 +119,13 @@ def main(argv: list[str] | None = None) -> int:
             return EXIT_ERROR
 
     if not args.dry_run:
-        os.makedirs(args.output_dir, exist_ok=True)
-        target = os.path.join(args.output_dir, f"snapshot-{snapshot.timestamp.replace(':', '')}.json")
-        with open(target, "w", encoding="utf-8") as fh:
-            fh.write(to_json(snapshot))
-        print(f"\nwrote {target}", file=sys.stderr)
+        filename = f"snapshot-{snapshot.timestamp.replace(':', '')}.json"
+        try:
+            target = _write_private(args.output_dir, filename, to_json(snapshot))
+        except OSError as exc:
+            print(f"cannot write snapshot: {_terminal(exc)}", file=sys.stderr)
+            return EXIT_ERROR
+        print(f"\nwrote {_terminal(target)}", file=sys.stderr)
 
     # A scan that could not see everything says so in its exit code, because
     # a partial inventory must never be indistinguishable from a clean one.
@@ -126,32 +133,103 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _delta(delta) -> None:
-    print(f"\ndelta vs the previous snapshot of {delta.endpoint}")
+    print(f"\ndelta vs the previous snapshot of {_terminal(delta.endpoint)}")
     if delta.is_empty:
         print("  no change")
         return
     for change in delta.changes:
-        detail = f"  ({change.detail})" if change.detail else ""
-        print(f"  {change.kind:<16} {change.name}{detail}")
+        detail = f"  ({_terminal(change.detail)})" if change.detail else ""
+        print(f"  {_terminal(change.kind):<16} {_terminal(change.name)}{detail}")
     for note in delta.coverage_delta:
-        print(f"  coverage         {note}")
+        print(f"  coverage         {_terminal(note)}")
 
 
 def _summary(snapshot) -> None:
     counts = stats(snapshot)
-    print(f"{snapshot.hostname} · {snapshot.platform} · catalog {snapshot.catalog_version}")
+    print(f"{_terminal(snapshot.hostname)} · {_terminal(snapshot.platform)} · "
+          f"catalog {_terminal(snapshot.catalog_version)}")
     print(f"  assets {counts['asset_count']} · findings {counts['finding_count']} · "
           f"review queue {counts['review_queue_count']} · coverage gaps {counts['coverage_gaps']}")
     for asset in snapshot.assets:
-        version = f" {asset.version}" if asset.version else ""
-        print(f"    {asset.kind.value:<14} {asset.name}{version}  [{asset.liveness.value}, "
+        version = f" {_terminal(asset.version)}" if asset.version else ""
+        print(f"    {asset.kind.value:<14} {_terminal(asset.name)}{version}  [{asset.liveness.value}, "
               f"{asset.confidence.label} confidence]")
     for finding in snapshot.findings:
-        print(f"  ! {finding.severity:<7} {finding.rule}: {finding.summary}")
+        print(f"  ! {_terminal(finding.severity):<7} {_terminal(finding.rule)}: "
+              f"{_terminal(finding.summary)}")
     cov = snapshot.coverage
     if not cov.is_complete:
         print(f"  coverage: {len(cov.denied)} denied · {len(cov.unavailable)} unavailable · "
               f"{len(cov.boundaries_hit)} boundaries · {len(cov.truncated)} truncated")
+
+
+def _load_json_mapping(path: str, label: str) -> dict:
+    """Load one bounded JSON object; optional CLI inputs are untrusted too."""
+    with open(path, "rb") as fh:
+        raw = fh.read(MAX_JSON_INPUT + 1)
+    if len(raw) > MAX_JSON_INPUT:
+        raise ValueError(f"{label} exceeds {MAX_JSON_INPUT} bytes")
+    try:
+        document = json.loads(raw)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise ValueError(f"{label} is not valid JSON: {exc}") from exc
+    if not isinstance(document, dict):
+        raise ValueError(f"{label} root must be an object")
+    return document
+
+
+def _telemetry(document: dict) -> dict[str, str]:
+    if not all(isinstance(key, str) and isinstance(value, str) for key, value in document.items()):
+        raise ValueError("telemetry must map strings to strings")
+    return document
+
+
+def _write_private(output_dir: str, filename: str, text: str) -> str:
+    """Create a new private snapshot without following a target symlink."""
+    if os.path.basename(filename) != filename:
+        raise OSError("snapshot filename must not contain a directory")
+    os.makedirs(output_dir, mode=0o700, exist_ok=True)
+    absolute = os.path.abspath(output_dir)
+    if os.path.islink(absolute):
+        raise OSError("output directory must not be a symlink")
+
+    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    directory_fd = os.open(absolute, directory_flags)
+    try:
+        before = os.fstat(directory_fd)
+        current = os.stat(absolute, follow_symlinks=False)
+        if (before.st_dev, before.st_ino) != (current.st_dev, current.st_ino):
+            raise OSError("output directory changed during validation")
+
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+        if os.open in os.supports_dir_fd:
+            fd = os.open(filename, flags, 0o600, dir_fd=directory_fd)
+        else:  # Windows has no dir_fd variant; O_EXCL still prevents clobbering.
+            fd = os.open(os.path.join(absolute, filename), flags, 0o600)
+        try:
+            if hasattr(os, "fchmod"):
+                os.fchmod(fd, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fd = -1
+                fh.write(text)
+        finally:
+            if fd >= 0:
+                os.close(fd)
+    finally:
+        os.close(directory_fd)
+    return os.path.join(output_dir, filename)
+
+
+def _terminal(value: object) -> str:
+    """Render untrusted text without terminal control or bidi characters."""
+    out = []
+    for char in str(value):
+        if unicodedata.category(char).startswith("C"):
+            code = ord(char)
+            out.append(f"\\x{code:02x}" if code <= 0xFF else f"\\u{code:04x}")
+        else:
+            out.append(char)
+    return "".join(out)
 
 
 if __name__ == "__main__":
