@@ -109,10 +109,57 @@ def test_u1_08_subprocess_timeout_is_a_refusal_not_an_answer(world):
     os.chmod(world.root + "/slow", 0o755)
     gate = world.gate(budget=Budget(max_subprocess_seconds=0.2))
 
-    result = gate.run(("/slow",))
+    result = gate.run_helper(("/slow",))
 
     assert not result.ok and result.reason == "timeout"
     assert any(p.status == "failed" for p in gate.ledger.freeze().probes)
+
+
+def test_u1_08b_helpers_never_search_path(world):
+    world.exe("/attacker/bin/ps", "owned")
+    gate = world.gate(env={"PATH": world.root + "/attacker/bin"})
+
+    result = gate.run_helper(("ps", "--version"))
+
+    assert not result.ok and result.reason == "helper_not_absolute"
+
+
+def test_u1_08c_subprocess_output_is_bounded(world):
+    world.file("/loud", "#!/bin/sh\nhead -c 9000 /dev/zero\n")
+    os.chmod(world.root + "/loud", 0o755)
+    gate = world.gate()
+
+    result = gate.run_helper(("/loud",))
+
+    assert not result.ok and result.reason == "output_limit"
+
+
+def test_u1_08d_directory_listing_spends_the_budget_while_iterating(world):
+    for index in range(10):
+        world.file(f"/wide/{index}", "")
+    gate = world.gate(budget=Budget(max_entries=3))
+
+    result = gate.list_dir("/wide")
+
+    assert result.ok and len(result.value) == 3
+    assert gate.budget.entries_used == 3
+    assert any(b.boundary == "budget_exhausted" for b in gate.ledger.freeze().boundaries_hit)
+
+
+def test_u1_08e_an_ancestor_swap_is_refused(world):
+    world.file("/race/dir/target", "public")
+    world.file("/home/a/Documents/target", "private")
+    gate = world.gate()
+
+    def swap_ancestor(resolved: str) -> None:
+        if resolved.endswith("/race/dir/target"):
+            os.rename(world.root + "/race/dir", world.root + "/race/original")
+            os.symlink(world.root + "/home/a/Documents", world.root + "/race/dir")
+
+    gate.on_validated = swap_ancestor
+    result = gate.read_text("/race/dir/target")
+
+    assert not result.ok and result.reason == "swapped"
 
 
 def test_u1_09_a_missing_provider_is_unavailable_not_empty(world):

@@ -37,7 +37,7 @@ class DarwinProviders(NullProviders):
     def processes(self, gate):
         from ..gate import Ok
 
-        ran = gate.run(("ps", "-axo", "pid=,ppid=,user=,comm="))
+        ran = gate.run_helper(("/bin/ps", "-axo", "pid=,ppid=,user=,comm="))
         if not ran.ok or ran.value.code != 0:
             return self._unavailable(gate, "processes")
         procs: list[Process] = []
@@ -54,7 +54,7 @@ class DarwinProviders(NullProviders):
     def sockets(self, gate):
         from ..gate import Ok
 
-        ran = gate.run(("lsof", "-nP", "-iTCP"))
+        ran = gate.run_helper(("/usr/sbin/lsof", "-nP", "-iTCP"))
         if not ran.ok or ran.value.code != 0:
             return self._unavailable(gate, "sockets")
         out: list[Socket] = []

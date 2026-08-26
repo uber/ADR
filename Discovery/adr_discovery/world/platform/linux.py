@@ -153,7 +153,7 @@ class LinuxProviders(NullProviders):
                 elif manager == "flatpak" and entry.is_dir:
                     found.append(Package(manager, name, None, entry.path))
 
-        rpm = gate.run(("rpm", "-qa", "--qf", "%{NAME}\\t%{VERSION}-%{RELEASE}\\n"))
+        rpm = gate.run_helper(("/usr/bin/rpm", "-qa", "--qf", "%{NAME}\\t%{VERSION}-%{RELEASE}\\n"))
         if rpm.ok and rpm.value.code == 0:
             for line in rpm.value.stdout.splitlines():
                 name, sep, version = line.partition("\t")
@@ -193,7 +193,7 @@ class LinuxProviders(NullProviders):
         return Ok(tuple(apps))
 
     def dns_cache(self, gate):
-        ran = gate.run(("resolvectl", "statistics"))
+        ran = gate.run_helper(("/usr/bin/resolvectl", "statistics"))
         if not ran.ok:
             return self._unavailable(gate, "dns_cache")
         # resolvectl exposes counters, not entries, on most builds. Report
@@ -206,7 +206,7 @@ class LinuxProviders(NullProviders):
     def package_owner(self, gate, path):
         from ..gate import Ok, Refused
 
-        ran = gate.run(("dpkg", "-S", path))
+        ran = gate.run_helper(("/usr/bin/dpkg", "-S", path))
         if not ran.ok:
             return ran
         if ran.value.code != 0 or ":" not in ran.value.stdout:

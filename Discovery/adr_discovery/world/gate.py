@@ -17,7 +17,11 @@ from __future__ import annotations
 
 import errno
 import os
+import signal
 import subprocess
+import threading
+import time
+from collections import deque
 from dataclasses import dataclass
 from typing import Generic, Iterator, TypeVar
 
@@ -27,6 +31,8 @@ from .budget import Budget
 from .platform.base import Providers
 
 T = TypeVar("T")
+MAX_SUBPROCESS_OUTPUT = 8192
+_HELPER_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,13 +94,11 @@ class Gate:
         budget: Budget | None = None,
         providers: Providers | None = None,
         env: dict[str, str] | None = None,
-        allow_subprocess: bool = True,
     ) -> None:
         self._root = os.path.realpath(root)
         self.ledger = ledger if ledger is not None else Ledger()
         self.budget = budget if budget is not None else Budget()
         self.env = dict(env) if env is not None else {}
-        self.allow_subprocess = allow_subprocess
         from .platform.base import NullProviders
 
         self.providers = providers if providers is not None else NullProviders()
@@ -151,36 +155,39 @@ class Gate:
 
     # ---------------------------------------------------------------- reads
 
-    def _open_verified(self, resolved: str) -> Result[int]:
-        """Checking a path and opening it are two operations.
+    def _open_verified(self, logical: str, resolved: str, flags: int = os.O_RDONLY) -> Result[int]:
+        """Open a target, then prove the descriptor still names the validated path.
 
-        The descriptor is compared against the validated target, so a swap
-        between the two is a refusal rather than a read.
+        Revalidating after open closes the ancestor-swap race: checking only
+        the final component with ``O_NOFOLLOW`` is insufficient when an
+        attacker controls a directory above it.
         """
-        try:
-            before = os.stat(resolved, follow_symlinks=False)
-        except FileNotFoundError:
-            return Refused("absent", resolved)
-        except OSError as exc:
-            return Refused("stat_failed", exc.strerror or str(exc))
-
         if self.on_validated is not None:
             self.on_validated(resolved)
 
         try:
-            fd = os.open(resolved, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+            fd = os.open(resolved, flags | getattr(os, "O_NOFOLLOW", 0))
+        except FileNotFoundError:
+            return Refused("absent", resolved)
         except OSError as exc:
-            # The target was already resolved, so it cannot legitimately be a
-            # symlink by the time we open it. ELOOP here means the path was
-            # replaced between the check and the open.
             if exc.errno == errno.ELOOP:
                 return Refused("swapped", "target became a symlink after validation")
             return Refused("open_failed", exc.strerror or str(exc))
 
-        after = os.fstat(fd)
-        if (after.st_dev, after.st_ino) != (before.st_dev, before.st_ino):
+        current = self._validate(logical)
+        try:
+            descriptor = os.fstat(fd)
+            path_stat = os.stat(resolved, follow_symlinks=False)
+        except OSError as exc:
             os.close(fd)
-            return Refused("swapped", "descriptor did not match the validated target")
+            return Refused("swapped", exc.strerror or str(exc))
+        if (
+            not current.ok
+            or current.value != resolved
+            or (descriptor.st_dev, descriptor.st_ino) != (path_stat.st_dev, path_stat.st_ino)
+        ):
+            os.close(fd)
+            return Refused("swapped", "descriptor did not match the revalidated target")
         return Ok(fd)
 
     def read_bytes(self, logical: str, limit: int | None = None) -> Result[bytes]:
@@ -191,7 +198,7 @@ class Gate:
         resolved = validated.value
         ceiling = self.budget.max_read_bytes if limit is None else min(limit, self.budget.max_read_bytes)
 
-        opened = self._open_verified(resolved)
+        opened = self._open_verified(logical, resolved)
         if not opened.ok:
             if opened.reason in ("open_failed", "stat_failed"):
                 self.ledger.deny(logical, opened.detail or opened.reason)
@@ -228,6 +235,17 @@ class Gate:
         except OSError as exc:
             self.ledger.deny(logical, exc.strerror or str(exc))
             return Refused("stat_failed", exc.strerror or str(exc))
+        current = self._validate(logical)
+        if not current.ok or current.value != resolved:
+            self.ledger.deny(logical, "target swapped after validation")
+            return Refused("swapped", "path changed during stat")
+        try:
+            after = os.stat(resolved)
+        except OSError as exc:
+            return Refused("swapped", exc.strerror or str(exc))
+        if (st.st_dev, st.st_ino) != (after.st_dev, after.st_ino):
+            self.ledger.deny(logical, "target swapped after validation")
+            return Refused("swapped", "path changed during stat")
         return Ok(
             Stat(
                 path=logical,
@@ -245,32 +263,47 @@ class Gate:
         if not validated.ok:
             return validated
         resolved = validated.value
-        try:
-            raw = sorted(os.scandir(resolved), key=lambda e: e.name)
-        except FileNotFoundError:
-            # Absent is not denied. A surface that does not exist was not
-            # refused, and recording it here would drown the real refusals
-            # and make `coverage.is_complete` meaningless.
-            return Refused("absent", logical)
-        except OSError as exc:
-            self.ledger.deny(logical, exc.strerror or str(exc))
-            return Refused("listdir_failed", exc.strerror or str(exc))
+        directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+        opened = self._open_verified(logical, resolved, directory_flags)
+        if not opened.ok:
+            if opened.reason not in ("absent",):
+                self.ledger.deny(logical, opened.detail or opened.reason)
+            return opened
 
+        fd = opened.value
         entries: list[Entry] = []
-        for e in raw:
-            try:
-                info = e.stat(follow_symlinks=False)
-                entries.append(
-                    Entry(
-                        path=os.path.join(logical, e.name) if logical != "/" else "/" + e.name,
-                        is_dir=e.is_dir(follow_symlinks=False),
-                        is_symlink=e.is_symlink(),
-                        size=info.st_size,
-                        is_exec=bool(info.st_mode & 0o111) and not e.is_dir(follow_symlinks=False),
-                    )
-                )
-            except OSError:
-                continue
+        exhausted = False
+        try:
+            with os.scandir(fd) as listing:
+                for e in listing:
+                    if not self.budget.take_entries():
+                        exhausted = True
+                        break
+                    try:
+                        info = e.stat(follow_symlinks=False)
+                        is_dir = e.is_dir(follow_symlinks=False)
+                        entries.append(
+                            Entry(
+                                path=os.path.join(logical, e.name) if logical != "/" else "/" + e.name,
+                                is_dir=is_dir,
+                                is_symlink=e.is_symlink(),
+                                size=info.st_size,
+                                is_exec=bool(info.st_mode & 0o111) and not is_dir,
+                            )
+                        )
+                    except OSError:
+                        continue
+        except (OSError, TypeError) as exc:
+            self.ledger.deny(logical, getattr(exc, "strerror", None) or str(exc))
+            return Refused("listdir_failed", str(exc))
+        finally:
+            os.close(fd)
+
+        if exhausted:
+            self.ledger.boundary(
+                logical, "budget_exhausted", f"cap {self.budget.max_entries}; directory truncated"
+            )
+        entries.sort(key=lambda entry: entry.path)
         return Ok(tuple(entries))
 
     def walk(self, logical_root: str, max_depth: int | None = None) -> Iterator[Entry]:
@@ -281,13 +314,13 @@ class Gate:
         everything in the first deep subtree it meets.
         """
         depth_cap = self.budget.max_depth if max_depth is None else max_depth
-        frontier: list[tuple[str, int]] = [(logical_root, 0)]
+        frontier = deque([(logical_root, 0)])
         seen: set[str] = set()
         deepest = 0
         count = 0
 
         while frontier:
-            path, depth = frontier.pop(0)
+            path, depth = frontier.popleft()
             if depth > depth_cap:
                 self.ledger.boundary(path, "depth", f"cap {depth_cap}")
                 continue
@@ -300,10 +333,6 @@ class Gate:
                 continue
             deepest = max(deepest, depth)
             for entry in listing.value:
-                if not self.budget.take_entries():
-                    self.ledger.boundary(path, "budget_exhausted", f"cap {self.budget.max_entries}")
-                    self.ledger.swept(logical_root, deepest, count)
-                    return
                 count += 1
                 yield entry
                 if entry.is_dir and not entry.is_symlink and entry.path not in seen:
@@ -338,22 +367,19 @@ class Gate:
 
     # ----------------------------------------------------------- subprocess
 
-    def run(self, argv: tuple[str, ...], timeout: float | None = None) -> Result[Ran]:
-        """One sandboxed subprocess, under the budget's time ceiling.
+    def run_helper(self, argv: tuple[str, ...], timeout: float | None = None) -> Result[Ran]:
+        """Run one absolute-path OS inventory helper with bounded output.
 
-        The executable is resolved through the world like every other path,
-        so a caller passes the same logical path it would pass to a read.
-        Without that, a fixture and a live machine are not interchangeable
-        and every case has to know which one it is running against.
-
-        Output is capped and a timeout is a recorded refusal, so partial
-        output can never be mistaken for a version string.
+        This API is deliberately unavailable to discovered candidates. It
+        does not search ``PATH`` and drains output incrementally, so neither
+        path precedence nor post-exit slicing can turn inventory into code
+        execution or an unbounded allocation.
         """
         self.calls["run"] += 1
-        if not self.allow_subprocess:
-            return Refused("subprocess_disabled", "")
         if not argv:
             return Refused("no_argv", "")
+        if not os.path.isabs(argv[0]):
+            return Refused("helper_not_absolute", argv[0])
         if self.budget.time_exhausted:
             self.ledger.probe(argv[0], "failed", "scan time budget exhausted")
             return Refused("time_budget_exhausted", f"{self.budget.max_seconds}s")
@@ -366,19 +392,81 @@ class Gate:
             target = validated.value
 
         limit = self.budget.max_subprocess_seconds if timeout is None else timeout
+        env = {"PATH": _HELPER_PATH, "LC_ALL": "C", "LANG": "C"}
+        if os.name == "nt":
+            env.update({"SystemRoot": r"C:\Windows", "WINDIR": r"C:\Windows"})
         try:
-            proc = subprocess.run(
+            proc = subprocess.Popen(
                 [target, *argv[1:]],
-                capture_output=True,
-                text=True,
-                timeout=limit,
-                env={"PATH": self.env.get("PATH", "/usr/bin:/bin"), "LC_ALL": "C"},
-                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=env,
+                start_new_session=os.name != "nt",
             )
-        except subprocess.TimeoutExpired:
-            self.ledger.probe(argv[0] if argv else "?", "failed", "timeout")
-            return Refused("timeout", f"{limit}s")
         except (OSError, ValueError) as exc:
             self.ledger.probe(argv[0] if argv else "?", "failed", str(exc))
             return Refused("spawn_failed", str(exc))
-        return Ok(Ran(tuple(argv), proc.returncode, proc.stdout[:8192]))
+
+        stdout = bytearray()
+        total = [0]
+        lock = threading.Lock()
+        overflow = threading.Event()
+
+        def drain(stream, keep: bool) -> None:
+            while True:
+                chunk = stream.read(4096)
+                if not chunk:
+                    return
+                with lock:
+                    total[0] += len(chunk)
+                    if keep and len(stdout) < MAX_SUBPROCESS_OUTPUT:
+                        remaining = MAX_SUBPROCESS_OUTPUT - len(stdout)
+                        stdout.extend(chunk[:remaining])
+                    if total[0] > MAX_SUBPROCESS_OUTPUT:
+                        overflow.set()
+
+        threads = [
+            threading.Thread(target=drain, args=(proc.stdout, True), daemon=True),
+            threading.Thread(target=drain, args=(proc.stderr, False), daemon=True),
+        ]
+        for thread in threads:
+            thread.start()
+
+        deadline = time.monotonic() + limit
+        reason = None
+        while proc.poll() is None:
+            if overflow.wait(timeout=min(0.02, max(0.0, deadline - time.monotonic()))):
+                reason = "output_limit"
+                break
+            if time.monotonic() >= deadline:
+                reason = "timeout"
+                break
+
+        if reason is not None:
+            self._terminate(proc)
+        else:
+            proc.wait()
+        for stream in (proc.stdout, proc.stderr):
+            stream.close()
+        for thread in threads:
+            thread.join(timeout=0.2)
+
+        if reason is not None:
+            detail = f"{MAX_SUBPROCESS_OUTPUT} bytes" if reason == "output_limit" else f"{limit}s"
+            self.ledger.probe(argv[0], "failed", reason)
+            return Refused(reason, detail)
+        return Ok(Ran(tuple(argv), proc.returncode, stdout.decode("utf-8", "replace")))
+
+    @staticmethod
+    def _terminate(proc: subprocess.Popen) -> None:
+        try:
+            if os.name != "nt":
+                os.killpg(proc.pid, signal.SIGKILL)
+            else:
+                proc.kill()
+        except (OSError, ProcessLookupError):
+            pass
+        try:
+            proc.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            pass

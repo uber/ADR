@@ -41,9 +41,6 @@ def from_binaries(gate, homes: tuple[str, ...]) -> tuple[Candidate, ...]:
                 break
             if not (entry.is_exec or entry.path.endswith(BUNDLE_SUFFIXES)):
                 continue
-            if not gate.budget.take_entries():
-                gate.ledger.boundary(root, "budget_exhausted", "binaries not fully read")
-                return tuple(out)
             if entry.path in seen:
                 continue
             seen.add(entry.path)

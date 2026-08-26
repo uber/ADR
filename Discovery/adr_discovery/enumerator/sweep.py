@@ -25,9 +25,6 @@ def sweep(gate, include_dependency_caches: bool = False) -> tuple[Candidate, ...
         if gate.budget.entries_exhausted:
             gate.ledger.boundary(root, "budget_exhausted", "root not swept")
             continue
-        probe = gate.list_dir(root)
-        if not probe.ok:
-            continue
         for entry in gate.walk(root):
             if not in_scope(entry.path, include_dependency_caches):
                 continue

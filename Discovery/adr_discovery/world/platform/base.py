@@ -186,6 +186,10 @@ class LanguagePackages:
         return out
 
     def _go(self, gate, homes) -> list[Package]:
+        """Read Go metadata only through the root-owned toolchain.
+
+        User-managed ``go`` shims are not trusted scanner helpers.
+        """
         out: list[Package] = []
         for home in homes:
             listing = gate.list_dir(home + "/go/bin")
@@ -194,7 +198,7 @@ class LanguagePackages:
             for entry in listing.value:
                 if entry.is_dir or not entry.is_exec:
                     continue
-                ran = gate.run(("go", "version", "-m", entry.path))
+                ran = gate.run_helper(("/usr/local/go/bin/go", "version", "-m", entry.path))
                 if not ran.ok or ran.value.code != 0:
                     continue
                 for line in ran.value.stdout.splitlines():

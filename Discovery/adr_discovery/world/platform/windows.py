@@ -76,7 +76,10 @@ class WindowsProviders(NullProviders):
         return Refused("not_owned", path)
 
     def _ps_json(self, gate, script, surface):
-        ran = gate.run(("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script))
+        ran = gate.run_helper((
+            r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
+            "-NoProfile", "-NonInteractive", "-Command", script,
+        ))
         if not ran.ok or ran.value.code != 0:
             return None
         try:
