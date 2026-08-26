@@ -3,10 +3,10 @@
 import os
 
 import pytest
-from adr_discovery.world.gate import Gate
 
 from adr_discovery import cli
 from adr_discovery.cli import _load_json_mapping, _terminal, _write_private, build_parser
+from adr_discovery.world.gate import Gate
 
 
 def test_discovered_subprocess_api_does_not_exist():
