@@ -16,9 +16,26 @@ The measurement is a comparison between two lists:
                     compare  ═══►  TP / FP / FN per category
 ```
 
-## Test environment
+## Current harness status
 
-Three virtual machines, one per operating system. Nothing is tested on a developer's own machine, because the whole method depends on knowing the complete contents of the endpoint.
+The 120-entry manifest is the target corpus, not a claim that every entry can
+be installed automatically today. The harness currently provides manifest
+validation, synthetic run generation, replayable scoring, JSON and HTML
+scorecards, and dry-run command planning. Four recipe families execute against
+the guest-driver interface; on Linux, 64 of 105 applicable entries currently
+have executable recipes.
+
+Linux and macOS guest drivers exist, but neither has automated golden-snapshot
+restoration wired up. There is no Windows guest driver yet, and the integrated
+`tests.cli run` command supports only `--dry`. See [HARNESS.md](HARNESS.md) for
+the current recipe, driver, and measured-run status.
+
+## Target test environment
+
+The complete fidelity measurement targets three virtual machines, one per
+operating system. Nothing should be scored as a golden-endpoint run on a
+developer's own machine, because the method depends on knowing the complete
+contents of the endpoint.
 
 | VM | Operating system | Purpose |
 | --- | --- | --- |
@@ -30,9 +47,12 @@ VMs rather than containers or the host, for three reasons that matter to the res
 
 1. **A known-clean baseline.** Every run starts from a snapshot with no AI tooling installed. Without that, a reported asset can't be attributed to the manifest.
 2. **Rollback between runs.** Installing 30 tools mutates the machine permanently. A VM snapshot makes each run reproducible instead of cumulative.
-3. **Real OS surfaces.** A container has no launchd, no Windows registry, no Task Scheduler, and no GUI app bundles. Those are exactly the surfaces four of the ten probes exist to read.
+3. **Real OS surfaces.** A container has no launchd, no Windows registry, no Task Scheduler, and no GUI app bundles. Those are surfaces the collector and manifest are intended to exercise.
 
-Each VM is provisioned with the OS defaults plus the runtimes the tools need (Node, Python, a browser, a JetBrains IDE where applicable) and **nothing else**. Those prerequisites are part of the baseline, not the manifest.
+For a complete golden run, each VM must be provisioned with the OS defaults plus
+the runtimes the tools need (Node, Python, a browser, and a JetBrains IDE where
+applicable) and **nothing else**. Those prerequisites are part of the baseline,
+not the manifest.
 
 ## Method
 
@@ -58,7 +78,12 @@ compare(delta.added, manifest)          # this comparison is the test result
 
 ## The install manifest
 
-This is the complete inventory the harness installs. Every row has a stable **id**, and the id is what the runner executes, what `manifest.actual.json` records an outcome against, and what a scorecard reports a miss under. Nothing is left as "and a few others" — an entry that is not listed here is not tested.
+This is the complete inventory the harness intends to install and score. Every
+row has a stable **id**, and the id is what the runner plans, what
+`manifest.actual.json` records an outcome against, and what a scorecard reports
+a miss under. Entries whose recipe family is not implemented are recorded as
+unavailable rather than reported as successful; only entries recorded as
+installed are scored for recall.
 
 `catalog_id` is the join key between what we installed and what was reported. Rows with no `catalog_id` (MCP servers, skills, hooks) are matched by install path or launch identity instead.
 
@@ -74,7 +99,12 @@ Platform columns record where a vendor ships the tool. Availability is re-confir
 | Agents | 12 | `AG-*` |
 | Negative controls | 10 | `N-*` |
 
-The AI-tool rows cover **all 42 entries in the catalog**, and that is a property worth keeping: a catalog entry with no manifest row is a tool the collector claims to recognize but that nothing ever verifies. Adding a catalog entry should mean adding a manifest row in the same change.
+The manifest currently references 42 distinct `catalog_id` values, while the
+collector catalog contains 35 entries. They are not synchronized: six current
+catalog IDs have no manifest row, and 13 manifest IDs no longer exist under
+those names in the catalog. Restoring one-to-one catalog coverage is open work.
+Adding or renaming a catalog entry should include the corresponding manifest
+change.
 
 ### Category 1 — AI tools
 
@@ -324,7 +354,9 @@ For each category, every manifest entry is matched to reported assets by `catalo
 
 **Redaction**, checked over the whole snapshot rather than per asset. Every credential planted during installation is a unique canary string. The check is a search of the serialized snapshot for each canary; any hit is a critical failure regardless of the scores above.
 
-**Errors.** `stats.error_count` must be zero, or every error must be explained by something the manifest deliberately created (a denied path, a permission the VM lacks). Unexplained errors fail the run.
+**Errors.** The scorecard records total and unexplained errors. Every error must
+be explained by something the manifest deliberately created (a denied path or
+a permission the VM lacks); unexplained errors fail the gate.
 
 ## Reporting the result
 
@@ -341,26 +373,40 @@ One table per category per OS, plus a run summary:
 | Agents | | | | | | | |
 | Negative controls | — | — | | — | — | — | — |
 
-Accompanied by: the baseline asset count, field accuracy per field, the review queue contents, the canary check verdict, `stats.error_count`, and wall-clock scan time per OS.
+Accompanied by: the baseline asset count, field accuracy per field, the review
+queue contents, the canary check verdict, total and unexplained error counts,
+and wall-clock scan time per OS.
 
 Every FP and FN is listed individually with the evidence the collector recorded, because the aggregate number is for tracking and the individual rows are what get fixed.
 
 ## Running it
 
-```bash
-# per VM, from a clean snapshot
-adr-discovery --json > snapshot_before.json
-<apply the manifest for this OS>
-adr-discovery --json > snapshot_after.json
+The implemented local workflows are:
+
+```sh
+python3 -m tests.cli check
+python3 -m tests.cli synthesize runs/local --os linux
+python3 -m tests.cli score runs/local --html runs/local/score.html
+python3 -m tests.cli run --os linux --dry
 ```
 
-Then score `snapshot_before.json`, `snapshot_after.json` and the recorded manifest.
+The dry run records installation commands without touching a guest. Individual
+Linux and macOS drivers can be used by the bootstrap tooling, but a complete
+restore-install-scan-score workflow is not yet wired into `tests.cli run`.
+Current driver-specific instructions and limitations are in
+[HARNESS.md](HARNESS.md).
 
-Because this run installs real software, signs into real accounts and starts real listeners, it is **not** part of per-commit CI. Run it against a release candidate, when the catalog changes, and when a new OS version ships.
+Once the complete golden run is automated, it will install real software, sign
+into real accounts, and start real listeners. That workflow should run against
+a release candidate, when the catalog changes, and when a new OS version ships,
+not as part of per-commit CI.
 
 ## Relationship to the fixture suite
 
-This document describes the end-to-end fidelity measurement. The fast, per-commit suite is a different instrument and is documented separately in [FIXTURE_SUITE.md](FIXTURE_SUITE.md): 241 cases that build synthetic endpoints and run in about four seconds on any CI box.
+This document describes the end-to-end fidelity measurement. The fast,
+per-commit suite is a different instrument: collector module and pipeline tests
+live under `adr_discovery/tests_unit/`, while harness validation and scoring
+tests live directly under `tests/`. Run both with `pytest -q`.
 
 The two are complementary, and neither replaces the other:
 
