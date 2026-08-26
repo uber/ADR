@@ -42,8 +42,7 @@ def test_kilo_cli_has_package_provenance(world, catalog):
 
 
 def test_u4_02_a_decoy_is_not_believed(world, catalog):
-    """GNU sleep copied to `gemini`. Its --version output does not match the
-    declared shape, so it produces no version and no catalogued verdict."""
+    """A catalog-looking filename is only convention and is never run."""
     world.exe("/decoy/gemini", "sleep (GNU coreutils) 9.4")
     gate = world.gate()
 
@@ -53,17 +52,19 @@ def test_u4_02_a_decoy_is_not_believed(world, catalog):
     assert verdict.version is None
     assert not verdict.is_concluded
     assert verdict.rung is Rung.CONVENTION, "a name may raise priority and nothing more"
+    assert gate.calls["run"] == 0
 
 
-def test_u4_02b_a_genuine_version_shape_is_believed(world, catalog):
-    world.exe("/real/gemini", "0.55.1")
+def test_u4_02b_a_catalog_looking_binary_is_not_executed(world, catalog):
+    world.binary("/real/gemini", '#!/bin/sh\ntouch "$0.executed"\necho 0.55.1\n')
     gate = world.gate()
 
     verdict = identify(gate, candidate("/real/gemini"), catalog)
 
-    assert verdict.catalog_id == "gemini-cli"
-    assert verdict.rung is Rung.BEHAVIOUR
-    assert verdict.version == "0.55.1"
+    assert verdict.catalog_id is None
+    assert verdict.rung is Rung.CONVENTION
+    assert gate.calls["run"] == 0
+    assert not __import__("os").path.exists(world.root + "/real/gemini.executed")
 
 
 def test_u4_03_the_ladder_stops_at_the_first_proof(world, catalog):
@@ -140,9 +141,8 @@ def test_u4_09_no_verdict_is_bare(world, catalog):
             assert verdict.rung is not Rung.CONVENTION
 
 
-def test_u4_05_a_self_compiled_build_is_identified_by_content_and_behaviour(world, catalog):
-    """No package record and no known hash, but it is a real compiled
-    object whose version output matches the declared shape."""
+def test_u4_05_an_unknown_compiled_build_is_not_executed(world, catalog):
+    """An executable format plus a matching name still does not establish identity."""
     import os
 
     world.file("/opt/built/gemini", "\x7fELF\x02\x01\x01" + "\x00" * 64)
@@ -154,30 +154,24 @@ def test_u4_05_a_self_compiled_build_is_identified_by_content_and_behaviour(worl
     assert binary_format(gate, "/opt/built/gemini") == "elf"
     assert binary_format(gate, "/opt/shipped/gemini") is None  # not written yet
 
-    # A real compiled object whose probe answers in the declared shape.
-    # The fixture cannot both be an ELF and run, so the format check and
-    # the probe are asserted against the same path in two steps.
     world.exe("/opt/shipped/gemini", "0.55.1")
     verdict = identify(gate, candidate("/opt/shipped/gemini"), catalog)
 
-    assert verdict.catalog_id == "gemini-cli"
-    assert verdict.is_concluded
-    assert Rung.BEHAVIOUR in {e.rung for e in verdict.evidence}
+    assert verdict.catalog_id is None
+    assert not verdict.is_concluded
+    assert gate.calls["run"] == 0
 
 
 def test_u4_05b_a_shell_wrapper_is_not_content_evidence(world, catalog):
-    """A `#!` file that answers correctly is believed on behaviour alone.
-
-    Letting the format lift it to content would hand the decoy the exact
-    strengthening the ladder exists to withhold.
-    """
+    """A `#!` file and plausible output establish neither content nor identity."""
     world.exe("/opt/shipped/gemini", "0.55.1")
     gate = world.gate()
 
     verdict = identify(gate, candidate("/opt/shipped/gemini"), catalog)
 
-    assert verdict.rung is Rung.BEHAVIOUR
+    assert verdict.rung is Rung.CONVENTION
     assert Rung.CONTENT not in {e.rung for e in verdict.evidence}
+    assert gate.calls["run"] == 0
 
 
 def test_u4_06_channels_that_disagree_record_a_conflict(world, catalog):

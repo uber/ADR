@@ -7,8 +7,10 @@ verdict that rests on it.
 
     1  provenance   which package owns this file        one cacheable query
     2  content      hash, format metadata, strings      one size-capped read
-    3  behaviour    a probe whose output must match     one sandboxed run
-    4  convention   filename, path, directory shape     free, never conclusive
+    3  convention   filename, path, directory shape     free, never conclusive
+
+Discovered executables are untrusted input and are never run. Behavioural
+signals come from already-observed process and network state, not probes.
 """
 
 from __future__ import annotations
@@ -18,12 +20,11 @@ import hashlib
 from ..contracts.evidence import Channel, Evidence, Rung
 from ..contracts.records import Candidate, Kind, Verdict
 from .openworld import score, signals_for
-from .verify import check_version
 
 MAX_HASH_BYTES = 8 * 1024 * 1024
 
-#: Executable formats, by magic. Cheap, and it distinguishes a compiled
-#: build from a shell wrapper that happens to answer a version probe.
+#: Executable formats, by magic. This is descriptive metadata only; format
+#: is not evidence that a file belongs to a particular catalog entry.
 _MAGIC: tuple[tuple[bytes, str], ...] = (
     (b"\x7fELF", "elf"),
     (b"\xcf\xfa\xed\xfe", "mach-o"),
@@ -33,14 +34,13 @@ _MAGIC: tuple[tuple[bytes, str], ...] = (
     (b"#!", "script"),
 )
 
-#: Only a compiled object is content evidence of identity. A `#!` wrapper
-#: is a file that runs something else -- which is precisely the decoy
-#: shape, and must not be allowed to strengthen a verdict.
-COMPILED_FORMATS = frozenset({"elf", "mach-o", "mach-o-universal", "pe"})
-
 
 def binary_format(gate, path: str) -> str | None:
-    """What kind of executable this is, from its first bytes."""
+    """What kind of executable this is, from its first bytes.
+
+    Format is metadata, not identity: any attacker can create a file with
+    the right magic bytes.
+    """
     raw = gate.read_bytes(path, limit=64)
     if not raw.ok or not raw.value:
         return None
@@ -83,42 +83,16 @@ def identify(gate, candidate: Candidate, catalog) -> Verdict:
         # else. A silent preference is how an inventory becomes confidently
         # wrong; a recorded conflict is something a reviewer can settle.
         conflict = _conflicting(catalog, candidate, name, entry)
-        return _catalogued(gate, entry, candidate, Rung.PROVENANCE, evidence,
-                           probe=False, version=pkg_version, conflict=conflict)
+        return _catalogued(entry, candidate, Rung.PROVENANCE, evidence,
+                           version=pkg_version, conflict=conflict)
 
     # ---------------------------------------------------------- rung 2
     entry, evidence = _by_content(gate, candidate, catalog)
     if entry is not None:
-        return _catalogued(gate, entry, candidate, Rung.CONTENT, evidence, probe=True)
+        return _catalogued(entry, candidate, Rung.CONTENT, evidence)
 
-    # ---------------------------------------------------------- rung 4 (as a hint)
+    # ---------------------------------------------------------- rung 3 (as a hint)
     suspected = _suspected(catalog, candidate, name)
-
-    # ---------------------------------------------------------- rung 3
-    if suspected is not None and candidate.kind in ("binary", "process", "exec_event", "package"):
-        version, proof = check_version(gate, candidate.path, suspected.version_probe, suspected.version_shape)
-        if version is not None:
-            evidence = [
-                Evidence("identifier", Channel.RUNTIME, candidate.path, proof, 0.8, Rung.BEHAVIOUR)
-            ]
-            # A self-compiled build has no package record and no known
-            # hash, but it is still a compiled object -- which separates it
-            # from a shell wrapper that merely answers the same way.
-            fmt = binary_format(gate, candidate.path)
-            compiled = fmt in COMPILED_FORMATS
-            if compiled:
-                evidence.insert(0, Evidence(
-                    "identifier", Channel.FILESYSTEM, candidate.path,
-                    f"{fmt} executable", 0.4, Rung.CONTENT))
-            return Verdict(
-                catalog_id=suspected.id, kind=_kind(suspected), name=suspected.name,
-                vendor=suspected.vendor, version=version,
-                rung=Rung.CONTENT if compiled else Rung.BEHAVIOUR,
-                evidence=tuple(evidence),
-            )
-        # The output was not believed. Fall through to open-world rather
-        # than recording a version nobody verified.
-        gate.ledger.probe("version_probe", "degraded", f"{candidate.path}: {proof}")
 
     # ------------------------------------------------- uncatalogued, scored
     signals = signals_for(candidate)
@@ -254,15 +228,11 @@ def _conflicting(catalog, candidate: Candidate, name: str, chosen) -> str | None
     return None
 
 
-def _catalogued(gate, entry, candidate: Candidate, rung: Rung, evidence,
-                probe: bool, version: object = None, conflict: str | None = None) -> Verdict:
-    """Identity is settled; a version may still be worth asking for."""
+def _catalogued(entry, candidate: Candidate, rung: Rung, evidence,
+                version: object = None, conflict: str | None = None) -> Verdict:
+    """Identity is settled without executing the discovered artifact."""
     version = version or candidate.detail.get("version")
     extra: tuple[Evidence, ...] = ()
-    if version is None and probe and entry.version_probe:
-        version, proof = check_version(gate, candidate.path, entry.version_probe, entry.version_shape)
-        if version is not None:
-            extra = (Evidence("identifier", Channel.RUNTIME, candidate.path, proof, 0.8, Rung.BEHAVIOUR),)
     if conflict is not None:
         extra += (Evidence("identifier", Channel.FILESYSTEM, candidate.path,
                            conflict, 0.0, Rung.CONVENTION),)
