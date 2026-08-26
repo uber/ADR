@@ -21,10 +21,21 @@ class Policy:
 
     @staticmethod
     def from_dict(raw: dict) -> "Policy":
+        if not isinstance(raw, dict):
+            raise ValueError("policy root must be an object")
+
+        def string_set(field: str) -> frozenset[str]:
+            value = raw.get(field) or ()
+            if isinstance(value, str) or not isinstance(value, (list, tuple, set, frozenset)):
+                raise ValueError(f"policy {field!r} must be an array of strings")
+            if not all(isinstance(item, str) and item for item in value):
+                raise ValueError(f"policy {field!r} must contain non-empty strings")
+            return frozenset(value)
+
         return Policy(
-            approved=frozenset(raw.get("approved") or ()),
-            forbidden=frozenset(raw.get("forbidden") or ()),
-            tenant_domains=frozenset(raw.get("tenant_domains") or ()),
+            approved=string_set("approved"),
+            forbidden=string_set("forbidden"),
+            tenant_domains=frozenset(domain.lower().rstrip(".") for domain in string_set("tenant_domains")),
         )
 
 

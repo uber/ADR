@@ -7,6 +7,8 @@ real machines and by no fixture.
 
 from __future__ import annotations
 
+import pytest
+
 from adr_discovery.contracts.evidence import Band, Channel
 from adr_discovery.contracts.records import Asset, Declaration, Kind, Liveness
 from adr_discovery.judge import Policy, judge
@@ -85,6 +87,18 @@ def test_u6_07_tenant_values_come_from_configuration():
 
     assert [f.rule for f in none_raised] == []
     assert [f.rule for f in raised] == ["third_party_destination"]
+
+
+@pytest.mark.parametrize("value", ["claude-code", ["claude-code", 7], {"id": True}])
+def test_u6_07b_policy_sets_require_arrays_of_strings(value):
+    with pytest.raises(ValueError):
+        Policy.from_dict({"approved": value})
+
+
+def test_u6_07c_tenant_domains_are_normalized():
+    policy = Policy.from_dict({"tenant_domains": ["EXAMPLE.COM."]})
+
+    assert policy.tenant_domains == frozenset({"example.com"})
 
 
 def test_u6_08_unattended_comes_from_the_agents_own_launch():
