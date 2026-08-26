@@ -1333,25 +1333,38 @@ class TestWindowsAppDataResolution:
 
     def test_redirected_appdata_end_to_end(self, tmp_path, monkeypatch):
         """A Cursor DB under a redirected %APPDATA% (outside the profile) is found."""
+        import importlib
+
+        from adr_sensor.parsers import cursor_parser as cursor_parser_module
+
         redirected = tmp_path / "fileserver/profiles$/alice/AppData/Roaming"
         db = redirected / "Cursor/User/globalStorage/state.vscdb"
         db.parent.mkdir(parents=True)
         db.touch()
 
-        monkeypatch.setenv("APPDATA", str(redirected))
+        try:
+            with monkeypatch.context() as isolated:
+                isolated.setenv("APPDATA", str(redirected))
+                # DB_PATHS is built at import time, so reload under the redirected env.
+                importlib.reload(cursor_parser_module)
 
-        windows_db = windows_appdata() / "Cursor/User/globalStorage/state.vscdb"
-        assert windows_db == db
+                reloaded_parser = cursor_parser_module.CursorParser
+                windows_candidate = reloaded_parser.DB_PATHS[-1]
+                assert windows_candidate == db
 
-        # Isolate this Windows-path test from real Cursor installations on the host.
-        monkeypatch.setattr(
-            CursorParser,
-            "DB_PATHS",
-            [
-                tmp_path / "missing-macos/state.vscdb",
-                tmp_path / "missing-linux/state.vscdb",
-                windows_db,
-            ],
-        )
+                # Preserve the parser's actual Windows candidate while preventing real
+                # macOS or Linux Cursor installations from winning the existence check.
+                isolated.setattr(
+                    reloaded_parser,
+                    "DB_PATHS",
+                    [
+                        tmp_path / "missing-macos/state.vscdb",
+                        tmp_path / "missing-linux/state.vscdb",
+                        windows_candidate,
+                    ],
+                )
 
-        assert CursorParser().db_path == db
+                assert reloaded_parser().db_path == db
+        finally:
+            # Restore module-level paths using the process's original environment.
+            importlib.reload(cursor_parser_module)
