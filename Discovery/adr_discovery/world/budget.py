@@ -19,6 +19,7 @@ class Budget:
     max_entries: int = 200_000
     max_depth: int = 12
     max_subprocess_seconds: float = 5.0
+    max_subprocess_output_bytes: int = 4 * 1024 * 1024
     max_strings_bytes: int = 512 * 1024
     #: The whole scan, wall clock. Plane A promises seconds, and a promise
     #: with no ceiling behind it is a hope.

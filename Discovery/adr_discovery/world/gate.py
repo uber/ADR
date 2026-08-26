@@ -31,7 +31,6 @@ from .budget import Budget
 from .platform.base import Providers
 
 T = TypeVar("T")
-MAX_SUBPROCESS_OUTPUT = 8192
 _HELPER_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
 
 
@@ -408,6 +407,7 @@ class Gate:
             return Refused("spawn_failed", str(exc))
 
         stdout = bytearray()
+        output_limit = self.budget.max_subprocess_output_bytes
         total = [0]
         lock = threading.Lock()
         overflow = threading.Event()
@@ -419,10 +419,10 @@ class Gate:
                     return
                 with lock:
                     total[0] += len(chunk)
-                    if keep and len(stdout) < MAX_SUBPROCESS_OUTPUT:
-                        remaining = MAX_SUBPROCESS_OUTPUT - len(stdout)
+                    if keep and len(stdout) < output_limit:
+                        remaining = output_limit - len(stdout)
                         stdout.extend(chunk[:remaining])
-                    if total[0] > MAX_SUBPROCESS_OUTPUT:
+                    if total[0] > output_limit:
                         overflow.set()
 
         threads = [
@@ -452,7 +452,7 @@ class Gate:
             thread.join(timeout=0.2)
 
         if reason is not None:
-            detail = f"{MAX_SUBPROCESS_OUTPUT} bytes" if reason == "output_limit" else f"{limit}s"
+            detail = f"{output_limit} bytes" if reason == "output_limit" else f"{limit}s"
             self.ledger.probe(argv[0], "failed", reason)
             return Refused(reason, detail)
         return Ok(Ran(tuple(argv), proc.returncode, stdout.decode("utf-8", "replace")))

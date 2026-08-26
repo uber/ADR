@@ -127,7 +127,7 @@ def test_u1_08b_helpers_never_search_path(world):
 def test_u1_08c_subprocess_output_is_bounded(world):
     world.file("/loud", "#!/bin/sh\nhead -c 9000 /dev/zero\n")
     os.chmod(world.root + "/loud", 0o755)
-    gate = world.gate()
+    gate = world.gate(budget=Budget(max_subprocess_output_bytes=1024))
 
     result = gate.run_helper(("/loud",))
 
