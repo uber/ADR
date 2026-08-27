@@ -62,70 +62,71 @@ class CursorParser(BaseParser):
 
         try:
             conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
+            try:
+                cursor = conn.cursor()
 
-            composer_metadata = self.get_composer_metadata(cursor)
+                composer_metadata = self.get_composer_metadata(cursor)
 
-            cutoff_time = datetime.now(timezone.utc) - timedelta(days=self.max_age_days)
-            recent_conv_ids = set()
-            skipped_count = 0
+                cutoff_time = datetime.now(timezone.utc) - timedelta(days=self.max_age_days)
+                recent_conv_ids = set()
+                skipped_count = 0
 
-            for conv_id, metadata in composer_metadata.items():
-                conv_timestamp = None
-                if "lastUpdatedAt" in metadata:
+                for conv_id, metadata in composer_metadata.items():
+                    conv_timestamp = None
+                    if "lastUpdatedAt" in metadata:
+                        try:
+                            conv_timestamp = normalize_timestamp(metadata["lastUpdatedAt"])
+                        except Exception:
+                            pass
+                    if conv_timestamp is None and "createdAt" in metadata:
+                        try:
+                            conv_timestamp = normalize_timestamp(metadata["createdAt"])
+                        except Exception:
+                            pass
+
+                    if conv_timestamp is None or conv_timestamp >= cutoff_time:
+                        recent_conv_ids.add(conv_id)
+                    else:
+                        skipped_count += 1
+
+                if skipped_count > 0:
+                    print(f"[CURSOR] Skipped {skipped_count} conversations older than {self.max_age_days} days")
+
+                cursor.execute("SELECT key, value FROM cursorDiskKV WHERE key LIKE 'bubbleId:%'")
+
+                conversations: Dict[str, List] = {}
+                for key, value in self._iter_cursor_batches(cursor):
                     try:
-                        conv_timestamp = normalize_timestamp(metadata["lastUpdatedAt"])
-                    except Exception:
-                        pass
-                if conv_timestamp is None and "createdAt" in metadata:
-                    try:
-                        conv_timestamp = normalize_timestamp(metadata["createdAt"])
-                    except Exception:
-                        pass
+                        parts = key.split(":")
+                        if len(parts) >= 3:
+                            conv_id = parts[1]
 
-                if conv_timestamp is None or conv_timestamp >= cutoff_time:
-                    recent_conv_ids.add(conv_id)
-                else:
-                    skipped_count += 1
-
-            if skipped_count > 0:
-                print(f"[CURSOR] Skipped {skipped_count} conversations older than {self.max_age_days} days")
-
-            cursor.execute("SELECT key, value FROM cursorDiskKV WHERE key LIKE 'bubbleId:%'")
-
-            conversations: Dict[str, List] = {}
-            for key, value in self._iter_cursor_batches(cursor):
-                try:
-                    parts = key.split(":")
-                    if len(parts) >= 3:
-                        conv_id = parts[1]
-
-                        if conv_id not in recent_conv_ids:
-                            continue
-
-                        if conv_id not in conversations:
-                            conversations[conv_id] = []
-
-                        if isinstance(value, str):
-                            try:
-                                bubble_data = json.loads(value)
-                                conversations[conv_id].append(bubble_data)
-                            except json.JSONDecodeError:
+                            if conv_id not in recent_conv_ids:
                                 continue
-                        else:
-                            conversations[conv_id].append(value)
-                except Exception:
-                    continue
 
-            for conv_id, bubbles in conversations.items():
-                try:
-                    entry = self.parse_conversation(conv_id, bubbles, composer_metadata)
-                    if entry:
-                        entries.append(entry)
-                except Exception:
-                    pass
+                            if conv_id not in conversations:
+                                conversations[conv_id] = []
 
-            conn.close()
+                            if isinstance(value, str):
+                                try:
+                                    bubble_data = json.loads(value)
+                                    conversations[conv_id].append(bubble_data)
+                                except json.JSONDecodeError:
+                                    continue
+                            else:
+                                conversations[conv_id].append(value)
+                    except Exception:
+                        continue
+
+                for conv_id, bubbles in conversations.items():
+                    try:
+                        entry = self.parse_conversation(conv_id, bubbles, composer_metadata)
+                        if entry:
+                            entries.append(entry)
+                    except Exception:
+                        pass
+            finally:
+                conn.close()
 
         except Exception as e:
             print(f"[CURSOR] Error parsing conversations: {e}")
