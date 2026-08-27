@@ -64,6 +64,7 @@ class WarpParser(BaseParser):
             conn.row_factory = sqlite3.Row
 
             conversations = self._get_all_conversations(conn)
+            has_ai_blocks = self._has_table(conn, "ai_blocks")
             print(f"[WARP] Found {len(conversations)} conversations")
 
             recent_conversations = self._filter_recent_conversations(conversations)
@@ -74,7 +75,7 @@ class WarpParser(BaseParser):
             for conversation in recent_conversations:
                 conversation_id = conversation["conversation_id"]
                 try:
-                    exchanges = self._get_conversation_exchanges(conn, conversation_id)
+                    exchanges = self._get_conversation_exchanges(conn, conversation_id, has_ai_blocks)
                     entry = self._create_entry_from_exchanges(conversation_id, exchanges)
                     if entry and entry.has_meaningful_content():
                         entries.append(entry)
@@ -93,9 +94,9 @@ class WarpParser(BaseParser):
         """Get all conversation ids and timestamps from the database.
 
         Deliberately excludes the conversation_data column: it is not used
-        anywhere in this parser (exchange content comes from ai_queries /
-        ai_blocks instead), so fetching it here would be wasted I/O for
-        every conversation on every run.
+        anywhere in this parser (exchange content comes from ai_queries and,
+        for legacy schemas, ai_blocks), so fetching it here would be wasted
+        I/O for every conversation on every run.
         """
         cursor = conn.cursor()
         cursor.execute("""
@@ -127,15 +128,26 @@ class WarpParser(BaseParser):
 
         return recent
 
-    def _get_conversation_exchanges(self, conn, conversation_id: str) -> List[Dict]:
-        """Get all exchanges for a conversation with LLM output."""
+    def _has_table(self, conn, table_name: str) -> bool:
+        """Return whether the connected database contains ``table_name``."""
+        return (
+            conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (table_name,)).fetchone()
+            is not None
+        )
+
+    def _get_conversation_exchanges(
+        self, conn, conversation_id: str, has_ai_blocks: bool
+    ) -> List[Dict]:
+        """Get all exchanges, including legacy LLM output when available."""
         cursor = conn.cursor()
+        llm_output_column = "b.output" if has_ai_blocks else "NULL"
+        ai_blocks_join = "LEFT JOIN ai_blocks b ON q.exchange_id = b.exchange_id" if has_ai_blocks else ""
         cursor.execute(
-            """
+            f"""
             SELECT q.exchange_id, q.conversation_id, q.start_ts, q.input, q.working_directory,
-                   q.output_status, q.model_id, b.output as llm_output
+                   q.output_status, q.model_id, {llm_output_column} as llm_output
             FROM ai_queries q
-            LEFT JOIN ai_blocks b ON q.exchange_id = b.exchange_id
+            {ai_blocks_join}
             WHERE q.conversation_id = ?
             ORDER BY q.start_ts ASC
         """,
@@ -154,13 +166,18 @@ class WarpParser(BaseParser):
             sorted_exchanges = sorted(exchanges, key=lambda x: x["start_ts"], reverse=True)
             most_recent = sorted_exchanges[0]
             timestamp = normalize_timestamp(most_recent["start_ts"])
+            model_id = most_recent.get("model_id")
+            if isinstance(model_id, str):
+                parsed_model_id = self._parse_json_safely(model_id)
+                if isinstance(parsed_model_id, str):
+                    model_id = parsed_model_id
 
             entry = AgentEvent(
                 timestamp=timestamp,
                 source="warp",
                 session_id=f"warp_{conversation_id}",
                 project_path=most_recent.get("working_directory"),
-                model=most_recent.get("model_id"),
+                model=model_id,
                 raw_log_path=str(self.db_path),
             )
 
