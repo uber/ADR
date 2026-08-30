@@ -83,6 +83,29 @@ def test_uc2_02_a_flag_name_survives_redaction():
     assert "SECRET" not in scrubbed
 
 
+def test_uc2_02a_joined_short_credential_operands_are_redacted():
+    assert redact.scrub_argv(("mysql", "-uroot", "-pSuperSecret123", "mydb")) == (
+        "mysql", "-uroot", f"-p{redact.REDACTED}", "mydb",
+    )
+    assert redact.scrub_argv(("curl", "-HAuthorization: Bearer secret")) == (
+        "curl", f"-H{redact.REDACTED}",
+    )
+
+
+def test_uc2_02b_credential_assignments_without_flags_are_redacted():
+    assert redact.scrub_argv(("agent", "password=hunter2")) == (
+        "agent", f"password={redact.REDACTED}",
+    )
+    assert redact.scrub_argv(("agent", "OPENAI_API_KEY=sk-secret")) == (
+        "agent", f"OPENAI_API_KEY={redact.REDACTED}",
+    )
+
+
+def test_uc2_02c_noncredential_assignments_are_preserved():
+    assert redact.scrub_argv(("server", "--port=8080")) == ("server", "--port=8080")
+    assert redact.scrub_argv(("agent", "profile=production")) == ("agent", "profile=production")
+
+
 def test_uc2_04_explain_names_every_rule_it_enforces():
     lines = redact.explain()
 
