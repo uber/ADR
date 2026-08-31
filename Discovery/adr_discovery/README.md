@@ -12,7 +12,7 @@ The endpoint collector is implemented in this repository. Its seven-stage pipeli
 
 | | |
 | --- | --- |
-| **Design of record** | `adr-discovery-design.html` — the full argument, module contracts and complete target corpus |
+| **Design overview** | The architecture, contracts, target corpus and constraints documented below |
 | **Implementation** | This package: M1–M7, the cross-cutting catalog/redaction/coverage concerns, and the `adr-discovery` CLI |
 | **Verification** | The fast module and pipeline suite under `tests_unit/`, plus the black-box endpoint harness in [../tests/README.md](../tests/README.md) |
 | **Current maturity** | Core architecture complete; production source coverage and the three-OS golden-endpoint corpus remain incomplete |
@@ -116,7 +116,7 @@ One directory per module. Directory names are the module names above verbatim, s
 
 ```
 adr_discovery/
-├── cli.py                argument parsing, exit codes. Nothing else.
+├── cli.py                process boundary: arguments, output files and exit codes
 ├── pipeline.py           the composition root — the only file importing more than one stage
 │
 ├── contracts/            the types the stages hand each other
@@ -170,12 +170,12 @@ A boundary described only in a document is a boundary that has already been cros
 
 | Rule | The regression it prevents |
 | --- | --- |
-| Only `world/` imports `os`, `pathlib`, `subprocess`, `socket` | Probes quietly growing private file access, each with its own containment bug |
+| Only `world/` and the CLI process boundary import host-facing modules such as `os`, `pathlib`, `subprocess` and `socket` | Probes quietly growing private file access, each with its own containment bug |
 | No stage imports a sibling stage | The cycle that makes any one stage impossible to test alone |
-| Only `pipeline.py` imports more than one stage | Execution order becoming an emergent property of the import graph |
+| Outside stage internals and the CLI boundary, only `pipeline.py` imports more than one stage | Execution order becoming an emergent property of the import graph |
 | `catalog/` imports nothing from the package | The landscape's weekly churn ending up on the release train |
-| Every stage is a function from its input type to its output type, reading no module-level state | `PROJECT_ROOTS` in five files — the defect this rewrite exists for |
-| Every stage returns its coverage alongside its result | A partial answer that reads as a clean machine |
+| Stages hold no mutable module-level state | `PROJECT_ROOTS` in five files — the defect this rewrite exists for |
+| Coverage-producing stages record gaps in the shared ledger, which the pipeline freezes into the snapshot | A partial answer that reads as a clean machine |
 
 Every other guarantee in this file is a claim about intent. The import test is a claim about the code, it runs in under a second, and it fails on the pull request that would have reintroduced the problem.
 
@@ -247,15 +247,25 @@ Accuracy claims state which layer produced them. A suite whose worlds are built 
 
 ### The two instruments
 
-[tests/README.md](../tests/README.md) documents the end-to-end fidelity measurement: real tools installed on a clean guest per OS, a scan before and after, and a comparison of what was installed against what the collector reported. Because it installs real software, signs into real accounts and starts real listeners, it is not part of per-commit CI — it runs against a release candidate, when the catalog changes, and when a new OS version ships.
+[tests/README.md](../tests/README.md) specifies the end-to-end fidelity
+measurement: real tools installed on a clean guest per OS, a scan before and
+after, and a comparison of what was installed against what the collector
+reported. The complete three-OS workflow is not operational yet. Linux and
+macOS drivers and a subset of executable recipes exist, but automated golden
+restore is not wired up, there is no Windows driver, and the integrated harness
+runner currently supports dry runs only.
 
-The fast per-commit suite is a separate instrument, documented alongside it: synthetic endpoints built on disk, scanned by a real pipeline, in about four seconds on any CI box.
+The fast per-commit suite is a separate instrument: synthetic endpoints are
+built on disk and scanned through the real pipeline without requiring a guest.
 
 The two are complementary and neither replaces the other. The fixture suite has a perfect oracle — it built the machine — but can only contain situations somebody imagined, so it catches regressions. The VM run has real input nobody predicted but a slower, costlier oracle, so it discovers defects. Every defect a VM run finds should be reduced to a fixture case, which is the intended flow of work between them.
 
 The harness under `tests/` can validate manifests, synthesize and replay recorded runs, provision through its current guest drivers, and generate JSON and HTML scorecards. Only part of the install manifest currently has executable recipes; see [HARNESS.md](../tests/HARNESS.md) for current counts and known guest limitations.
 
-Unit tests mirror the package tree — one directory per module, importing only that module. The arrangement is the assertion: a module that cannot be tested without standing up three others does not have a boundary, whatever the directory listing says.
+Unit tests under `tests_unit/` use one focused test module per implementation
+area. Import-graph tests enforce the stage boundaries directly; a module that
+cannot be tested without standing up three others does not have a meaningful
+boundary, whatever the directory listing says.
 
 ## Implementation progress
 
