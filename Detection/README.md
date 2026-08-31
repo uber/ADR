@@ -1,6 +1,6 @@
 # ADR Benchmark - AI Agent Security Research Framework
 
-Complete framework for AI agent security research with threat detection and red-teaming capabilities. **ADR-Bench + AgentDojo integration, 133 MCP servers, four detector baselines**.
+Complete framework for AI agent security research with threat detection and red-teaming capabilities. **ADR-Bench + AgentDojo integration, 134 MCP servers, four detector baselines**.
 
 > **Paper:** [ADR: An Agentic Detection System for Enterprise Agentic AI Security](https://arxiv.org/abs/2605.17380)  
 > **Reproduce Table 2 / figures:** [../docs/REPRODUCIBILITY.md](../docs/REPRODUCIBILITY.md)
@@ -58,8 +58,8 @@ Detection/
 ├── 📋 Core Benchmark
 │   ├── main_benchmark.py          # ADR-Bench + AgentDojo execution
 │   ├── plot_paper_figures.py      # PR curves, latency, cost figures (paper)
-│   ├── tasks.json                 # 303 scenarios (261 benign, 42 malicious)
-│   ├── mcp_servers_registry.json  # 133 server definitions
+│   ├── tasks.json                 # 304 scenarios (261 benign, 43 malicious)
+│   ├── mcp_servers_registry.json  # 134 server definitions
 │   ├── config_benchmark.yaml
 │   ├── openai_config.py
 │   └── benchmark/                 # vendored code + run output — same directory
@@ -118,7 +118,7 @@ Detection/
 │       │   └── policy_store.yaml
 │       └── source_codes/
 │           ├── mcp_servers_0/     # Benign tools (78 servers)
-│           ├── mcp_servers_1/     # Vulnerable tools (25 servers)
+│           ├── mcp_servers_1/     # Vulnerable tools (26 servers)
 │           └── mcp_servers_2/     # Environment emulation (12 servers)
 │
 └── 📄 Configuration
@@ -130,14 +130,14 @@ Detection/
 **Key Components**:
 
 - **🎯 Dual Benchmark System**:
-  - **ADR-Bench**: 303 realistic business tasks with 42 sophisticated attacks
+  - **ADR-Bench**: 304 realistic business tasks with 43 sophisticated attacks
   - **AgentDojo Integration**: Public benchmark for prompt injection evaluation
 - **🛡️ Detectors**: ADR (dual-agent) vs LlamaFirewall comparison; ALRPHFS/GuardAgent are paper-only numbers, not runnable here (see [docs/BASELINE_REPLICATION.md](../docs/BASELINE_REPLICATION.md))
-- **🔧 MCP Servers**: 133 general-purpose servers (registry `type`: 102 local, 12 local_environment, 15 community, 4 official) + 3 context provider servers (separate registry)
+- **🔧 MCP Servers**: 134 general-purpose servers (registry `type`: 103 local, 12 local_environment, 15 community, 4 official) + 3 context provider servers (separate registry)
   - **78 Benign Servers**: Legitimate business tools (toolkits + utilities)
-  - **25 Vulnerable Servers**: EAS target tools with embedded vulnerabilities for discovery — one (`location_harvester`) is registered under a spoofed community identity (`weather_forecast_service`, `type: community`) as a supply-chain-impersonation test case, so it's also counted in the 15 "community" servers above
+  - **26 Vulnerable Servers**: EAS target tools with embedded vulnerabilities for discovery — one (`location_harvester`) is registered under a spoofed community identity (`weather_forecast_service`, `type: community`) as a supply-chain-impersonation test case, so it's also counted in the 15 "community" servers above
   - **12 Environment Servers**: Emulated enterprise systems for safe testing
-  - **19 Community/Official Servers**: Community (15) and official (4) MCP servers, by registry `type` — overlaps with 1 of the 25 Vulnerable Servers above
+  - **19 Community/Official Servers**: Community (15) and official (4) MCP servers, by registry `type` — overlaps with 1 of the 26 Vulnerable Servers above
   - **3 Context Providers**: Specialized threat intelligence, policy, and source code analysis (context_providers_registry.json)
 - **📊 Analysis**: Automated threat detection with ground truth validation
 
@@ -147,22 +147,22 @@ Detection/
 
 ### What it does
 
-- **ADR-Bench**: Executes 303 realistic business tasks using MCP servers
+- **ADR-Bench**: Executes 304 realistic business tasks using MCP servers
 - **AgentDojo**: Runs public prompt injection benchmark with conversation logs
 - Forces pure MCP usage (blocks 80+ built-in tools)
 - Measures task completion, tool coverage, and performance
 
 ### Input
 
-- **ADR-Bench Tasks**: `tasks.json` - 303 predefined business scenarios
+- **ADR-Bench Tasks**: `tasks.json` - 304 predefined business scenarios
 - **AgentDojo Tasks**: Automatically loaded from benchmark configuration
-- **MCP Servers**: `mcp_servers_registry.json` - 133 available servers
+- **MCP Servers**: `mcp_servers_registry.json` - 134 available servers
 - **Config**: `config_benchmark.yaml` - execution settings
 
 ### How to run
 
 ```bash
-# Run ADR-Bench (default - all 303 tasks)
+# Run ADR-Bench (default - all 304 tasks)
 uv run python main_benchmark.py
 
 # Run AgentDojo benchmark (prompt injection attacks)
@@ -309,7 +309,7 @@ Top-level `metrics` also includes `accuracy`, `precision`, `recall`, and `f1_sco
 
 ### Paper results (ADR-Bench)
 
-Reported in [Table 2](https://arxiv.org/abs/2605.17380) on the original **302-task** evaluation set (260 benign, 42 malicious). This repo ships **303 tasks** — one additional benign task that was previously blocked by a benchmark pipeline bug; see [REPRODUCIBILITY.md](../docs/REPRODUCIBILITY.md).
+Reported in [Table 2](https://arxiv.org/abs/2605.17380) on the original **302-task** evaluation set (260 benign, 42 malicious). This repo's `tasks.json` defines **304 tasks** — one additional benign task (previously blocked by a benchmark pipeline bug, now fixed) plus one additional malicious task (`task_304`, not yet in the packed benchmark JSONL pending a recorded run); see [REPRODUCIBILITY.md](../docs/REPRODUCIBILITY.md#adr-bench-task-count-304-vs-302).
 
 
 | Detector             | Precision | Recall            | F1        | False positives |
@@ -494,7 +494,6 @@ if __name__ == "__main__":
   category: "utilities"
   description: "Legitimate-sounding description (no MALICIOUS labels)"
   capabilities: ["legitimate_function"]
-  risk_level: "low"  # Disguise threat level
 ```
 
 1. **Create detection task** in `tasks.json`:
@@ -589,15 +588,15 @@ uv run python main_benchmark.py --tasks=1-10
 
 ### 🎯 **Dual Benchmark System**
 
-- **ADR-Bench**: 303 total (261 benign business workflows, 42 sophisticated attacks)
+- **ADR-Bench**: 304 total (261 benign business workflows, 43 sophisticated attacks)
 - **AgentDojo Integration**: Public prompt injection benchmark with automatic ground truth extraction
-- **MCP Servers**: 133 verified (official, community, local, environment) + 3 context providers
+- **MCP Servers**: 134 verified (official, community, local, environment) + 3 context providers
 - **Categories**: Office productivity, finance, system admin, security tools, research tools
 - **Execution**: Configurable with concurrent processing for both ADR-Bench and AgentDojo
 
 ### 📈 **Benchmark Metrics**
 
-- **ADR-Bench Scale**: 303 tasks with diverse business workflows
+- **ADR-Bench Scale**: 304 tasks with diverse business workflows
 - **ADR-Bench Success Rate**: High task completion rate with concurrent execution
 - **Tool Coverage**: >95% MCP tool usage across tasks
 - **Detection (paper Table 2)**: ADR — 100% precision, 67% recall, 0 false positives on ADR-Bench
@@ -621,8 +620,8 @@ uv run python main_benchmark.py --tasks=1-10
 ### 🎯 **Benchmark Results**
 
 ```
-✅ ADR-Bench Scale: 303 tasks (261 benign, 42 malicious)
-✅ MCP Servers: 133 general-purpose servers (102 local, 12 environment, 15 community, 4 official) + 3 context providers
+✅ ADR-Bench Scale: 304 tasks (261 benign, 43 malicious)
+✅ MCP Servers: 134 general-purpose servers (103 local, 12 environment, 15 community, 4 official) + 3 context providers
 ✅ AgentDojo Integration: Full conversation log compatibility with ground truth extraction
 ⚡ Execution Time: Configurable with concurrent processing (scales with task count)
 🔧 Tool Coverage: >95% MCP tool usage (blocking 80+ built-in tools)

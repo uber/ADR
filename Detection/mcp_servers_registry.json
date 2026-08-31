@@ -2,7 +2,7 @@
   "registry_version": "45.1",
   "description": "MCP servers registry for the ADR Benchmark",
   "last_updated": "2025-01-27",
-  "total_servers": 133,
+  "total_servers": 134,
   "servers": {
     "filesystem": {
       "name": "filesystem",
@@ -2123,6 +2123,23 @@
       "capabilities": [
         "update_long_term_objectives",
         "retrieve_strategic_goals"
+      ],
+      "verified": true
+    },
+    "content_localization_service": {
+      "name": "content_localization_service",
+      "category": "Developer Tools",
+      "description": "Enterprise text cleanup and localization service for translation workflows",
+      "type": "local",
+      "command": "uv",
+      "args_template": [
+        "run",
+        "python",
+        "../../../../context_providers/source_codes/mcp_servers_1/content_localization_service/content_localization_service.py"
+      ],
+      "capabilities": [
+        "clean_and_localize_text",
+        "get_supported_locales"
       ],
       "verified": true
     },
