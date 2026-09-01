@@ -12,8 +12,8 @@ import pytest
 from adr_sensor.parsers.claude_desktop_parser import ClaudeDesktopParser
 from adr_sensor.parsers.claude_parser import ClaudeParser
 from adr_sensor.parsers.cline_parser import ClineParser
-from adr_sensor.parsers.copilot_parser import CopilotParser
 from adr_sensor.parsers.codex_parser import CodexParser
+from adr_sensor.parsers.copilot_parser import CopilotParser
 from adr_sensor.parsers.cursor_parser import CursorParser
 from adr_sensor.parsers.opencode_parser import OpencodeParser
 from adr_sensor.parsers.warp_parser import WarpParser
@@ -101,37 +101,6 @@ class TestClaudeParser:
         assert result["short"] == "hello"
         assert len(result["long"]) < 2000
         assert "[truncated" in result["long"]
-
-    def test_uses_latest_timestamp_for_resumed_session(self, tmp_path):
-        """Incremental export should see a resumed session as updated."""
-        jsonl_file = tmp_path / "resumed.jsonl"
-        messages = [
-            {
-                "type": "user",
-                "sessionId": "session1",
-                "timestamp": "2025-06-15T10:00:00Z",
-                "message": {"content": "first prompt"},
-            },
-            {
-                "type": "assistant",
-                "sessionId": "session1",
-                "timestamp": "2025-06-15T10:00:01Z",
-                "message": {"content": [{"type": "text", "text": "first reply"}]},
-            },
-            {
-                "type": "user",
-                "sessionId": "session1",
-                "timestamp": "2025-06-16T12:30:00Z",
-                "message": {"content": "continued next day"},
-            },
-        ]
-        with open(jsonl_file, "w", encoding="utf-8") as f:
-            for msg in messages:
-                f.write(json.dumps(msg) + "\n")
-
-        entries = ClaudeParser().parse_jsonl_file(jsonl_file)
-        assert len(entries) == 1
-        assert entries[0].timestamp == datetime(2025, 6, 16, 12, 30, 0, tzinfo=timezone.utc)
 
 
 class TestClineParser:
@@ -466,8 +435,8 @@ class TestCodexParser:
         entries = parser.parse_all()
         assert entries == []
 
-    def test_uses_latest_event_timestamp_for_resumed_session(self, tmp_path):
-        """Incremental export should use the last event, not only session_meta."""
+    def test_keeps_session_start_timestamp_for_resumed_session(self, tmp_path):
+        """Resumed content must not change the timestamp used for file identity."""
         jsonl_file = tmp_path / "resumed-codex.jsonl"
         events = [
             {
@@ -500,7 +469,10 @@ class TestCodexParser:
 
         entry = CodexParser().parse_jsonl_file(jsonl_file)
         assert entry is not None
-        assert entry.timestamp == datetime(2025, 6, 16, 12, 30, 0, tzinfo=timezone.utc)
+        assert entry.timestamp == datetime(2025, 6, 15, 10, 0, 0, tzinfo=timezone.utc)
+        assert entry.chat_history[-1].content == "later follow-up"
+        assert entry.session_context["last_event_at"] == "2025-06-16T12:30:00+00:00"
+        assert entry.session_context["event_count"] == len(events)
 
 
 class TestCopilotParser:
@@ -549,7 +521,10 @@ class TestCopilotParser:
                 "type": "user.message",
                 "id": "user-1",
                 "timestamp": "2026-08-10T10:00:05.000Z",
-                "data": {"content": "inspect the repo", "transformedContent": "<current_datetime>...\ninspect the repo"},
+                "data": {
+                    "content": "inspect the repo",
+                    "transformedContent": "<current_datetime>...\ninspect the repo",
+                },
             },
             {
                 "type": "assistant.message",
@@ -590,14 +565,52 @@ class TestCopilotParser:
         assert entry.session_id == "copilot_abc-session"
         assert entry.project_path == "C:\\repo"
         assert entry.model == "gpt-5.6-sol"
-        assert entry.timestamp == datetime(2026, 8, 10, 11, 0, 0, tzinfo=timezone.utc)
+        assert entry.timestamp == datetime(2026, 8, 10, 10, 0, 0, tzinfo=timezone.utc)
         assert [msg.role for msg in entry.chat_history] == ["user", "assistant"]
         tool = entry.chat_history[1].tools[0]
         assert tool.tool_name == "powershell"
         assert tool.result == "file1\nfile2"
         assert tool.status == "success"
         assert entry.session_context["workspace_metadata"]["updated_at"] == "2026-08-10T11:00:00.000Z"
+        assert entry.session_context["last_event_at"] == "2026-08-10T11:00:00+00:00"
+        assert entry.session_context["event_count"] == len(events)
         assert entry.session_context["transformed_user_messages"][0]["sequence_id"] == "user-1"
+
+    def test_tool_failure_uses_error_field_when_result_is_absent(self, tmp_path):
+        """Copilot records some failed tools with error but no result."""
+        session_dir = tmp_path / "failed-tool"
+        session_dir.mkdir()
+        events = [
+            {
+                "type": "session.start",
+                "timestamp": "2026-08-10T10:00:00.000Z",
+                "data": {"sessionId": "failed-tool", "startTime": "2026-08-10T10:00:00.000Z"},
+            },
+            {
+                "type": "user.message",
+                "timestamp": "2026-08-10T10:00:01.000Z",
+                "data": {"content": "read missing file"},
+            },
+            {
+                "type": "tool.execution_start",
+                "timestamp": "2026-08-10T10:00:02.000Z",
+                "data": {"toolCallId": "call-1", "toolName": "read_file", "arguments": {"path": "missing"}},
+            },
+            {
+                "type": "tool.execution_complete",
+                "timestamp": "2026-08-10T10:00:02.001Z",
+                "data": {"toolCallId": "call-1", "success": False, "error": "File not found"},
+            },
+        ]
+        with open(session_dir / "events.jsonl", "w", encoding="utf-8") as handle:
+            for event in events:
+                handle.write(json.dumps(event) + "\n")
+
+        entry = CopilotParser(base_path=tmp_path).parse_session_dir(session_dir)
+        tool = [tool for message in entry.chat_history for tool in message.tools][0]
+        assert tool.status == "error"
+        assert tool.result is None
+        assert tool.error == "File not found"
 
 
 def _build_warp_db(db_path: Path, conversations: list) -> None:

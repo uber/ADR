@@ -127,7 +127,7 @@ class ClaudeParser(BaseParser):
                     if "timestamp" in obj:
                         try:
                             ts = normalize_timestamp(obj["timestamp"])
-                            if sessions[session_id]["timestamp"] is None or ts > sessions[session_id]["timestamp"]:
+                            if sessions[session_id]["timestamp"] is None or ts < sessions[session_id]["timestamp"]:
                                 sessions[session_id]["timestamp"] = ts
                         except Exception:
                             pass

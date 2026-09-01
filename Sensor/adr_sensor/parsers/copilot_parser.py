@@ -132,10 +132,8 @@ class CopilotParser(BaseParser):
             return None
 
         timestamp = (
-            self._normalize_optional_timestamp(workspace_meta.get("updated_at"))
-            or self._normalize_optional_timestamp(vscode_meta.get("modified"))
-            or self._normalize_optional_timestamp(session_data["last_event_at"])
-            or session_data["timestamp"]
+            # Updated/modified sidecars can lag resumed events and must not define file identity.
+            session_data["timestamp"]
             or self._normalize_optional_timestamp(workspace_meta.get("created_at"))
             or self._normalize_optional_timestamp(vscode_meta.get("created"))
             or self._normalize_optional_timestamp(session_data["first_event_at"])
@@ -165,10 +163,13 @@ class CopilotParser(BaseParser):
         event_time = self._normalize_optional_timestamp(event.get("timestamp"))
 
         session_data["event_counts"][event_type] += 1
-        if event_time and session_data["first_event_at"] is None:
-            session_data["first_event_at"] = event_time
         if event_time:
-            session_data["last_event_at"] = event_time
+            first_event_at = session_data["first_event_at"]
+            last_event_at = session_data["last_event_at"]
+            if first_event_at is None or event_time < first_event_at:
+                session_data["first_event_at"] = event_time
+            if last_event_at is None or event_time > last_event_at:
+                session_data["last_event_at"] = event_time
 
         if event_type == "session.start":
             session_id = data.get("sessionId")
@@ -259,10 +260,11 @@ class CopilotParser(BaseParser):
             if tool is not None:
                 success = bool(data.get("success"))
                 result_text = self._normalize_tool_result(data.get("result"))
+                error_text = self._normalize_tool_result(data.get("error"))
                 tool["result"] = result_text
                 tool["status"] = "success" if success else "error"
-                if not success and result_text:
-                    tool["error"] = result_text
+                if not success:
+                    tool["error"] = error_text or result_text
             session_data["model"] = data.get("model") or session_data["model"]
             return
 
@@ -427,6 +429,7 @@ class CopilotParser(BaseParser):
             "first_event_at": self._format_datetime(session_data["first_event_at"]),
             "last_event_at": self._format_datetime(session_data["last_event_at"]),
             "event_counts": dict(session_data["event_counts"]),
+            "event_count": sum(session_data["event_counts"].values()),
             "model_changes": session_data["model_changes"],
             "usage_checkpoints": session_data["usage_checkpoints"],
             "permissions": session_data["permissions"],
@@ -449,6 +452,8 @@ class CopilotParser(BaseParser):
             elif isinstance(value, list) and value:
                 filtered[key] = value
             elif isinstance(value, str) and value:
+                filtered[key] = value
+            elif isinstance(value, int) and value >= 0:
                 filtered[key] = value
         return filtered
 
