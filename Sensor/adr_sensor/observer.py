@@ -5,10 +5,16 @@ This is the central orchestrator that coordinates all parsers and manages
 the ingestion, display, and export of agent telemetry data.
 """
 
+import errno
+import hashlib
 import json
 import os
 import platform
+import re
+import secrets
+import stat
 import sys
+import time
 import traceback
 from datetime import datetime
 from pathlib import Path
@@ -20,12 +26,15 @@ from .parsers.claude_desktop_parser import ClaudeDesktopParser
 from .parsers.claude_parser import ClaudeParser
 from .parsers.cline_parser import ClineParser
 from .parsers.codex_parser import CodexParser
+from .parsers.copilot_parser import CopilotParser
 from .parsers.cursor_parser import CursorParser
 from .parsers.opencode_parser import OpencodeParser
 from .parsers.warp_parser import WarpParser
 from .schemas.agent_event_schema import AgentEvent
 from .schemas.system_config_schema import SystemConfiguration
 from .utils.timestamp_utils import format_timestamp_for_filename, normalize_timestamp, parse_timestamp_from_filename
+
+_COLLISION_SUFFIX_PATTERN = re.compile(r"_([0-9a-f]{64})(?:_(\d+))?$")
 
 
 class AgentObserver:
@@ -50,6 +59,7 @@ class AgentObserver:
         ("cline", "Cline"),
         ("warp", "Warp Terminal"),
         ("codex", "Codex"),
+        ("copilot", "GitHub Copilot"),
         ("opencode", "opencode"),
     )
 
@@ -58,6 +68,8 @@ class AgentObserver:
     PLATFORM_RESTRICTED_SOURCES = {
         "claude_desktop": ("Darwin", "Windows"),
     }
+
+    CONTENT_AWARE_INCREMENTAL_SOURCES = frozenset({"codex", "copilot"})
 
     def __init__(self, output_dir: Optional[Path] = None, max_age_days: Optional[int] = None):
         """Initialize the AgentObserver.
@@ -72,6 +84,7 @@ class AgentObserver:
             ClaudeDesktopParser(max_age_days=max_age_days) if max_age_days is not None else ClaudeDesktopParser()
         )
         self.codex_parser = CodexParser()
+        self.copilot_parser = CopilotParser()
         self.cline_parser = ClineParser()
         self.warp_parser = WarpParser(max_age_days=max_age_days) if max_age_days is not None else WarpParser()
         self.opencode_parser = (
@@ -114,7 +127,7 @@ class AgentObserver:
 
         Args:
             source_filter: Which source to ingest. One of 'all', 'claude', 'cursor',
-                'claude_desktop', 'cline', 'warp', 'codex', 'opencode'.
+                'claude_desktop', 'cline', 'warp', 'codex', 'copilot', 'opencode'.
 
         Returns:
             Tuple of (agent_events, system_configs).
@@ -279,20 +292,85 @@ class AgentObserver:
 
         output_dir.mkdir(parents=True, exist_ok=True)
         saved_files = []
+        session_file_index = (
+            self._build_session_file_index(output_dir)
+            if any(entry.source in self.CONTENT_AWARE_INCREMENTAL_SOURCES for entry in entries)
+            else {}
+        )
 
         for entry in entries:
             timestamp_str = format_timestamp_for_filename(entry.timestamp)
-            clean_session_id = self._clean_filename(entry.session_id)
-            filename = f"adr.{clean_session_id}.{timestamp_str}.json"
+            filename_session_id = (
+                self._session_filename_id(entry.session_id)
+                if entry.source in self.CONTENT_AWARE_INCREMENTAL_SOURCES
+                else self._clean_filename(entry.session_id)
+            )
+            filename = f"adr.{filename_session_id}.{timestamp_str}.json"
             file_path = output_dir / filename
+            temp_path: Optional[Path] = None
+            lock_path: Optional[Path] = None
+            lock_fd: Optional[int] = None
 
             try:
-                with open(file_path, "w", encoding="utf-8") as f:
-                    json.dump(entry.get_non_null_fields(), f, indent=2, ensure_ascii=False)
+                if entry.source in self.CONTENT_AWARE_INCREMENTAL_SOURCES:
+                    lock_path = output_dir / f".adr.{filename_session_id}.lock"
+                    lock_fd = self._acquire_session_lock(lock_path)
+                    existing_info = self._find_session_file(entry, session_file_index)
+                    file_path = self._resolve_session_file_path(
+                        output_dir, entry, filename_session_id, timestamp_str, existing_info
+                    )
+                    filename = file_path.name
+                    fresh_target = self._session_file_info(file_path)
+                    if (
+                        fresh_target is not None
+                        and fresh_target["data"].get("session_id") == entry.session_id
+                    ):
+                        existing_info = self._newer_session_file(existing_info, fresh_target)
+                    if self._session_revision_regresses(entry, existing_info):
+                        print(f"Skipped stale session: {filename}")
+                        continue
+
+                entry_data = entry.get_non_null_fields()
+                temp_path, temp_fd = self._create_session_temp(output_dir, filename, file_path)
+                with os.fdopen(temp_fd, mode="w", encoding="utf-8") as f:
+                    json.dump(entry_data, f, indent=2, ensure_ascii=False)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(temp_path, file_path)
+                temp_path = None
+                self._sync_session_directory(output_dir)
+
+                if entry.source in self.CONTENT_AWARE_INCREMENTAL_SOURCES:
+                    removed_stale_files = self._remove_stale_session_files(
+                        entry.session_id,
+                        file_path,
+                        self._session_file_candidates(entry, session_file_index),
+                    )
+                    if removed_stale_files:
+                        self._sync_session_directory(output_dir)
+                    self._index_session_file(session_file_index, file_path, entry_data)
+
                 saved_files.append(file_path)
                 print(f"Saved session: {filename}")
             except Exception as e:
                 print(f"Error saving session {filename}: {e}")
+                self._emit_error(
+                    {
+                        "source": entry.source,
+                        "stage": "save_session",
+                        "error_type": e.__class__.__name__,
+                        "message": str(e),
+                        "session_id": entry.session_id,
+                    }
+                )
+            finally:
+                if temp_path is not None and temp_path.exists():
+                    try:
+                        temp_path.unlink()
+                    except OSError as cleanup_error:
+                        print(f"Error removing temporary session file {temp_path.name}: {cleanup_error}")
+                if lock_fd is not None and lock_path is not None:
+                    self._release_session_lock(lock_fd)
 
         print(f"\nSaved {len(saved_files)} sessions to: {output_dir}")
         return saved_files
@@ -302,15 +380,36 @@ class AgentObserver:
     ) -> List[AgentEvent]:
         """Filter out entries that haven't changed since last processing."""
         existing_files = self._get_existing_session_files(output_dir)
+        target_dir = Path(output_dir) if output_dir is not None else self._get_default_session_dir()
+        session_file_index = (
+            self._build_session_file_index(target_dir)
+            if any(entry.source in self.CONTENT_AWARE_INCREMENTAL_SOURCES for entry in entries)
+            else {}
+        )
 
         filtered_entries = []
         for entry in entries:
-            session_id = entry.session_id
-            if session_id not in existing_files:
+            filename_session_id = (
+                self._session_filename_id(entry.session_id)
+                if entry.source in self.CONTENT_AWARE_INCREMENTAL_SOURCES
+                else self._clean_filename(entry.session_id)
+            )
+            existing_info = existing_files.get(filename_session_id)
+            if entry.source in self.CONTENT_AWARE_INCREMENTAL_SOURCES:
+                existing_info = self._find_session_file(entry, session_file_index)
+
+            if existing_info is None:
                 filtered_entries.append(entry)
                 continue
 
-            existing_info = existing_files[session_id]
+            if entry.source in self.CONTENT_AWARE_INCREMENTAL_SOURCES:
+                if self._session_content_changed(entry, existing_info):
+                    existing_revision = self._session_file_revision(existing_info)
+                    current_revision = self._entry_session_revision(entry)
+                    if existing_revision is None or current_revision is None or current_revision >= existing_revision:
+                        filtered_entries.append(entry)
+                continue
+
             existing_ts = normalize_timestamp(existing_info["timestamp"]).replace(microsecond=0)
             entry_ts = normalize_timestamp(entry.timestamp).replace(microsecond=0)
 
@@ -318,6 +417,401 @@ class AgentObserver:
                 filtered_entries.append(entry)
 
         return filtered_entries
+
+    def _session_content_changed(self, entry: AgentEvent, existing_info: Dict[str, Any]) -> bool:
+        """Compare complete exported content for sources whose sessions can resume."""
+        existing_path = existing_info["file_path"]
+        try:
+            existing_data = existing_info.get("data")
+            if existing_data is None:
+                with open(existing_path, encoding="utf-8") as handle:
+                    existing_data = json.load(handle)
+            if not isinstance(existing_data, dict):
+                raise ValueError("existing session file must contain a JSON object")
+            current_content = self._session_export_content(entry.get_non_null_fields())
+            existing_content = self._session_export_content(existing_data)
+            if entry.source == "codex" and "session_context" not in existing_content:
+                current_context = current_content.get("session_context")
+                if isinstance(current_context, dict) and set(current_context) == {"last_event_at"}:
+                    current_content.pop("session_context")
+            return current_content != existing_content
+        except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError) as exc:
+            print(f"Error comparing existing session {existing_path.name}: {exc}")
+            self._emit_error(
+                {
+                    "source": entry.source,
+                    "stage": "compare_session",
+                    "error_type": exc.__class__.__name__,
+                    "message": str(exc),
+                    "session_id": entry.session_id,
+                }
+            )
+            return True
+
+    @staticmethod
+    def _session_export_content(event_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Ignore fields that change only because a snapshot is rewritten."""
+        return {key: value for key, value in event_data.items() if key not in {"timestamp", "uuid"}}
+
+    def _find_session_file(
+        self,
+        entry: AgentEvent,
+        session_file_index: Dict[str, List[Dict[str, Any]]],
+    ) -> Optional[Dict[str, Any]]:
+        """Find the latest snapshot whose stored session ID matches exactly."""
+        latest: Optional[Dict[str, Any]] = None
+        for candidate_info in self._session_file_candidates(entry, session_file_index):
+            candidate = candidate_info["file_path"]
+            if not candidate.exists():
+                continue
+            data = candidate_info.get("data") or self._load_session_file(candidate)
+            if data is None or data.get("session_id") != entry.session_id:
+                continue
+            candidate_info = dict(candidate_info)
+            candidate_info["data"] = data
+            candidate_info["revision"] = self._session_file_revision(candidate_info)
+            latest = self._newer_session_file(latest, candidate_info)
+        return latest
+
+    def _session_file_info(self, file_path: Path) -> Optional[Dict[str, Any]]:
+        if not file_path.exists():
+            return None
+        file_timestamp = parse_timestamp_from_filename(file_path.name)
+        data = self._load_session_file(file_path)
+        if file_timestamp is None or data is None:
+            return None
+        info = {
+            "file_path": file_path,
+            "timestamp": file_timestamp,
+            "filename": file_path.name,
+            "data": data,
+        }
+        info["revision"] = self._session_file_revision(info)
+        return info
+
+    @staticmethod
+    def _newer_session_file(
+        current: Optional[Dict[str, Any]],
+        candidate: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        if current is None:
+            return candidate
+        candidate_revision = candidate.get("revision")
+        current_revision = current.get("revision")
+        candidate_event_count = AgentObserver._session_file_event_count(candidate)
+        current_event_count = AgentObserver._session_file_event_count(current)
+        if (
+            candidate_revision is not None
+            and (current_revision is None or candidate_revision > current_revision)
+        ) or (
+            candidate_revision == current_revision
+            and (
+                candidate_event_count is not None
+                and (current_event_count is None or candidate_event_count > current_event_count)
+            )
+        ) or (
+            candidate_revision == current_revision
+            and candidate_event_count == current_event_count
+            and candidate["timestamp"] > current["timestamp"]
+        ):
+            return candidate
+        return current
+
+    @staticmethod
+    def _create_session_temp(output_dir: Path, filename: str, target_path: Path) -> Tuple[Path, int]:
+        """Create a same-directory temporary file with compatible permissions."""
+        for _ in range(10):
+            temp_path = output_dir / f".{filename}.{secrets.token_hex(8)}.tmp"
+            try:
+                fd = os.open(temp_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o666)
+            except FileExistsError:
+                continue
+
+            try:
+                if target_path.exists():
+                    os.chmod(temp_path, stat.S_IMODE(target_path.stat().st_mode))
+            except OSError:
+                os.close(fd)
+                temp_path.unlink(missing_ok=True)
+                raise
+            return temp_path, fd
+        raise FileExistsError(f"unable to allocate temporary file for {filename}")
+
+    def _build_session_file_index(self, output_dir: Path) -> Dict[str, List[Dict[str, Any]]]:
+        """Index filenames once so batch incremental processing stays linear."""
+        index: Dict[str, List[Dict[str, Any]]] = {}
+        if not output_dir.exists():
+            return index
+
+        for file_path in output_dir.glob("adr.*.json"):
+            file_timestamp = parse_timestamp_from_filename(file_path.name)
+            if file_timestamp is None:
+                continue
+            filename_session_id = file_path.name[4:-5].rsplit(".", 1)[0]
+            info = {
+                "file_path": file_path,
+                "timestamp": file_timestamp,
+                "filename": file_path.name,
+            }
+            index.setdefault(filename_session_id, []).append(info)
+            match = _COLLISION_SUFFIX_PATTERN.search(filename_session_id)
+            if match:
+                index.setdefault(f"#sha256:{match.group(1)}", []).append(info)
+        return index
+
+    def _session_file_candidates(
+        self,
+        entry: AgentEvent,
+        session_file_index: Dict[str, List[Dict[str, Any]]],
+    ) -> List[Dict[str, Any]]:
+        filename_session_id = self._session_filename_id(entry.session_id)
+        legacy_session_id = self._clean_filename(entry.session_id)
+        digest = hashlib.sha256(entry.session_id.encode("utf-8")).hexdigest()
+        candidates: List[Dict[str, Any]] = []
+        seen_paths = set()
+        for key in (filename_session_id, legacy_session_id, f"#sha256:{digest}"):
+            for info in session_file_index.get(key, []):
+                path = info["file_path"]
+                if path in seen_paths:
+                    continue
+                candidate_session_id = path.name[4:-5].rsplit(".", 1)[0]
+                if self._filename_id_matches_session(candidate_session_id, entry.session_id):
+                    candidates.append(info)
+                    seen_paths.add(path)
+        return candidates
+
+    def _index_session_file(
+        self,
+        session_file_index: Dict[str, List[Dict[str, Any]]],
+        file_path: Path,
+        data: Dict[str, Any],
+    ) -> None:
+        filename_session_id = file_path.name[4:-5].rsplit(".", 1)[0]
+        keys = [filename_session_id]
+        match = _COLLISION_SUFFIX_PATTERN.search(filename_session_id)
+        if match:
+            keys.append(f"#sha256:{match.group(1)}")
+        for key in keys:
+            session_file_index[key] = [
+                info for info in session_file_index.get(key, []) if info["file_path"] != file_path
+            ]
+
+        info = {
+            "file_path": file_path,
+            "timestamp": parse_timestamp_from_filename(file_path.name),
+            "filename": file_path.name,
+            "data": data,
+        }
+        session_file_index.setdefault(filename_session_id, []).append(info)
+        if match:
+            session_file_index.setdefault(f"#sha256:{match.group(1)}", []).append(info)
+
+    def _resolve_session_file_path(
+        self,
+        output_dir: Path,
+        entry: AgentEvent,
+        filename_session_id: str,
+        timestamp_str: str,
+        existing_info: Optional[Dict[str, Any]],
+    ) -> Path:
+        """Resolve a stable path without overwriting a colliding session ID."""
+        preferred = output_dir / f"adr.{filename_session_id}.{timestamp_str}.json"
+        if existing_info is not None and format_timestamp_for_filename(existing_info["timestamp"]) == timestamp_str:
+            existing_session_part = existing_info["file_path"].name[4:-5].rsplit(".", 1)[0]
+            if (
+                existing_session_part == filename_session_id
+                or existing_session_part.startswith(f"{filename_session_id}_")
+            ):
+                return existing_info["file_path"]
+
+        if not preferred.exists():
+            return preferred
+        if self._session_file_has_id(preferred, entry.session_id):
+            return preferred
+
+        digest = hashlib.sha256(entry.session_id.encode("utf-8")).hexdigest()
+        counter = 0
+        while True:
+            suffix = digest if counter == 0 else f"{digest}_{counter}"
+            prefix = filename_session_id[: 200 - len(suffix) - 1]
+            alternate_id = f"{prefix}_{suffix}".strip("_")
+            alternate = output_dir / f"adr.{alternate_id}.{timestamp_str}.json"
+            if not alternate.exists() or self._session_file_has_id(alternate, entry.session_id):
+                return alternate
+            counter += 1
+
+    def _session_revision_regresses(
+        self, entry: AgentEvent, existing_info: Optional[Dict[str, Any]]
+    ) -> bool:
+        """Prevent an older concurrent parse from replacing a newer snapshot."""
+        if existing_info is None:
+            return False
+        existing_revision = self._session_file_revision(existing_info)
+        current_revision = self._entry_session_revision(entry)
+        existing_event_count = self._session_file_event_count(existing_info)
+        current_event_count = self._entry_session_event_count(entry)
+        return (
+            existing_revision is not None
+            and current_revision is not None
+            and (
+                current_revision < existing_revision
+                or (
+                    current_revision == existing_revision
+                    and existing_event_count is not None
+                    and current_event_count is not None
+                    and current_event_count < existing_event_count
+                )
+            )
+        )
+
+    @staticmethod
+    def _entry_session_revision(entry: AgentEvent) -> Optional[datetime]:
+        context = entry.session_context or {}
+        last_event_at = context.get("last_event_at") if isinstance(context, dict) else None
+        if last_event_at is None:
+            return None
+        try:
+            return normalize_timestamp(last_event_at)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _entry_session_event_count(entry: AgentEvent) -> Optional[int]:
+        context = entry.session_context or {}
+        event_count = context.get("event_count") if isinstance(context, dict) else None
+        return event_count if isinstance(event_count, int) and event_count >= 0 else None
+
+    @staticmethod
+    def _session_file_event_count(existing_info: Dict[str, Any]) -> Optional[int]:
+        data = existing_info.get("data")
+        if data is None:
+            data = AgentObserver._load_session_file(existing_info["file_path"])
+        context = data.get("session_context") if isinstance(data, dict) else None
+        event_count = context.get("event_count") if isinstance(context, dict) else None
+        return event_count if isinstance(event_count, int) and event_count >= 0 else None
+
+    @staticmethod
+    def _session_file_revision(existing_info: Dict[str, Any]) -> Optional[datetime]:
+        if "revision" in existing_info:
+            revision = existing_info["revision"]
+            return revision if isinstance(revision, datetime) else None
+        try:
+            data = existing_info.get("data")
+            if data is None:
+                with open(existing_info["file_path"], encoding="utf-8") as handle:
+                    data = json.load(handle)
+            if not isinstance(data, dict):
+                return None
+            context = data.get("session_context")
+            last_event_at = context.get("last_event_at") if isinstance(context, dict) else None
+            return normalize_timestamp(last_event_at or data.get("timestamp") or existing_info["timestamp"])
+        except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _acquire_session_lock(lock_path: Path, timeout_seconds: float = 30.0) -> int:
+        """Acquire an OS-managed cross-process lock for one session."""
+        fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+        try:
+            if os.fstat(fd).st_size == 0:
+                os.write(fd, b"0")
+        except Exception:
+            os.close(fd)
+            raise
+
+        deadline = time.monotonic() + timeout_seconds
+        while True:
+            try:
+                os.lseek(fd, 0, os.SEEK_SET)
+                if os.name == "nt":
+                    import msvcrt
+
+                    msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return fd
+            except OSError as exc:
+                if exc.errno not in {errno.EACCES, errno.EAGAIN}:
+                    os.close(fd)
+                    raise
+                if time.monotonic() >= deadline:
+                    os.close(fd)
+                    raise TimeoutError(f"timed out waiting for session lock {lock_path.name}")
+                time.sleep(0.05)
+
+    @staticmethod
+    def _release_session_lock(lock_fd: int) -> None:
+        try:
+            os.lseek(lock_fd, 0, os.SEEK_SET)
+            if os.name == "nt":
+                import msvcrt
+
+                msvcrt.locking(lock_fd, msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        finally:
+            os.close(lock_fd)
+
+    @staticmethod
+    def _sync_session_directory(output_dir: Path) -> None:
+        """Persist directory entries after replacing or removing snapshots."""
+        if os.name == "nt":
+            return
+        directory_fd = os.open(output_dir, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+
+    def _remove_stale_session_files(
+        self,
+        session_id: str,
+        keep_path: Path,
+        candidates: List[Dict[str, Any]],
+    ) -> bool:
+        """Remove superseded moving-timestamp snapshots after the replacement succeeds."""
+        removed_files = False
+        for info in candidates:
+            candidate = info["file_path"]
+            if candidate == keep_path or not candidate.exists():
+                continue
+            # Reload immediately before removal: indexed data can be stale after a writer updates a path.
+            data = self._load_session_file(candidate)
+            if data is None or data.get("session_id") != session_id:
+                continue
+            try:
+                candidate.unlink()
+                removed_files = True
+            except OSError as exc:
+                print(f"Error removing stale session {candidate.name}: {exc}")
+                self._emit_error(
+                    {
+                        "stage": "remove_stale_session",
+                        "error_type": exc.__class__.__name__,
+                        "message": str(exc),
+                        "session_id": session_id,
+                    }
+                )
+        return removed_files
+
+    @staticmethod
+    def _session_file_has_id(file_path: Path, session_id: str) -> bool:
+        """Verify ownership before migrating or deleting a legacy filename."""
+        data = AgentObserver._load_session_file(file_path)
+        return data is not None and data.get("session_id") == session_id
+
+    @staticmethod
+    def _load_session_file(file_path: Path) -> Optional[Dict[str, Any]]:
+        try:
+            with open(file_path, encoding="utf-8") as handle:
+                data = json.load(handle)
+            return data if isinstance(data, dict) else None
+        except (OSError, UnicodeError, json.JSONDecodeError, TypeError):
+            return None
 
     def _get_existing_session_files(self, output_dir: Optional[Path] = None) -> Dict[str, Dict[str, Any]]:
         """Get a mapping of session_id to file info for existing session files."""
@@ -370,3 +864,30 @@ class AgentObserver:
             clean_id = clean_id[:max_session_length]
 
         return clean_id
+
+    def _session_filename_id(self, session_id: str) -> str:
+        """Preserve existing safe names while disambiguating lossy sanitization."""
+        clean_id = self._clean_filename(session_id)
+        if clean_id == session_id:
+            return clean_id
+
+        digest = hashlib.sha256(session_id.encode("utf-8")).hexdigest()[:12]
+        clean_id = clean_id[: 200 - len(digest) - 1]
+        return f"{clean_id}_{digest}".strip("_")
+
+    def _filename_id_matches_session(self, filename_session_id: str, session_id: str) -> bool:
+        current_id = self._session_filename_id(session_id)
+        if filename_session_id in {current_id, self._clean_filename(session_id)}:
+            return True
+
+        match = _COLLISION_SUFFIX_PATTERN.search(filename_session_id)
+        if not match:
+            return False
+        digest = hashlib.sha256(session_id.encode("utf-8")).hexdigest()
+        if match.group(1) != digest:
+            return False
+
+        counter = int(match.group(2)) if match.group(2) is not None else 0
+        suffix = digest if counter == 0 else f"{digest}_{counter}"
+        prefix = current_id[: 200 - len(suffix) - 1]
+        return filename_session_id == f"{prefix}_{suffix}".strip("_")

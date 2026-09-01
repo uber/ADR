@@ -13,6 +13,7 @@ from adr_sensor.parsers.claude_desktop_parser import ClaudeDesktopParser
 from adr_sensor.parsers.claude_parser import ClaudeParser
 from adr_sensor.parsers.cline_parser import ClineParser
 from adr_sensor.parsers.codex_parser import CodexParser
+from adr_sensor.parsers.copilot_parser import CopilotParser
 from adr_sensor.parsers.cursor_parser import CursorParser
 from adr_sensor.parsers.opencode_parser import OpencodeParser
 from adr_sensor.parsers.warp_parser import WarpParser
@@ -433,6 +434,183 @@ class TestCodexParser:
         parser.base_path = Path("/nonexistent/path")
         entries = parser.parse_all()
         assert entries == []
+
+    def test_keeps_session_start_timestamp_for_resumed_session(self, tmp_path):
+        """Resumed content must not change the timestamp used for file identity."""
+        jsonl_file = tmp_path / "resumed-codex.jsonl"
+        events = [
+            {
+                "type": "session_meta",
+                "timestamp": "2025-06-15T10:00:00Z",
+                "payload": {"id": "sess-resume", "timestamp": "2025-06-15T10:00:00Z", "cwd": "/tmp"},
+            },
+            {
+                "type": "response_item",
+                "timestamp": "2025-06-15T10:00:01Z",
+                "payload": {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "first question"}],
+                },
+            },
+            {
+                "type": "response_item",
+                "timestamp": "2025-06-16T12:30:00Z",
+                "payload": {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "later follow-up"}],
+                },
+            },
+        ]
+        with open(jsonl_file, "w", encoding="utf-8") as f:
+            for event in events:
+                f.write(json.dumps(event) + "\n")
+
+        entry = CodexParser().parse_jsonl_file(jsonl_file)
+        assert entry is not None
+        assert entry.timestamp == datetime(2025, 6, 15, 10, 0, 0, tzinfo=timezone.utc)
+        assert entry.chat_history[-1].content == "later follow-up"
+        assert entry.session_context["last_event_at"] == "2025-06-16T12:30:00+00:00"
+        assert entry.session_context["event_count"] == len(events)
+
+
+class TestCopilotParser:
+    def test_parse_session_dir(self, tmp_path):
+        """Parse Copilot session directories into chat history and tool usage."""
+        session_dir = tmp_path / "abc-session"
+        session_dir.mkdir()
+
+        (session_dir / "workspace.yaml").write_text(
+            "\n".join(
+                [
+                    "id: abc-session",
+                    "cwd: C:\\repo",
+                    "client_name: vscode",
+                    "name: Sample session",
+                    "created_at: 2026-08-10T10:00:00.000Z",
+                    "updated_at: 2026-08-10T11:00:00.000Z",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        (session_dir / "vscode.metadata.json").write_text(
+            json.dumps(
+                {
+                    "origin": "vscode",
+                    "created": 1785470000000,
+                    "modified": 1785476400000,
+                    "firstUserMessage": "inspect the repo",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        events = [
+            {
+                "type": "session.start",
+                "timestamp": "2026-08-10T10:00:00.000Z",
+                "data": {
+                    "sessionId": "abc-session",
+                    "startTime": "2026-08-10T10:00:00.000Z",
+                    "selectedModel": "gpt-5.6-sol",
+                    "context": {"cwd": "C:\\repo"},
+                },
+            },
+            {
+                "type": "user.message",
+                "id": "user-1",
+                "timestamp": "2026-08-10T10:00:05.000Z",
+                "data": {
+                    "content": "inspect the repo",
+                    "transformedContent": "<current_datetime>...\ninspect the repo",
+                },
+            },
+            {
+                "type": "assistant.message",
+                "id": "assistant-1",
+                "timestamp": "2026-08-10T10:00:06.000Z",
+                "data": {
+                    "messageId": "assistant-message-1",
+                    "model": "gpt-5.6-sol",
+                    "content": "I will inspect it.",
+                    "toolRequests": [
+                        {
+                            "toolCallId": "call-1",
+                            "name": "powershell",
+                            "type": "function",
+                            "arguments": {"command": "Get-ChildItem", "description": "List files"},
+                        }
+                    ],
+                },
+            },
+            {
+                "type": "tool.execution_complete",
+                "timestamp": "2026-08-10T11:00:00.000Z",
+                "data": {
+                    "toolCallId": "call-1",
+                    "model": "gpt-5.6-sol",
+                    "success": True,
+                    "result": {"content": "file1\nfile2"},
+                },
+            },
+        ]
+        with open(session_dir / "events.jsonl", "w", encoding="utf-8") as f:
+            for event in events:
+                f.write(json.dumps(event) + "\n")
+
+        entry = CopilotParser(base_path=tmp_path).parse_session_dir(session_dir)
+        assert entry is not None
+        assert entry.source == "copilot"
+        assert entry.session_id == "copilot_abc-session"
+        assert entry.project_path == "C:\\repo"
+        assert entry.model == "gpt-5.6-sol"
+        assert entry.timestamp == datetime(2026, 8, 10, 10, 0, 0, tzinfo=timezone.utc)
+        assert [msg.role for msg in entry.chat_history] == ["user", "assistant"]
+        tool = entry.chat_history[1].tools[0]
+        assert tool.tool_name == "powershell"
+        assert tool.result == "file1\nfile2"
+        assert tool.status == "success"
+        assert entry.session_context["workspace_metadata"]["updated_at"] == "2026-08-10T11:00:00.000Z"
+        assert entry.session_context["last_event_at"] == "2026-08-10T11:00:00+00:00"
+        assert entry.session_context["event_count"] == len(events)
+        assert entry.session_context["transformed_user_messages"][0]["sequence_id"] == "user-1"
+
+    def test_tool_failure_uses_error_field_when_result_is_absent(self, tmp_path):
+        """Copilot records some failed tools with error but no result."""
+        session_dir = tmp_path / "failed-tool"
+        session_dir.mkdir()
+        events = [
+            {
+                "type": "session.start",
+                "timestamp": "2026-08-10T10:00:00.000Z",
+                "data": {"sessionId": "failed-tool", "startTime": "2026-08-10T10:00:00.000Z"},
+            },
+            {
+                "type": "user.message",
+                "timestamp": "2026-08-10T10:00:01.000Z",
+                "data": {"content": "read missing file"},
+            },
+            {
+                "type": "tool.execution_start",
+                "timestamp": "2026-08-10T10:00:02.000Z",
+                "data": {"toolCallId": "call-1", "toolName": "read_file", "arguments": {"path": "missing"}},
+            },
+            {
+                "type": "tool.execution_complete",
+                "timestamp": "2026-08-10T10:00:02.001Z",
+                "data": {"toolCallId": "call-1", "success": False, "error": "File not found"},
+            },
+        ]
+        with open(session_dir / "events.jsonl", "w", encoding="utf-8") as handle:
+            for event in events:
+                handle.write(json.dumps(event) + "\n")
+
+        entry = CopilotParser(base_path=tmp_path).parse_session_dir(session_dir)
+        tool = [tool for message in entry.chat_history for tool in message.tools][0]
+        assert tool.status == "error"
+        assert tool.result is None
+        assert tool.error == "File not found"
 
 
 def _build_warp_db(db_path: Path, conversations: list) -> None:
