@@ -1,0 +1,852 @@
+{
+  "applicable": 105,
+  "collector": "0.1.0+synthetic",
+  "entries": [
+    {
+      "catalog_id": "claude-code",
+      "id": "T-CLI-01",
+      "method": "npm-global",
+      "path": null,
+      "status": "installed",
+      "version": "2.1.235"
+    },
+    {
+      "catalog_id": "codex",
+      "id": "T-CLI-02",
+      "method": "npm-global",
+      "path": null,
+      "status": "installed",
+      "version": "0.58.0"
+    },
+    {
+      "catalog_id": "gemini-cli",
+      "id": "T-CLI-03",
+      "method": "npm-global",
+      "path": null,
+      "status": "installed",
+      "version": "0.12.0"
+    },
+    {
+      "catalog_id": "opencode",
+      "id": "T-CLI-04",
+      "method": "npm-global",
+      "path": null,
+      "status": "installed",
+      "version": "0.5.29"
+    },
+    {
+      "catalog_id": "amp",
+      "id": "T-CLI-05",
+      "method": "npm-global",
+      "path": null,
+      "status": "installed",
+      "version": "0.0.1787428878-gebb20a"
+    },
+    {
+      "catalog_id": "kilo-cli",
+      "id": "T-CLI-06",
+      "method": "npm-global",
+      "path": null,
+      "status": "installed",
+      "version": "7.4.23"
+    },
+    {
+      "catalog_id": "qwen-code",
+      "id": "T-CLI-07",
+      "method": "npm-global",
+      "path": null,
+      "status": "installed",
+      "version": "0.22.0"
+    },
+    {
+      "catalog_id": "copilot-cli",
+      "id": "T-CLI-08",
+      "method": "npm-global",
+      "path": null,
+      "status": "installed",
+      "version": "1.0.80"
+    },
+    {
+      "catalog_id": "goose",
+      "id": "T-CLI-09",
+      "method": "npm-global",
+      "path": null,
+      "status": "installed",
+      "version": "1.0.28"
+    },
+    {
+      "catalog_id": "aider",
+      "id": "T-CLI-10",
+      "method": "pipx",
+      "path": null,
+      "status": "installed",
+      "version": "0.86.1"
+    },
+    {
+      "catalog_id": "crush",
+      "id": "T-CLI-11",
+      "method": "vendor-binary",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": "grok-cli",
+      "id": "T-CLI-12",
+      "method": "vendor-binary",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": "cursor",
+      "id": "T-APP-02",
+      "method": "app-installer",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": "windsurf",
+      "id": "T-APP-03",
+      "method": "app-installer",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": "vscode",
+      "id": "T-APP-04",
+      "method": "app-installer",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": "zed",
+      "id": "T-APP-05",
+      "method": "app-installer",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": "jetbrains-ai",
+      "id": "T-APP-06",
+      "method": "app-installer",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": "warp",
+      "id": "T-APP-08",
+      "method": "app-installer",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": "cline",
+      "id": "T-EXT-01",
+      "method": "vscode-ext",
+      "path": null,
+      "status": "installed",
+      "version": "3.42.0"
+    },
+    {
+      "catalog_id": "continue",
+      "id": "T-EXT-02",
+      "method": "vscode-ext",
+      "path": null,
+      "status": "installed",
+      "version": "1.5.9"
+    },
+    {
+      "catalog_id": "roo-code",
+      "id": "T-EXT-03",
+      "method": "vscode-ext",
+      "path": null,
+      "status": "installed",
+      "version": "3.30.1"
+    },
+    {
+      "catalog_id": "kilo-code",
+      "id": "T-EXT-04",
+      "method": "vscode-ext",
+      "path": null,
+      "status": "installed",
+      "version": "4.108.0"
+    },
+    {
+      "catalog_id": "copilot-ext",
+      "id": "T-EXT-05",
+      "method": "vscode-ext",
+      "path": null,
+      "status": "installed",
+      "version": "1.380.0"
+    },
+    {
+      "catalog_id": "ollama",
+      "id": "T-RT-01",
+      "method": "service",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": "lm-studio",
+      "id": "T-RT-02",
+      "method": "service",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": "llama.cpp",
+      "id": "T-RT-03",
+      "method": "service",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": "gpt4all",
+      "id": "T-RT-04",
+      "method": "service",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": "jan",
+      "id": "T-RT-05",
+      "method": "service",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": "vllm",
+      "id": "T-RT-06",
+      "method": "service",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": "localai",
+      "id": "T-RT-07",
+      "method": "service",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": "open-webui",
+      "id": "T-RT-08",
+      "method": "service",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": "openhands",
+      "id": "T-RT-09",
+      "method": "service",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "T-CHAN-01",
+      "method": "channel-variant",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "T-CHAN-03",
+      "method": "channel-variant",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "T-CHAN-04",
+      "method": "channel-variant",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "T-CHAN-06",
+      "method": "channel-variant",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "T-CHAN-07",
+      "method": "channel-variant",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "M-SITE-01",
+      "method": "declare-mcp",
+      "path": "~/.claude.json",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "M-SITE-02",
+      "method": "declare-mcp",
+      "path": "~/.config/claude-desktop/claude_desktop_config.json",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "M-SITE-03",
+      "method": "declare-mcp",
+      "path": "~/.cursor/mcp.json",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "M-SITE-04",
+      "method": "declare-mcp",
+      "path": "~/.codeium/windsurf/mcp_config.json",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "M-SITE-05",
+      "method": "declare-mcp",
+      "path": "~/.config/Code/User/mcp.json",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "M-SITE-06",
+      "method": "declare-mcp",
+      "path": "~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "M-SITE-07",
+      "method": "declare-mcp",
+      "path": "~/.config/zed/settings.json",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "M-SITE-08",
+      "method": "declare-mcp",
+      "path": "~/.config/JetBrains/options/mcp.json",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "M-SITE-09",
+      "method": "declare-mcp",
+      "path": "~/.config/opencode/opencode.json",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "M-SITE-10",
+      "method": "declare-mcp",
+      "path": "~/.codex/config.toml",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "M-SITE-11",
+      "method": "declare-mcp",
+      "path": "~/.config/goose/config.yaml",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "M-SITE-12",
+      "method": "declare-mcp",
+      "path": "/etc/claude-code/managed-settings.json",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "M-SITE-13",
+      "method": "declare-mcp",
+      "path": "/etc/adr/managed-mcp.json",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "M-SITE-14",
+      "method": "declare-mcp",
+      "path": "~/dev/demo-repo/.mcp.json",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "M-PIN-01",
+      "method": "declare-mcp",
+      "path": "~/.claude.json",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "M-PIN-02",
+      "method": "declare-mcp",
+      "path": "~/.claude.json",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "M-PIN-03",
+      "method": "declare-mcp",
+      "path": "~/.claude.json",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "M-PIN-04",
+      "method": "declare-mcp",
+      "path": "~/.claude.json",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "M-PIN-05",
+      "method": "declare-mcp",
+      "path": "~/.claude.json",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "M-PIN-06",
+      "method": "declare-mcp",
+      "path": "~/.claude.json",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "M-PIN-07",
+      "method": "declare-mcp",
+      "path": "~/.claude.json",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "M-PIN-08",
+      "method": "declare-mcp",
+      "path": "~/.claude.json",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "M-PIN-09",
+      "method": "declare-mcp",
+      "path": "~/.claude.json",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "M-SP-01",
+      "method": "service",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "M-SP-02",
+      "method": "declare-mcp",
+      "path": "/etc/claude-code/managed-settings.json",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "M-SP-03",
+      "method": "declare-mcp",
+      "path": "~/.claude.json",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "M-SP-04",
+      "method": "declare-mcp",
+      "path": "~/.claude.json",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "M-SP-05",
+      "method": "declare-mcp",
+      "path": "~/.claude.json",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "M-SP-06",
+      "method": "artifact",
+      "path": "~/.mcpb/broken-bundle/manifest.json",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "S-01",
+      "method": "artifact",
+      "path": "~/.claude/skills/pdf-filler/SKILL.md",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "S-02",
+      "method": "artifact",
+      "path": "~/dev/demo-repo/.claude/skills/deploy-check/SKILL.md",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "S-03",
+      "method": "artifact",
+      "path": "~/.claude/commands/ship.md",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "S-04",
+      "method": "artifact",
+      "path": "~/.gemini/commands/review.toml",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "S-05",
+      "method": "artifact",
+      "path": "~/.codex/prompts/triage.md",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "S-06",
+      "method": "artifact",
+      "path": "~/dev/demo-repo/.claude/commands/release.md",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "S-07",
+      "method": "artifact",
+      "path": "~/.claude/output-styles/terse.md",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "S-08",
+      "method": "artifact",
+      "path": "~/.claude/agents/reviewer.md",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "S-09",
+      "method": "artifact",
+      "path": "~/.cursor/agents/refactor.md",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "S-10",
+      "method": "artifact",
+      "path": "~/.codeium/windsurf/agents/scan.md",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "S-11",
+      "method": "artifact",
+      "path": "~/dev/demo-repo/.claude/agents/tester.md",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "S-12",
+      "method": "artifact",
+      "path": "~/.claude/plugins/acme-tools/",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "S-13",
+      "method": "artifact",
+      "path": "~/.claude/settings.json",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "S-14",
+      "method": "artifact",
+      "path": "~/dev/demo-repo/.claude/settings.json",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "S-15",
+      "method": "artifact",
+      "path": "~/dev/demo-repo/.claude/settings.local.json",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "S-16",
+      "method": "artifact",
+      "path": "~/.claude/settings.json",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "S-17",
+      "method": "artifact",
+      "path": "~/.claude/CLAUDE.md",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "S-18",
+      "method": "artifact",
+      "path": "~/.codex/AGENTS.md",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "S-19",
+      "method": "artifact",
+      "path": "~/.gemini/GEMINI.md",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "AG-01",
+      "method": "runtime-state",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "AG-02",
+      "method": "runtime-state",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "AG-03",
+      "method": "runtime-state",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "AG-05",
+      "method": "scheduler",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "AG-06",
+      "method": "scheduler",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "AG-08",
+      "method": "identity",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "AG-09",
+      "method": "identity",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "AG-10",
+      "method": "identity",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "AG-11",
+      "method": "identity",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "AG-12",
+      "method": "artifact",
+      "path": "~/.bashrc",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "N-01",
+      "method": "baseline-prereq",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "N-02",
+      "method": "baseline-prereq",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "N-03",
+      "method": "baseline-prereq",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "N-04",
+      "method": "baseline-prereq",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "N-05",
+      "method": "non-ai-app",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "N-06",
+      "method": "non-ai-app",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "N-07",
+      "method": "artifact",
+      "path": "~/bin/mcp-backup.sh",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "N-08",
+      "method": "service",
+      "path": null,
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "N-09",
+      "method": "artifact",
+      "path": "/usr/local/bin/claude-old",
+      "status": "installed",
+      "version": null
+    },
+    {
+      "catalog_id": null,
+      "id": "N-10",
+      "method": "artifact",
+      "path": "~/bin/ask-corp-llm.sh",
+      "status": "installed",
+      "version": null
+    }
+  ],
+  "failed": 0,
+  "image": "linux-golden-synthetic",
+  "installed": 105,
+  "os": "linux",
+  "run_id": "synthetic-linux",
+  "unavailable": 0
+}
