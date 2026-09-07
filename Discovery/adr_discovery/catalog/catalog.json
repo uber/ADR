@@ -1,0 +1,191 @@
+{
+  "version": "2026.08.22",
+  "entries": [
+    {
+      "id": "claude-code", "name": "Claude Code", "vendor": "Anthropic", "kind": "cli_agent",
+      "fingerprints": {"binaries": ["claude"], "packages": ["npm:@anthropic-ai/claude-code"],
+                       "state_dirs": ["~/.claude"]},
+      "proofs": {"provenance": ["npm:@anthropic-ai/claude-code", "brew:claude"],
+                 "version_probe": ["--version"], "version_shape": "^\\d+\\.\\d+\\.\\d+"},
+      "risk_factors": ["executes_shell"]
+    },
+    {
+      "id": "gemini-cli", "name": "Gemini CLI", "vendor": "Google", "kind": "cli_agent",
+      "fingerprints": {"binaries": ["gemini"], "packages": ["npm:@google/gemini-cli"],
+                       "state_dirs": ["~/.gemini"]},
+      "proofs": {"provenance": ["npm:@google/gemini-cli"],
+                 "version_probe": ["--version"], "version_shape": "^\\d+\\.\\d+\\.\\d+$"},
+      "risk_factors": ["executes_shell"]
+    },
+    {
+      "id": "codex-cli", "name": "Codex CLI", "vendor": "OpenAI", "kind": "cli_agent",
+      "fingerprints": {"binaries": ["codex"], "packages": ["npm:@openai/codex"],
+                       "state_dirs": ["~/.codex"]},
+      "proofs": {"provenance": ["npm:@openai/codex"],
+                 "version_probe": ["--version"], "version_shape": "^codex-cli \\d+\\.\\d+\\.\\d+|^\\d+\\.\\d+\\.\\d+"},
+      "risk_factors": ["executes_shell"]
+    },
+    {
+      "id": "aider", "name": "Aider", "vendor": "Aider AI", "kind": "cli_agent",
+      "fingerprints": {"binaries": ["aider"], "packages": ["pipx:aider-chat", "uv:aider-chat"],
+                       "state_dirs": ["~/.aider"]},
+      "proofs": {"provenance": ["pipx:aider-chat"],
+                 "version_probe": ["--version"], "version_shape": "^aider \\d+\\.\\d+"},
+      "risk_factors": ["executes_shell"]
+    },
+    {
+      "id": "opencode", "name": "opencode", "vendor": "opencode", "kind": "cli_agent",
+      "fingerprints": {"binaries": ["opencode"], "packages": ["npm:opencode-ai"],
+                       "state_dirs": ["~/.config/opencode"]},
+      "proofs": {"provenance": ["npm:opencode-ai"],
+                 "version_probe": ["--version"], "version_shape": "^\\d+\\.\\d+\\.\\d+"},
+      "risk_factors": ["executes_shell"]
+    },
+    {
+      "id": "goose", "name": "goose", "vendor": "Block", "kind": "cli_agent",
+      "fingerprints": {"binaries": ["goose"], "state_dirs": ["~/.config/goose"]},
+      "proofs": {"version_probe": ["--version"], "version_shape": "^goose \\d+\\.\\d+"},
+      "risk_factors": ["executes_shell"]
+    },
+    {
+      "id": "cursor", "name": "Cursor", "vendor": "Anysphere", "kind": "app",
+      "fingerprints": {"bundle_ids": ["com.todesktop.230313mzl4w4u92"],
+                       "desktop_ids": ["cursor"], "state_dirs": ["~/.cursor"]},
+      "proofs": {"provenance": ["brew:cursor"]},
+      "risk_factors": []
+    },
+    {
+      "id": "claude-desktop", "name": "Claude Desktop", "vendor": "Anthropic", "kind": "app",
+      "fingerprints": {"bundle_ids": ["com.anthropic.claudefordesktop"],
+                       "state_dirs": ["~/Library/Application Support/Claude"]},
+      "proofs": {},
+      "risk_factors": []
+    },
+    {
+      "id": "vscode", "name": "Visual Studio Code", "vendor": "Microsoft", "kind": "app",
+      "fingerprints": {"bundle_ids": ["com.microsoft.VSCode"], "desktop_ids": ["code"],
+                       "state_dirs": ["~/.vscode/extensions"]},
+      "proofs": {},
+      "risk_factors": []
+    },
+    {
+      "id": "ollama", "name": "Ollama", "vendor": "Ollama", "kind": "model_runtime",
+      "fingerprints": {"binaries": ["ollama"], "ports": [11434],
+                       "model_dirs": ["~/.ollama/models"], "state_dirs": ["~/.ollama"]},
+      "proofs": {"provenance": ["brew:ollama"],
+                 "version_probe": ["--version"], "version_shape": "\\d+\\.\\d+\\.\\d+"},
+      "risk_factors": ["local_inference"]
+    },
+    {
+      "id": "lm-studio", "name": "LM Studio", "vendor": "LM Studio", "kind": "model_runtime",
+      "fingerprints": {"bundle_ids": ["ai.elementlabs.lmstudio"], "ports": [1234]},
+      "proofs": {},
+      "risk_factors": ["local_inference"]
+    },
+    {
+      "id": "continue", "name": "Continue", "vendor": "Continue", "kind": "extension",
+      "fingerprints": {"extension_ids": ["continue.continue"], "state_dirs": ["~/.continue"]},
+      "proofs": {},
+      "risk_factors": []
+    },
+    {
+      "id": "github-copilot", "name": "GitHub Copilot", "vendor": "GitHub", "kind": "extension",
+      "fingerprints": {"extension_ids": ["github.copilot", "github.copilot-chat"]},
+      "proofs": {},
+      "risk_factors": []
+    },
+    {
+      "id": "comet", "name": "Comet", "vendor": "Perplexity", "kind": "ai_browser",
+      "fingerprints": {"bundle_ids": ["ai.perplexity.comet"]},
+      "proofs": {},
+      "risk_factors": ["browses_autonomously"]
+    },
+    {
+      "id": "amp", "name": "Amp", "vendor": "Sourcegraph", "kind": "cli_agent",
+      "fingerprints": {"binaries": ["amp"], "packages": ["npm:@sourcegraph/amp"]}, "proofs": {}
+    },
+    {
+      "id": "crush", "name": "Crush", "vendor": "Charm", "kind": "cli_agent",
+      "fingerprints": {"binaries": ["crush"], "packages": ["brew:crush"]}, "proofs": {}
+    },
+    {
+      "id": "qwen-code", "name": "Qwen Code", "vendor": "Alibaba", "kind": "cli_agent",
+      "fingerprints": {"binaries": ["qwen"], "packages": ["npm:@qwen-code/qwen-code"]}, "proofs": {}
+    },
+    {
+      "id": "kilo-cli", "name": "Kilo CLI", "vendor": "Kilo Code", "kind": "cli_agent",
+      "fingerprints": {"binaries": ["kilo"], "packages": ["npm:@kilocode/cli"]},
+      "proofs": {"provenance": ["npm:@kilocode/cli"],
+                 "version_probe": ["--version"], "version_shape": "^\\d+\\.\\d+\\.\\d+"},
+      "risk_factors": ["executes_shell"]
+    },
+    {
+      "id": "github-copilot-cli", "name": "GitHub Copilot CLI", "vendor": "GitHub", "kind": "cli_agent",
+      "fingerprints": {"binaries": ["github-copilot-cli"], "packages": ["npm:@github/copilot"]}, "proofs": {}
+    },
+    {
+      "id": "windsurf", "name": "Windsurf", "vendor": "Codeium", "kind": "app",
+      "fingerprints": {"bundle_ids": ["com.exafunction.windsurf"], "desktop_ids": ["windsurf"]}, "proofs": {}
+    },
+    {
+      "id": "zed", "name": "Zed", "vendor": "Zed Industries", "kind": "app",
+      "fingerprints": {"bundle_ids": ["dev.zed.Zed"], "desktop_ids": ["dev.zed.Zed", "zed"]}, "proofs": {}
+    },
+    {
+      "id": "trae", "name": "Trae", "vendor": "ByteDance", "kind": "app",
+      "fingerprints": {"bundle_ids": ["com.trae.app"], "desktop_ids": ["trae"]}, "proofs": {}
+    },
+    {
+      "id": "chatgpt-desktop", "name": "ChatGPT", "vendor": "OpenAI", "kind": "app",
+      "fingerprints": {"bundle_ids": ["com.openai.chat", "com.openai.chatgpt"]}, "proofs": {}
+    },
+    {
+      "id": "perplexity-desktop", "name": "Perplexity", "vendor": "Perplexity", "kind": "app",
+      "fingerprints": {"bundle_ids": ["ai.perplexity.mac"]}, "proofs": {}
+    },
+    {
+      "id": "cline", "name": "Cline", "vendor": "Cline", "kind": "extension",
+      "fingerprints": {"extension_ids": ["saoudrizwan.claude-dev"]}, "proofs": {}
+    },
+    {
+      "id": "roo-code", "name": "Roo Code", "vendor": "Roo Code", "kind": "extension",
+      "fingerprints": {"extension_ids": ["rooveterinaryinc.roo-cline"]}, "proofs": {}
+    },
+    {
+      "id": "kilo-code", "name": "Kilo Code", "vendor": "Kilo Code", "kind": "extension",
+      "fingerprints": {"extension_ids": ["kilocode.kilo-code"]}, "proofs": {}
+    },
+    {
+      "id": "jetbrains-ai", "name": "JetBrains AI Assistant", "vendor": "JetBrains", "kind": "extension",
+      "fingerprints": {"extension_ids": ["com.intellij.ml.llm"]}, "proofs": {}
+    },
+    {
+      "id": "llama-cpp", "name": "llama.cpp", "vendor": "ggml-org", "kind": "model_runtime",
+      "fingerprints": {"binaries": ["llama-server", "server"], "packages": ["brew:llama.cpp"]}, "proofs": {}
+    },
+    {
+      "id": "vllm", "name": "vLLM", "vendor": "vLLM", "kind": "model_runtime",
+      "fingerprints": {"binaries": ["vllm"], "packages": ["pipx:vllm", "uv:vllm"]}, "proofs": {}
+    },
+    {
+      "id": "gpt4all", "name": "GPT4All", "vendor": "Nomic", "kind": "model_runtime",
+      "fingerprints": {"bundle_ids": ["com.nomic.gpt4all"], "desktop_ids": ["gpt4all"]}, "proofs": {}
+    },
+    {
+      "id": "jan", "name": "Jan", "vendor": "Jan", "kind": "model_runtime",
+      "fingerprints": {"bundle_ids": ["com.jan.ai"], "desktop_ids": ["jan"]}, "proofs": {}
+    },
+    {
+      "id": "localai", "name": "LocalAI", "vendor": "LocalAI", "kind": "model_runtime",
+      "fingerprints": {"binaries": ["local-ai"], "packages": ["brew:localai"]}, "proofs": {}
+    },
+    {
+      "id": "open-webui", "name": "Open WebUI", "vendor": "Open WebUI", "kind": "app",
+      "fingerprints": {"packages": ["pipx:open-webui", "uv:open-webui"]}, "proofs": {}
+    },
+    {
+      "id": "arc", "name": "Arc", "vendor": "The Browser Company", "kind": "ai_browser",
+      "fingerprints": {"bundle_ids": ["company.thebrowser.Browser"]}, "proofs": {}
+    }
+  ]
+}
