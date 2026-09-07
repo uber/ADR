@@ -1,0 +1,24 @@
+{
+  "assets": [],
+  "catalog_version": "2026.08.18",
+  "coverage": {
+    "boundaries_hit": [],
+    "denied": [],
+    "out_of_scope": [
+      "instruction_files",
+      "agent_hooks",
+      "scheduling_mechanisms"
+    ],
+    "probes": [],
+    "roots_swept": [],
+    "truncated": [],
+    "unavailable": []
+  },
+  "findings": [],
+  "hostname": "adr-disco-synthetic",
+  "platform": "linux",
+  "review_queue": [],
+  "schema_version": "1.0",
+  "timestamp": "2026-08-22T00:00:00Z",
+  "username": "root"
+}

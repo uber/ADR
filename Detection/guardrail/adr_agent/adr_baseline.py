@@ -13,7 +13,7 @@ import json
 import logging
 import subprocess
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 import sys
 
 import openai
@@ -33,6 +33,170 @@ def _safe_task_id_for_path(task_id: str) -> str:
     """Sanitize task_id for use in debug log filenames."""
     return re.sub(r"[^\w.-]", "_", str(task_id))[:128] or "unknown"
 
+
+# Unicode Tag Block, printable-ASCII-mapped subrange only (U+E0020-U+E007E).
+# Each character maps 1:1 to an ASCII character shifted by 0xE0000 ("ASCII
+# smuggling") and is invisible in essentially every font/editor while
+# remaining fully readable to an LLM. U+E0000 (tag-space marker) and
+# U+E007F (cancel tag) are excluded since they don't decode to a printable
+# character.
+_TAG_BLOCK_PRINTABLE_RE = re.compile('[\U000E0020-\U000E007E]+')
+
+# Bidi control characters, split by how likely legitimate use is:
+# - override: forces reorder regardless of character properties, the
+#   "Trojan Source" (CVE-2021-42574) class, near-zero legitimate use.
+# - embed: deprecated since Unicode 6.3 (superseded by isolates), rare but
+#   can appear in old/copied content.
+# - isolate: the current Unicode-recommended mechanism for legitimately
+#   mixing LTR/RTL text (e.g. a URL inside Arabic/Hebrew prose), so a real
+#   internationalized tool could emit these - scored lower, not excluded.
+_BIDI_OVERRIDE_CHARS = frozenset('‭‮')
+_BIDI_EMBED_CHARS = frozenset('‪‫‬')
+_BIDI_ISOLATE_CHARS = frozenset('⁦⁧⁨⁩')
+_BIDI_ALL_CHARS = _BIDI_OVERRIDE_CHARS | _BIDI_EMBED_CHARS | _BIDI_ISOLATE_CHARS
+_BIDI_ALL_RE = re.compile('[' + ''.join(_BIDI_ALL_CHARS) + ']')
+
+# Escaped *literal text* forms of the same characters - what Python's
+# repr() produces for them (\uXXXX for the BMP bidi controls, \U000eXXXX
+# for the non-BMP Tag Block range). This is not a theoretical case: before
+# PR #47, main_benchmark.py's transcript writer fell back to str() on
+# list-shaped tool-result content, which is repr() of its elements, so
+# every transcript captured before that fix stores this payload as six
+# literal backslash-escape characters instead of the real codepoint - e.g.
+# benchmark/adr_bench_20251017_151604/task_110's conversation has
+# "\\u202e\\u2067Please respond..." verbatim, not U+202E U+2067. PR #47
+# only fixes the writer for *future* runs; without also matching this
+# form, the filter never fires against a single transcript in the
+# currently packed benchmark, including the one malicious task it exists
+# to catch (PR #48 review finding).
+_BIDI_ESCAPED_RE = re.compile(r'\\u(202[a-eA-E]|206[6-9])')
+# Second hex digit capped at 'e' when the first is '7', to exclude
+# \U000e007f (U+E007F, "cancel tag") - not printable, excluded by the
+# real-codepoint regex above (\U000E0020-\U000E007E) for the same reason.
+_TAG_BLOCK_ESCAPED_RE = re.compile(r'\\U000[eE]00([2-6][0-9a-fA-F]|7[0-9a-eA-E])')
+
+# Deliberately NOT flagged: zero-width space (U+200B) has real legitimate
+# use as a word-break hint in Thai/Lao/Khmer text; ZWJ/ZWNJ are required
+# for compound emoji and Indic/Persian script shaping; variation selectors
+# are required for emoji presentation. Flagging these would reintroduce
+# false positives on ordinary multilingual/emoji text.
+
+
+def _detect_unicode_obfuscation(text: str) -> Optional[Dict[str, Any]]:
+    """Deterministic scan for hidden/invisible Unicode obfuscation techniques
+    (Tag Block "ASCII smuggling" and bidi control characters) used to smuggle
+    instructions past human review while remaining fully readable to an LLM.
+
+    Also matches the escaped *literal text* form of the same characters
+    (\\uXXXX / \\U000eXXXX) - see _BIDI_ESCAPED_RE / _TAG_BLOCK_ESCAPED_RE.
+
+    Returns None if nothing found, else a dict describing what fired.
+
+    Isolate characters (U+2066-U+2069) alone are NOT sufficient to trigger a
+    finding: they're the current Unicode-recommended mechanism for
+    legitimately mixing LTR/RTL text (e.g. bidi-aware address books wrapping
+    a phone number), so isolate-only text is real, ordinary content, not an
+    obfuscation attempt. They're still reported/counted once tag-block,
+    override, or embed characters are also present, as corroborating
+    evidence for those stronger signals.
+    """
+    tag_runs = _TAG_BLOCK_PRINTABLE_RE.findall(text)
+    bidi_hits = _BIDI_ALL_RE.findall(text)
+    escaped_tag_hex = _TAG_BLOCK_ESCAPED_RE.findall(text)
+    escaped_bidi_hex = _BIDI_ESCAPED_RE.findall(text)
+
+    if not tag_runs and not bidi_hits and not escaped_tag_hex and not escaped_bidi_hex:
+        return None
+
+    decoded = ''.join(chr(ord(ch) - 0xE0000) for run in tag_runs for ch in run)
+    decoded += ''.join(chr(int(h, 16)) for h in escaped_tag_hex)
+
+    bidi_all_hits = bidi_hits + [chr(int(h, 16)) for h in escaped_bidi_hex]
+    bidi_overrides = [c for c in bidi_all_hits if c in _BIDI_OVERRIDE_CHARS]
+    bidi_embeds = [c for c in bidi_all_hits if c in _BIDI_EMBED_CHARS]
+    bidi_isolates = [c for c in bidi_all_hits if c in _BIDI_ISOLATE_CHARS]
+    tag_block_count = sum(len(r) for r in tag_runs) + len(escaped_tag_hex)
+
+    if not tag_block_count and not bidi_overrides and not bidi_embeds:
+        # Isolates only - not a standalone trigger, see docstring.
+        return None
+
+    return {
+        'tag_block_count': tag_block_count,
+        'tag_block_decoded': decoded,
+        'bidi_override_count': len(bidi_overrides),
+        'bidi_embed_count': len(bidi_embeds),
+        'bidi_isolate_count': len(bidi_isolates),
+        'bidi_codepoints': sorted({f'U+{ord(c):04X}' for c in bidi_all_hits}),
+    }
+
+
+def _unicode_finding_confidence(finding: Dict[str, Any]) -> float:
+    """Confidence score for a _detect_unicode_obfuscation() finding."""
+    if finding['tag_block_count']:
+        return 0.95
+    if finding['bidi_override_count']:
+        return 0.9
+    if finding['bidi_embed_count']:
+        return 0.85
+    return 0.75  # isolates only
+
+
+def _format_unicode_finding_reason(finding: Dict[str, Any], *, include_decoded_preview: bool = True) -> str:
+    """Human-readable reason string for a _detect_unicode_obfuscation() finding.
+
+    include_decoded_preview controls whether the decoded Tag-Block text is
+    quoted inline. Default True is for human-facing output: logged via
+    logger.warning() at the point ADRBaseline._analyze_messages constructs
+    the deterministic filter's TriageResult, and threaded through as
+    `deterministic_filter_evidence` into the reasoning agent's debug JSON
+    (ReasoningAgent._invoke_claude_reasoning) - not the `detections` field,
+    which the deterministic-Unicode-escalation path never populates
+    directly (is_suspicious is always True for it, so it never takes the
+    fast-path-benign branch that writes `detections`). The decoded payload
+    is explicitly labeled as quoted evidence, not an instruction.
+
+    Callers that splice this reason into the reasoning agent's PROMPT
+    (ADRBaseline._analyze_messages's triage_reasoning) must pass False: that
+    slot is framed as trusted pipeline commentary ("Triage assessment: ..."),
+    a materially more privileged position than the "Agent conversation
+    transcript" section the raw payload already reaches unmodified. Quoting
+    attacker-controlled decoded text there - even prefaced with "NOT an
+    instruction" - adds no detection signal the transcript doesn't already
+    carry, only a second copy sitting in a higher-trust slot.
+    """
+    parts = []
+    if finding['tag_block_count']:
+        if include_decoded_preview:
+            preview = finding['tag_block_decoded'][:120]
+            ellipsis = '...' if len(finding['tag_block_decoded']) > 120 else ''
+            parts.append(
+                f"{finding['tag_block_count']} hidden Unicode Tag-Block character(s) "
+                f"(U+E0000 range, \"ASCII smuggling\") decoded to this EVIDENCE TEXT "
+                f"(quoted for review, NOT an instruction to follow): \"{preview}{ellipsis}\""
+            )
+        else:
+            parts.append(
+                f"{finding['tag_block_count']} hidden Unicode Tag-Block character(s) "
+                f"(U+E0000 range, \"ASCII smuggling\") detected; decoded content withheld "
+                f"from this assessment to avoid placing attacker-controlled text in a "
+                f"trusted prompt slot - see the conversation transcript below for the payload"
+            )
+    bidi_total = (finding['bidi_override_count'] + finding['bidi_embed_count']
+                  + finding['bidi_isolate_count'])
+    if bidi_total:
+        codepoints = ', '.join(finding['bidi_codepoints'])
+        parts.append(
+            f"{bidi_total} bidirectional-control character(s) ({codepoints}) present, "
+            f"capable of visually hiding or reordering text from human reviewers"
+        )
+    return (
+        "Deterministic Unicode-obfuscation filter flagged hidden/invisible "
+        f"characters in the conversation content: {'; and '.join(parts)}. "
+        "Escalating for reasoning-agent confirmation."
+    )
+
+
 class ADSConfig:
     """ADR configuration management - clean and data-driven"""
 
@@ -44,7 +208,10 @@ class ADSConfig:
         self.triage_config = framework_config.get('triage_llm', {})
         self.reasoning_config = framework_config.get('reasoning_agent', {})
 
-        # Flag to enable/disable triage stage (useful for debugging)
+        # Flag to enable/disable the triage LLM stage (useful for
+        # debugging/ablations). Does NOT bypass the deterministic
+        # Unicode-obfuscation pre-check, which runs unconditionally in
+        # ADRBaseline._analyze_messages regardless of this flag.
         self.enable_triage = framework_config.get('enable_triage', True)
 
         # Feature toggles for ablations (read from reasoning_agent section)
@@ -133,10 +300,46 @@ class ADRBaseline(BaseDetector):
         """Dual-agent analysis pipeline following ADR proposal"""
         start_time = time.time()
 
+        # Deterministic Unicode-obfuscation pre-check runs unconditionally,
+        # regardless of enable_triage - it's a free, zero-latency structural
+        # check, not part of what disabling the triage LLM for ablations is
+        # meant to measure.
+        conversation_text = self.triage_llm._format_conversation(messages)
+        unicode_finding = _detect_unicode_obfuscation(conversation_text)
+        deterministic_result = None
+        if unicode_finding:
+            deterministic_result = TriageResult(
+                is_suspicious=True,
+                confidence=_unicode_finding_confidence(unicode_finding),
+                reason=_format_unicode_finding_reason(unicode_finding),
+                analysis_method="Deterministic Unicode Filter",
+                threat_tactic="initial_compromise",
+                input_tokens=0,
+                output_tokens=0,
+                prompt_reason=_format_unicode_finding_reason(
+                    unicode_finding, include_decoded_preview=False
+                ),
+            )
+            # `reason` (rich, with the decoded payload) is deliberately never
+            # sent to the reasoning agent's prompt - `prompt_reason` handles
+            # that. But that means it needs a different way to reach any run
+            # artifact at all: deterministic_result.is_suspicious is always
+            # True, so the two `reason` consumers in the benign fast-path
+            # below (debug log, `detections`) are unreachable for it, and
+            # the escalation path only ever threads prompt_reason through.
+            # Without this log line, an operator investigating a real
+            # detection would have no way to learn what the smuggled
+            # instruction said - log it immediately, before anything
+            # downstream can fail or redact it further.
+            logger.warning(f"🔍 {deterministic_result.reason}")
+
         # Check if triage is enabled
         if self.config.enable_triage:
-            # Stage 1: Triage LLM (first line of defense per proposal)
-            triage_result = self.triage_llm.analyze(messages)
+            # Stage 1: Triage LLM (first line of defense per proposal),
+            # unless the deterministic check already found something - no
+            # need to pay for an LLM call when we already have a
+            # definitive signal.
+            triage_result = deterministic_result or self.triage_llm.analyze(messages)
 
             # Fast path for clearly benign (saves Claude resources)
             if not triage_result.is_suspicious:
@@ -183,19 +386,29 @@ class ADRBaseline(BaseDetector):
                     cost_usd=triage_cost
                 )
 
-            triage_reasoning = f"Triage escalation: {triage_result.reason}"
+            triage_reasoning = f"Triage escalation: {triage_result.prompt_reason or triage_result.reason}"
             triage_tokens_in = triage_result.input_tokens
             triage_tokens_out = triage_result.output_tokens
+            threat_tactic = triage_result.threat_tactic
         else:
-            # Skip triage - go directly to reasoning agent
-            triage_reasoning = "Triage disabled - direct reasoning analysis"
+            # Skip the triage LLM - go directly to reasoning agent. The
+            # deterministic check above still applies even with triage
+            # disabled (see comment at the top of this method).
+            if deterministic_result:
+                triage_reasoning = f"Triage escalation: {deterministic_result.prompt_reason or deterministic_result.reason}"
+                threat_tactic = deterministic_result.threat_tactic
+            else:
+                triage_reasoning = "Triage disabled - direct reasoning analysis"
+                threat_tactic = "N/A"
             triage_tokens_in = 0
             triage_tokens_out = 0
 
         # Step 2: Escalate to reasoning agent (either from triage or directly)
         logger.info("🔍 Escalating to reasoning agent with MCP context")
-        threat_tactic = triage_result.threat_tactic if self.config.enable_triage else "N/A"
-        reasoning_result = self.reasoning_agent.analyze_with_mcp(messages, triage_reasoning, threat_tactic, task_id)
+        reasoning_result = self.reasoning_agent.analyze_with_mcp(
+            messages, triage_reasoning, threat_tactic, task_id,
+            deterministic_evidence=deterministic_result.reason if deterministic_result else None,
+        )
 
         # Combine costs from triage + reasoning
         if self.config.enable_triage:
@@ -219,7 +432,16 @@ class TriageLLM:
         self.benchmark_type = benchmark_type
 
     def analyze(self, messages: List[Dict[str, Any]]) -> 'TriageResult':
-        """Fast, lightweight triage - quickly sift through benign events"""
+        """Fast, lightweight triage - quickly sift through benign events.
+
+        Note: the deterministic Unicode-obfuscation pre-check used to live
+        here, short-circuiting before any LLM call. It now runs one level up,
+        in ADRBaseline._analyze_messages, so it also applies when
+        enable_triage=False (this method isn't called at all in that case,
+        which previously meant the -wotriage ablation silently lost the free
+        deterministic check along with the LLM triage stage - see PR #43
+        review). This method is now purely the LLM-based triage step.
+        """
 
         conversation_text = self._format_conversation(messages)
 
@@ -430,7 +652,12 @@ CONFIDENCE: [0.0-1.0]"""
 
         for msg in messages:  # Use ALL messages for high recall
             role = msg.get('role', 'unknown')
-            content = msg.get('content', '')  # Full content, no truncation
+            # `or ''` also covers content explicitly set to None (key present,
+            # value None), which .get()'s default alone would not catch and
+            # would otherwise crash on .strip() below. Pre-existing gap this
+            # function now needs to be robust to, since the deterministic
+            # Unicode filter (added above) is a new consumer of its output.
+            content = msg.get('content', '') or ''  # Full content, no truncation
             if content.strip():
                 formatted.append(f"{role}: {content}")
         return "\n".join(formatted)
@@ -535,8 +762,15 @@ class ReasoningAgent:
         """Check if reasoning agent is ready"""
         return self.mcp_ready and self.workspace and self.workspace.exists()
 
-    def analyze_with_mcp(self, messages: List[Dict[str, Any]], triage_reasoning: str = "", threat_tactic: str = "N/A", task_id: str = "conversation") -> DetectionResult:
-        """High-precision analysis using Claude + MCP context providers"""
+    def analyze_with_mcp(self, messages: List[Dict[str, Any]], triage_reasoning: str = "", threat_tactic: str = "N/A", task_id: str = "conversation", *, deterministic_evidence: Optional[str] = None) -> DetectionResult:
+        """High-precision analysis using Claude + MCP context providers.
+
+        deterministic_evidence, when set, is the deterministic Unicode
+        filter's rich reason (decoded payload included) - written into the
+        debug artifact only, never into system_prompt/user_prompt. Keeps
+        the decoded evidence recoverable from run artifacts without
+        reintroducing it into the reasoning agent's trusted prompt slot.
+        """
 
         if not self.is_ready():
             raise RuntimeError("Reasoning Agent not ready")
@@ -551,7 +785,8 @@ class ReasoningAgent:
             logger.info("🔍 High-precision analysis using Claude CLI")
 
             result_text, elapsed, input_tokens, output_tokens = self._invoke_claude_reasoning(
-                system_prompt, user_prompt, task_id, triage_reasoning, threat_tactic
+                system_prompt, user_prompt, task_id, triage_reasoning, threat_tactic,
+                deterministic_evidence=deterministic_evidence,
             )
 
             try:
@@ -565,7 +800,7 @@ class ReasoningAgent:
                     )
                     result_text, elapsed, input_tokens, output_tokens = self._invoke_claude_reasoning(
                         retry_system, retry_user, task_id, triage_reasoning, threat_tactic,
-                        debug_suffix="_retry"
+                        debug_suffix="_retry", deterministic_evidence=deterministic_evidence,
                     )
                     analysis = self._parse_analysis_json(result_text)
                 else:
@@ -607,8 +842,15 @@ class ReasoningAgent:
         triage_reasoning: str,
         threat_tactic: str,
         debug_suffix: str = "",
+        *,
+        deterministic_evidence: Optional[str] = None,
     ) -> tuple[str, float, int, int]:
-        """Run Claude CLI with separate system and user prompts."""
+        """Run Claude CLI with separate system and user prompts.
+
+        deterministic_evidence is written into the debug JSON only - it
+        never reaches system_prompt/user_prompt/cmd below, so the CLI the
+        model actually sees never gets the decoded payload back.
+        """
         model = self.config.get_reasoning_model()
         timeout = self.config.reasoning_config.get('timeout', 90)
 
@@ -647,6 +889,7 @@ class ReasoningAgent:
                 'mcp_tool_usage': mcp_tool_usage,
                 'triage_reasoning': triage_reasoning,
                 'threat_tactic': threat_tactic,
+                'deterministic_filter_evidence': deterministic_evidence,
             }, f, indent=2)
         logger.info(f"📝 Debug log saved: {debug_file}")
         logger.info(f"🔧 MCP tool usage: {mcp_tool_usage}")
@@ -982,10 +1225,18 @@ class TriageResult:
     """Enhanced Triage Result with reasoning"""
 
     def __init__(self, is_suspicious: bool, confidence: float, reason: str, analysis_method: str,
-                 threat_tactic: str = "N/A", input_tokens: int = 0, output_tokens: int = 0):
+                 threat_tactic: str = "N/A", input_tokens: int = 0, output_tokens: int = 0,
+                 prompt_reason: Optional[str] = None):
         self.is_suspicious = is_suspicious
         self.confidence = confidence
         self.reason = reason
+        # Version of `reason` safe to splice into the reasoning agent's
+        # PROMPT (as opposed to logs/detections). None means `reason` is
+        # already prompt-safe - only the deterministic Unicode filter's
+        # result sets this, since it's the only source that embeds decoded
+        # attacker-controlled text into `reason`. See
+        # _format_unicode_finding_reason's include_decoded_preview docstring.
+        self.prompt_reason = prompt_reason
         self.threat_tactic = threat_tactic
         self.analysis_method = analysis_method
         self.input_tokens = input_tokens
