@@ -76,10 +76,12 @@ its `server_name` populated.
 │              Ingest → Filter → Display → Export                 │
 └─────────────────────────────┬───────────────────────────────────┘
                               │
-                      ┌───────┴───────┐
-                      ▼               ▼
-                JSON/JSONL      Your Detection
-                 Export          Pipeline / SIEM
+                 ┌────┴────┐
+                 ▼         ▼
+           JSON/JSONL   OTLP Logs
+              Files        │
+                           ▼
+                    Collector / SIEM
 ```
 
 ## Quick Start
@@ -90,6 +92,12 @@ Tagged releases are installed from [PyPI](https://pypi.org/project/adr-sensor/):
 
 ```bash
 pip install adr-sensor
+```
+
+Install the optional OpenTelemetry dependencies when OTLP log export is needed:
+
+```bash
+pip install "adr-sensor[otel]"
 ```
 
 Or install from source:
@@ -124,6 +132,12 @@ adr-sensor --all-history
 
 # Custom output directory
 adr-sensor --output-dir ./my-output
+
+# Export the same records to an OTLP/HTTP logs endpoint
+adr-sensor --otel-config ./opentelemetry-config.json
+
+# Export to OTLP without also writing JSON files
+adr-sensor --no-save --otel-config ./opentelemetry-config.json
 ```
 
 Sources whose agent only runs on some operating systems are skipped automatically
@@ -160,6 +174,45 @@ for event in events:
                 print(f"  Tool: {tool.tool_name} ({tool.tool_type})")
                 print(f"  Args: {tool.arguments}")
 ```
+
+### OpenTelemetry Logs Export
+
+OpenTelemetry export is disabled by default. The Sensor only initializes an
+OTLP exporter when `--otel-config` points to a JSON configuration file. Without
+that argument, CLI and file-export behavior are unchanged and no OpenTelemetry
+logs are sent.
+
+Start from [`examples/opentelemetry-config.json`](examples/opentelemetry-config.json):
+
+```json
+{
+  "endpoint": "http://localhost:4318/v1/logs",
+  "service_name": "adr-sensor",
+  "headers": {},
+  "timeout_seconds": 10,
+  "flush_timeout_seconds": 30
+}
+```
+
+`endpoint` must be the complete OTLP/HTTP logs URL, including `/v1/logs` when
+required by the receiver. `headers` can contain authentication headers. An
+optional `certificate_file` names a PEM certificate bundle; relative paths are
+resolved from the configuration file's directory.
+
+Each `AgentEvent` is sent as an `adr.agent.session` OpenTelemetry LogRecord. Its
+body is the complete dictionary returned by `AgentEvent.get_non_null_fields()`,
+the same content written to JSON/JSONL today. The OpenTelemetry exporter applies
+no redaction or field projection, so prompts, responses, tool arguments, tool
+results, usernames, hostnames, and local paths can be transmitted. Any
+normalization already performed by a source parser still applies.
+
+System-configuration records are sent as `adr.system.configuration` logs. Runs
+are not checkpointed specifically for OTLP: repeated runs can resend the same
+records, and consumers can use `adr.event.uuid` to deduplicate them.
+
+The one-shot Sensor process flushes and shuts down the exporter before exiting.
+Use an OpenTelemetry Collector when vendor-specific routing, transformation,
+retry, or persistent queuing is needed.
 
 ## Output Schema
 
@@ -288,7 +341,7 @@ builds its `--source` choices from `SOURCES`, so it picks the new agent up for f
 | --------------- | ------------------------------------------- |
 | Python          | 3.9, 3.10, 3.11, 3.12, 3.13                 |
 | Operating system| macOS, Linux, Windows                       |
-| Dependencies    | `tabulate` (runtime only — no native deps)  |
+| Dependencies    | `tabulate`; OpenTelemetry is an optional `otel` extra |
 
 Which sources yield data depends on the host OS and on which agents are installed;
 see the platform column in [Supported AI Agents](#supported-ai-agents). Sources that
@@ -342,6 +395,9 @@ adr-sensor/
 │   ├── __init__.py          # Package exports
 │   ├── cli.py               # CLI entry point
 │   ├── observer.py          # AgentObserver orchestrator
+│   ├── exporters/
+│   │   ├── config.py        # OTLP/HTTP JSON configuration
+│   │   └── opentelemetry.py # OpenTelemetry Logs exporter
 │   ├── parsers/
 │   │   ├── base_parser.py   # Abstract base class
 │   │   ├── claude_parser.py
@@ -359,6 +415,7 @@ adr-sensor/
 │       └── timestamp_utils.py
 ├── tests/
 ├── examples/
+│   └── opentelemetry-config.json
 ├── CONTRIBUTING.md
 ├── LICENSE
 ├── pyproject.toml
