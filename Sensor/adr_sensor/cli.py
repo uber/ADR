@@ -31,6 +31,14 @@ def get_version():
     return __version__
 
 
+def _non_negative_int(value: str) -> int:
+    """Parse a non-negative integer for bounded display options."""
+    parsed = int(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be zero or greater")
+    return parsed
+
+
 def main():
     """Main entry point for the ADR Sensor CLI."""
     parser = argparse.ArgumentParser(
@@ -72,7 +80,7 @@ Examples:
         default=None,
         help="Directory to save output files (default: ./output)",
     )
-    parser.add_argument("--limit", type=int, default=2, help="Number of entries to display")
+    parser.add_argument("--limit", type=_non_negative_int, default=2, help="Number of entries to display")
     parser.add_argument("--no-save", action="store_true", help="Do not save to file")
     parser.add_argument(
         "--save-sessions",
@@ -123,7 +131,7 @@ Examples:
             print(f"  -> Filtered {original_count - filtered_count} existing sessions, processing {filtered_count} new")
 
         # Display summary
-        observer.display_summary(entries, system_config_data)
+        observer.display_summary(entries, system_config_data, limit=args.limit)
 
         # Save
         if entries or system_config_data:

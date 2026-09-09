@@ -155,9 +155,12 @@ class AgentObserver:
         return all_entries, system_config_data
 
     def display_summary(
-        self, entries: List[AgentEvent], system_config_data: List[SystemConfiguration]
+        self,
+        entries: List[AgentEvent],
+        system_config_data: List[SystemConfiguration],
+        limit: int = 2,
     ) -> None:
-        """Display a summary of ingested logs."""
+        """Display aggregate counts and a bounded preview of recent entries."""
         if not entries and not system_config_data:
             print("No logs found!")
             return
@@ -195,6 +198,12 @@ class AgentObserver:
             )
         )
         print()
+
+        if entries and limit > 0:
+            print("RECENT ENTRIES")
+            for entry in sorted(entries, key=lambda item: normalize_timestamp(item.timestamp), reverse=True)[:limit]:
+                print(f"  {entry.get_summary()}")
+            print()
 
     def save_to_file(
         self,
