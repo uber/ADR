@@ -103,6 +103,17 @@ class TestClaudeParser:
 
 
 class TestClineParser:
+    @staticmethod
+    def _write_task(base_path: Path, name: str, text: str = "hello"):
+        task_dir = base_path / name
+        task_dir.mkdir()
+        api_file = task_dir / "api_conversation_history.json"
+        api_file.write_text(
+            json.dumps([{"role": "user", "content": [{"type": "text", "text": text}]}]),
+            encoding="utf-8",
+        )
+        return task_dir, api_file
+
     def test_parse_cline_log(self, tmp_path):
         """Test parsing a Cline task directory."""
         task_dir = tmp_path / "1234567890"
@@ -131,6 +142,76 @@ class TestClineParser:
         assert entry is not None
         assert entry.source == "cline"
         assert len(entry.chat_history) == 2
+
+    def test_parse_all_filters_tasks_by_conversation_mtime(self, tmp_path):
+        recent_task, _ = self._write_task(tmp_path, "recent", "recent task")
+        old_task, old_api_file = self._write_task(tmp_path, "old", "old task")
+        now = datetime.now(timezone.utc).timestamp()
+        old = (datetime.now(timezone.utc) - timedelta(days=30)).timestamp()
+
+        # The conversation file, not its task directory, determines a task's age.
+        os.utime(recent_task, (old, old))
+        os.utime(old_api_file, (old, old))
+        os.utime(old_task, (now, now))
+
+        parser = ClineParser(max_age_days=14)
+        parser.base_path = tmp_path
+        with patch.object(parser, "parse_cline_log", wraps=parser.parse_cline_log) as parse_log:
+            entries = parser.parse_all()
+
+        assert {entry.session_id for entry in entries} == {"cline_recent"}
+        assert [call.args[0] for call in parse_log.call_args_list] == [recent_task]
+
+    def test_parse_all_uses_directory_mtime_when_conversation_is_missing(self, tmp_path):
+        task_dir = tmp_path / "missing-conversation"
+        task_dir.mkdir()
+        old = (datetime.now(timezone.utc) - timedelta(days=30)).timestamp()
+        os.utime(task_dir, (old, old))
+        parser = ClineParser(max_age_days=14)
+        parser.base_path = tmp_path
+
+        with patch.object(parser, "parse_cline_log", wraps=parser.parse_cline_log) as parse_log:
+            entries = parser.parse_all()
+
+        assert entries == []
+        parse_log.assert_not_called()
+
+    def test_parse_all_falls_back_to_task_mtime_after_file_stat_failure(self, tmp_path, monkeypatch):
+        _, failing_api_file = self._write_task(tmp_path, "stat-failure", "recovered task")
+        self._write_task(tmp_path, "healthy", "healthy task")
+        parser = ClineParser(max_age_days=14)
+        parser.base_path = tmp_path
+        original_stat = Path.stat
+        should_fail = True
+
+        def fail_one_stat(path, *args, **kwargs):
+            nonlocal should_fail
+            if path == failing_api_file and should_fail:
+                should_fail = False
+                raise OSError("stat unavailable")
+            return original_stat(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "stat", fail_one_stat)
+
+        entries = parser.parse_all()
+
+        assert {entry.session_id for entry in entries} == {"cline_stat-failure", "cline_healthy"}
+
+    @pytest.mark.parametrize("max_age_days", [0, -1])
+    def test_parse_all_non_positive_max_age_includes_all_history(self, tmp_path, max_age_days):
+        task_dir, api_file = self._write_task(tmp_path, "old", "old task")
+        old = (datetime.now(timezone.utc) - timedelta(days=30)).timestamp()
+        os.utime(api_file, (old, old))
+        os.utime(task_dir, (old, old))
+        parser = ClineParser(max_age_days=max_age_days)
+        parser.base_path = tmp_path
+
+        entries = parser.parse_all()
+
+        assert {entry.session_id for entry in entries} == {"cline_old"}
+
+    def test_default_max_age_days(self):
+        assert ClineParser().max_age_days == 14
 
     def test_extract_mcp_tools(self):
         """Test MCP tool extraction from text."""
@@ -897,11 +978,11 @@ class TestCodexParser:
         assert entries == []
 
 
-def _build_warp_db(db_path: Path, conversations: list) -> None:
+def _build_warp_db(db_path: Path, conversations: list, *, include_ai_blocks: bool = True) -> None:
     """Create a synthetic warp.sqlite matching the schema WarpParser queries.
 
     Each item in `conversations` is a dict with keys:
-        conversation_id, last_modified_at, exchanges
+        conversation_id, last_modified_at, exchanges, and optional model_id
     where `exchanges` is a list of (exchange_id, start_ts, input_json, llm_output_json).
     """
     conn = sqlite3.connect(str(db_path))
@@ -928,7 +1009,8 @@ def _build_warp_db(db_path: Path, conversations: list) -> None:
         )
         """
     )
-    cursor.execute("CREATE TABLE ai_blocks (exchange_id TEXT, output TEXT)")
+    if include_ai_blocks:
+        cursor.execute("CREATE TABLE ai_blocks (exchange_id TEXT, output TEXT)")
 
     for conv in conversations:
         cursor.execute(
@@ -938,9 +1020,17 @@ def _build_warp_db(db_path: Path, conversations: list) -> None:
         for exchange_id, start_ts, input_json, llm_output_json in conv.get("exchanges", []):
             cursor.execute(
                 "INSERT INTO ai_queries VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (exchange_id, conv["conversation_id"], start_ts, input_json, "/tmp/project", "success", "claude"),
+                (
+                    exchange_id,
+                    conv["conversation_id"],
+                    start_ts,
+                    input_json,
+                    "/tmp/project",
+                    "success",
+                    conv.get("model_id", "model-default"),
+                ),
             )
-            if llm_output_json is not None:
+            if include_ai_blocks and llm_output_json is not None:
                 cursor.execute("INSERT INTO ai_blocks VALUES (?, ?)", (exchange_id, llm_output_json))
 
     conn.commit()
@@ -1059,6 +1149,93 @@ class TestWarpParser:
         assert len(assistant_msg.tools) == 1
         assert assistant_msg.tools[0].tool_name == "execute_command"
         assert assistant_msg.tools[0].status == "success"
+
+    def test_parses_current_schema_without_ai_blocks(self, tmp_path):
+        """Current databases without ai_blocks should still produce conversation events."""
+        now = datetime.now(timezone.utc).isoformat()
+        conversations = [
+            {
+                "conversation_id": "current-conv",
+                "last_modified_at": now,
+                "exchanges": [self._query_exchange("current-exchange", now)],
+            }
+        ]
+        db_path = tmp_path / "warp.sqlite"
+        _build_warp_db(db_path, conversations, include_ai_blocks=False)
+
+        entries = self._make_parser(tmp_path).parse_all()
+
+        assert len(entries) == 1
+        assert entries[0].session_id == "warp_current-conv"
+        assert entries[0].chat_history[0].content == "hello from current-exchange"
+
+    def test_legacy_schema_retains_llm_output(self, tmp_path):
+        """Legacy databases with ai_blocks should retain their assistant output."""
+        now = datetime.now(timezone.utc).isoformat()
+        action_result_input = json.dumps([{"ActionResult": {"id": "synthetic-tool", "result": {}}}])
+        llm_output = json.dumps({"Received": {"output": [{"Text": {"text": "synthetic response"}}]}})
+        conversations = [
+            {
+                "conversation_id": "legacy-conv",
+                "last_modified_at": now,
+                "exchanges": [("legacy-exchange", now, action_result_input, llm_output)],
+            }
+        ]
+        db_path = tmp_path / "warp.sqlite"
+        _build_warp_db(db_path, conversations)
+
+        entries = self._make_parser(tmp_path).parse_all()
+
+        assert len(entries) == 1
+        assert entries[0].chat_history[0].content == "synthetic response"
+
+    def test_checks_legacy_table_once_per_database(self, tmp_path):
+        """Schema detection should not add one sqlite_master query per conversation."""
+        now = datetime.now(timezone.utc).isoformat()
+        conversations = [
+            {
+                "conversation_id": f"conversation-{index}",
+                "last_modified_at": now,
+                "exchanges": [self._query_exchange(f"exchange-{index}", now)],
+            }
+            for index in range(2)
+        ]
+        db_path = tmp_path / "warp.sqlite"
+        _build_warp_db(db_path, conversations, include_ai_blocks=False)
+        parser = self._make_parser(tmp_path)
+
+        with patch.object(parser, "_has_table", wraps=parser._has_table) as has_table:
+            entries = parser.parse_all()
+
+        assert len(entries) == 2
+        has_table.assert_called_once()
+
+    @pytest.mark.parametrize(
+        ("stored_model_id", "expected_model_id"),
+        [
+            ('"model-quoted"', "model-quoted"),
+            ("model-unquoted", "model-unquoted"),
+            ('"model-malformed', '"model-malformed'),
+        ],
+    )
+    def test_normalizes_model_id(self, tmp_path, stored_model_id, expected_model_id):
+        """Only valid JSON-quoted model IDs should be decoded."""
+        now = datetime.now(timezone.utc).isoformat()
+        conversations = [
+            {
+                "conversation_id": "model-conv",
+                "last_modified_at": now,
+                "model_id": stored_model_id,
+                "exchanges": [self._query_exchange("model-exchange", now)],
+            }
+        ]
+        db_path = tmp_path / "warp.sqlite"
+        _build_warp_db(db_path, conversations, include_ai_blocks=False)
+
+        entries = self._make_parser(tmp_path).parse_all()
+
+        assert len(entries) == 1
+        assert entries[0].model == expected_model_id
 
     def test_parse_all_no_database(self, tmp_path):
         """Test parse_all when the database file doesn't exist."""

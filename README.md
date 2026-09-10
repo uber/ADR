@@ -1,5 +1,7 @@
 # ADR: Agentic AI Detection and Response
 
+[![uber/ADR | Trendshift](https://trendshift.io/api/badge/repositories/100696)](https://trendshift.io/repositories/100696?utm_source=repository-badge&utm_medium=badge&utm_campaign=badge-repository-100696)
+
 ADR (Agentic AI Detection and Response) is an enterprise security system for AI agents. It helps organizations secure employee-facing agents such as Cursor, Claude Code, and Codex, as well as customer-facing agents such as AI support agents.
 
 ADR is **deployed in production at Uber**, and the accompanying paper was accepted to **MLSys 2026**: [Paper PDF](docs/adr-paper.pdf) · [Slides PDF](docs/adr-mlsys-2026-slides.pdf)
@@ -56,6 +58,16 @@ Component documentation:
 ```
 
 Or use [CITATION.cff](CITATION.cff).
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=uber%2Fadr&type=date&legend=top-left">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=uber/adr&type=date&theme=dark&legend=top-left" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=uber/adr&type=date&legend=top-left" />
+    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=uber/adr&type=date&legend=top-left" />
+  </picture>
+</a>
 
 ## License
 
