@@ -76,6 +76,104 @@ class TestClaudeParser:
         assert entry.model == "claude-sonnet-4-20250514"
         assert len(entry.chat_history) >= 1
 
+    def test_classify_tool(self):
+        """MCP tools are attributed to their server; shell tools are terminal commands."""
+        parser = ClaudeParser()
+
+        assert parser._classify_tool("mcp__jarvis__ssh_run") == ("mcp_tool", "jarvis")
+        assert parser._classify_tool("mcp__chrome-devtools__navigate") == (
+            "mcp_tool",
+            "chrome-devtools",
+        )
+        assert parser._classify_tool("Bash") == ("terminal_command", None)
+        assert parser._classify_tool("PowerShell") == ("terminal_command", None)
+        assert parser._classify_tool("Read") == ("tool_use", None)
+
+    def test_mcp_tool_keeps_server_after_result_merge(self, tmp_path):
+        """Server attribution survives the tool_use -> tool_result merge."""
+        jsonl_file = tmp_path / "mcp.jsonl"
+        messages = [
+            {
+                "type": "assistant",
+                "sessionId": "session1",
+                "timestamp": "2025-06-15T10:00:00Z",
+                "message": {
+                    "model": "claude-sonnet-4-20250514",
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "tool1",
+                            "name": "mcp__github__create_issue",
+                            "input": {"title": "hi"},
+                        }
+                    ],
+                },
+            },
+            {
+                "type": "user",
+                "sessionId": "session1",
+                "timestamp": "2025-06-15T10:00:01Z",
+                "message": {
+                    "content": [
+                        {"type": "tool_result", "tool_use_id": "tool1", "content": "created"}
+                    ]
+                },
+            },
+        ]
+        with open(jsonl_file, "w") as f:
+            for msg in messages:
+                f.write(json.dumps(msg) + "\n")
+
+        entries = ClaudeParser().parse_jsonl_file(jsonl_file)
+        tools = [t for e in entries for m in e.chat_history for t in m.tools]
+
+        assert len(tools) == 1
+        assert tools[0].tool_type == "mcp_tool"
+        assert tools[0].server_name == "github"
+        assert tools[0].status == "success"
+
+    def test_failed_tool_result_is_marked_error(self, tmp_path):
+        """A tool_result flagged is_error is recorded as an error, not a success."""
+        jsonl_file = tmp_path / "error.jsonl"
+        messages = [
+            {
+                "type": "assistant",
+                "sessionId": "session1",
+                "timestamp": "2025-06-15T10:00:00Z",
+                "message": {
+                    "model": "claude-sonnet-4-20250514",
+                    "content": [
+                        {"type": "tool_use", "id": "tool1", "name": "Bash", "input": {"command": "false"}}
+                    ],
+                },
+            },
+            {
+                "type": "user",
+                "sessionId": "session1",
+                "timestamp": "2025-06-15T10:00:01Z",
+                "message": {
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "tool1",
+                            "content": "permission denied",
+                            "is_error": True,
+                        }
+                    ]
+                },
+            },
+        ]
+        with open(jsonl_file, "w") as f:
+            for msg in messages:
+                f.write(json.dumps(msg) + "\n")
+
+        entries = ClaudeParser().parse_jsonl_file(jsonl_file)
+        tools = [t for e in entries for m in e.chat_history for t in m.tools]
+
+        assert len(tools) == 1
+        assert tools[0].status == "error"
+        assert tools[0].error == "permission denied"
+
     def test_parse_empty_file(self, tmp_path):
         """Test parsing an empty file."""
         jsonl_file = tmp_path / "empty.jsonl"
