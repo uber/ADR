@@ -103,6 +103,17 @@ class TestClaudeParser:
 
 
 class TestClineParser:
+    @staticmethod
+    def _write_task(base_path: Path, name: str, text: str = "hello"):
+        task_dir = base_path / name
+        task_dir.mkdir()
+        api_file = task_dir / "api_conversation_history.json"
+        api_file.write_text(
+            json.dumps([{"role": "user", "content": [{"type": "text", "text": text}]}]),
+            encoding="utf-8",
+        )
+        return task_dir, api_file
+
     def test_parse_cline_log(self, tmp_path):
         """Test parsing a Cline task directory."""
         task_dir = tmp_path / "1234567890"
@@ -131,6 +142,76 @@ class TestClineParser:
         assert entry is not None
         assert entry.source == "cline"
         assert len(entry.chat_history) == 2
+
+    def test_parse_all_filters_tasks_by_conversation_mtime(self, tmp_path):
+        recent_task, _ = self._write_task(tmp_path, "recent", "recent task")
+        old_task, old_api_file = self._write_task(tmp_path, "old", "old task")
+        now = datetime.now(timezone.utc).timestamp()
+        old = (datetime.now(timezone.utc) - timedelta(days=30)).timestamp()
+
+        # The conversation file, not its task directory, determines a task's age.
+        os.utime(recent_task, (old, old))
+        os.utime(old_api_file, (old, old))
+        os.utime(old_task, (now, now))
+
+        parser = ClineParser(max_age_days=14)
+        parser.base_path = tmp_path
+        with patch.object(parser, "parse_cline_log", wraps=parser.parse_cline_log) as parse_log:
+            entries = parser.parse_all()
+
+        assert {entry.session_id for entry in entries} == {"cline_recent"}
+        assert [call.args[0] for call in parse_log.call_args_list] == [recent_task]
+
+    def test_parse_all_uses_directory_mtime_when_conversation_is_missing(self, tmp_path):
+        task_dir = tmp_path / "missing-conversation"
+        task_dir.mkdir()
+        old = (datetime.now(timezone.utc) - timedelta(days=30)).timestamp()
+        os.utime(task_dir, (old, old))
+        parser = ClineParser(max_age_days=14)
+        parser.base_path = tmp_path
+
+        with patch.object(parser, "parse_cline_log", wraps=parser.parse_cline_log) as parse_log:
+            entries = parser.parse_all()
+
+        assert entries == []
+        parse_log.assert_not_called()
+
+    def test_parse_all_falls_back_to_task_mtime_after_file_stat_failure(self, tmp_path, monkeypatch):
+        _, failing_api_file = self._write_task(tmp_path, "stat-failure", "recovered task")
+        self._write_task(tmp_path, "healthy", "healthy task")
+        parser = ClineParser(max_age_days=14)
+        parser.base_path = tmp_path
+        original_stat = Path.stat
+        should_fail = True
+
+        def fail_one_stat(path, *args, **kwargs):
+            nonlocal should_fail
+            if path == failing_api_file and should_fail:
+                should_fail = False
+                raise OSError("stat unavailable")
+            return original_stat(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "stat", fail_one_stat)
+
+        entries = parser.parse_all()
+
+        assert {entry.session_id for entry in entries} == {"cline_stat-failure", "cline_healthy"}
+
+    @pytest.mark.parametrize("max_age_days", [0, -1])
+    def test_parse_all_non_positive_max_age_includes_all_history(self, tmp_path, max_age_days):
+        task_dir, api_file = self._write_task(tmp_path, "old", "old task")
+        old = (datetime.now(timezone.utc) - timedelta(days=30)).timestamp()
+        os.utime(api_file, (old, old))
+        os.utime(task_dir, (old, old))
+        parser = ClineParser(max_age_days=max_age_days)
+        parser.base_path = tmp_path
+
+        entries = parser.parse_all()
+
+        assert {entry.session_id for entry in entries} == {"cline_old"}
+
+    def test_default_max_age_days(self):
+        assert ClineParser().max_age_days == 14
 
     def test_extract_mcp_tools(self):
         """Test MCP tool extraction from text."""
@@ -316,6 +397,316 @@ class TestCodexParser:
         assert tool.arguments == {"path": "main.py"}
         assert tool.result == "def main(): pass"
 
+    def test_mcp_function_call_is_strictly_classified(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-mcp.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "mcp-session"}},
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "function_call",
+                    "call_id": "mcp-call",
+                    "name": "mcp__sample-server__lookup_item",
+                    "arguments": {"item": "example"},
+                },
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        tool = CodexParser().parse_jsonl_file(jsonl_file).chat_history[0].tools[0]
+
+        assert tool.tool_name == "mcp__sample-server__lookup_item"
+        assert tool.tool_type == "mcp_tool"
+        assert tool.server_name == "sample-server"
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "mcp__sample-server",
+            "mcp____lookup_item",
+            "mcp__sample-server__",
+            "mcp__sample-server__lookup_item__extra",
+            "mcp__sample server__lookup_item",
+            "prefix__sample-server__lookup_item",
+        ],
+    )
+    def test_malformed_mcp_names_keep_their_classic_type(self, name):
+        assert CodexParser._classify_tool(name, "custom_tool_call") == ("custom_tool_call", None)
+
+    def test_tool_arguments_are_normalized_and_recursively_bounded(self):
+        parser = CodexParser()
+        nested = {"leaf": "kept"}
+        for _ in range(12):
+            nested = {"next": nested}
+
+        arguments = parser._parse_tool_arguments(
+            {
+                "items": list(range(150)),
+                "mapping": {f"key-{index}": index for index in range(150)},
+                "long": "x" * 5000,
+                "nested": nested,
+            }
+        )
+
+        assert len(arguments["items"]) == 100
+        assert len(arguments["mapping"]) == 100
+        assert len(arguments["long"]) < 1200
+        assert "[truncated" in arguments["long"]
+        assert "maximum depth" in json.dumps(arguments["nested"])
+        assert parser._parse_tool_arguments('[1, {"key": "value"}]') == {
+            "raw": [1, {"key": "value"}]
+        }
+        assert parser._parse_tool_arguments("") == {}
+        assert parser._parse_tool_arguments(None) == {}
+        assert parser._parse_tool_arguments("false") == {"raw": False}
+        assert parser._parse_tool_arguments(7) == {"raw": 7}
+        assert parser._parse_tool_arguments('"text"') == {"raw": "text"}
+
+    def test_oversized_json_arguments_are_not_decoded(self):
+        raw_arguments = json.dumps({"value": "x" * 100_100})
+
+        arguments = CodexParser()._parse_tool_arguments(raw_arguments)
+
+        assert list(arguments) == ["raw"]
+        assert isinstance(arguments["raw"], str)
+        assert len(arguments["raw"]) < 1200
+        assert "[truncated" in arguments["raw"]
+
+    def test_output_correlates_across_id_aliases_and_flattens_content(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-alias.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "alias-session"}},
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "function_call",
+                    "id": "shared-id",
+                    "name": "lookup",
+                    "arguments": [],
+                },
+            },
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "function_call_output",
+                    "toolCallId": "shared-id",
+                    "output": {
+                        "content": [
+                            {"type": "text", "text": "first"},
+                            {"content": "second"},
+                        ]
+                    },
+                },
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        tool = CodexParser().parse_jsonl_file(jsonl_file).chat_history[0].tools[0]
+
+        assert tool.arguments == {"raw": []}
+        assert tool.result == "first\nsecond"
+        assert tool.status == "success"
+        assert tool.error is None
+
+    @pytest.mark.parametrize(
+        ("output", "expected_status", "expected_result", "expected_error"),
+        [
+            ({"Ok": {"content": [{"text": "complete"}]}}, "success", "complete", None),
+            (
+                {"Ok": {"isError": True, "content": [{"text": "not completed"}]}},
+                "error",
+                "not completed",
+                "not completed",
+            ),
+            (json.dumps({"Err": {"message": "rejected"}}), "error", "rejected", "rejected"),
+            (
+                {"isError": True, "content": [{"type": "text", "text": "not completed"}]},
+                "error",
+                "not completed",
+                "not completed",
+            ),
+            ({"is_error": False, "content": "complete"}, "success", "complete", None),
+            ({"status": "failed", "message": "not completed"}, "error", "not completed", "not completed"),
+            ({"state": "in_progress", "message": "waiting"}, "pending", "waiting", None),
+            ({"state": "completed", "content": "finished"}, "success", "finished", None),
+            ({"exit_code": 3, "stderr": "process detail"}, "error", "process detail", "Exit code: 3"),
+            ({"exitCode": 0, "stdout": "complete"}, "success", "complete", None),
+            ("ERROR: ordinary returned text", "success", "ERROR: ordinary returned text", None),
+        ],
+    )
+    def test_tool_output_uses_structural_outcome_signals(
+        self, tmp_path, output, expected_status, expected_result, expected_error
+    ):
+        jsonl_file = tmp_path / "rollout-outcome.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "outcome-session"}},
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "custom_tool_call",
+                    "callId": "outcome-call",
+                    "name": "run_task",
+                    "input": {"value": 1},
+                },
+            },
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "custom_tool_call_output",
+                    "tool_call_id": "outcome-call",
+                    "output": output,
+                },
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        tool = CodexParser().parse_jsonl_file(jsonl_file).chat_history[0].tools[0]
+
+        assert tool.status == expected_status
+        assert tool.result == expected_result
+        assert tool.error == expected_error
+
+    def test_nested_domain_status_does_not_mark_tool_as_failed(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-domain-status.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "domain-status-session"}},
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "function_call",
+                    "call_id": "domain-status-call",
+                    "name": "lookup_record",
+                    "arguments": {},
+                },
+            },
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "function_call_output",
+                    "call_id": "domain-status-call",
+                    "output": {
+                        "content": [
+                            {"type": "record", "id": "sample-record", "status": "failed"}
+                        ]
+                    },
+                },
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        tool = CodexParser().parse_jsonl_file(jsonl_file).chat_history[0].tools[0]
+
+        assert tool.status == "success"
+        assert tool.result == '{"type":"record","id":"sample-record","status":"failed"}'
+        assert tool.error is None
+
+    def test_unknown_typed_result_item_is_retained(self):
+        result = CodexParser()._normalize_tool_output(
+            [{"type": "artifact", "path": "sample.txt", "state": "ready", "message": "created"}]
+        )
+
+        assert result == '{"type":"artifact","path":"sample.txt","state":"ready","message":"created"}'
+
+    @pytest.mark.parametrize(
+        "output",
+        [
+            {"type": "artifact", "path": "sample.txt", "message": "created"},
+            {"content": {"type": "artifact", "path": "sample.txt", "message": "created"}},
+        ],
+    )
+    def test_unknown_typed_result_mapping_is_retained_outside_lists(self, output):
+        result = CodexParser()._normalize_tool_output(output)
+
+        assert result == '{"type":"artifact","path":"sample.txt","message":"created"}'
+
+    def test_explicit_mcp_namespace_classifies_plain_tool_name(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-mcp-namespace.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "mcp-namespace-session"}},
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "function_call",
+                    "call_id": "mcp-call",
+                    "namespace": "mcp__queryrunner_mcp",
+                    "name": "run_query",
+                    "arguments": {"query": "SELECT 1"},
+                },
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        tool = CodexParser().parse_jsonl_file(jsonl_file).chat_history[0].tools[0]
+
+        assert tool.tool_type == "mcp_tool"
+        assert tool.server_name == "queryrunner_mcp"
+        assert tool.tool_name == "run_query"
+
+    def test_nested_outcome_like_fields_remain_domain_data(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-nested-domain-outcome.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "nested-domain-session"}},
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "function_call",
+                    "call_id": "nested-domain-call",
+                    "name": "lookup_record",
+                    "arguments": {},
+                },
+            },
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "function_call_output",
+                    "call_id": "nested-domain-call",
+                    "output": {
+                        "isError": False,
+                        "content": [
+                            {
+                                "type": "record",
+                                "result": {"status": "failed", "error": "domain value"},
+                                "exit_code": 7,
+                            }
+                        ],
+                    },
+                },
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        tool = CodexParser().parse_jsonl_file(jsonl_file).chat_history[0].tools[0]
+
+        assert tool.status == "success"
+        assert '"status":"failed"' in tool.result
+        assert tool.error is None
+
+    @pytest.mark.parametrize(
+        ("status", "expected"),
+        [("completed", "success"), ("failed", "error"), ("running", "pending")],
+    )
+    def test_call_status_is_canonicalized_without_output(self, tmp_path, status, expected):
+        jsonl_file = tmp_path / f"rollout-{status}.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": f"{status}-session"}},
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "function_call",
+                    "call_id": f"{status}-call",
+                    "name": "sample_tool",
+                    "arguments": {},
+                    "status": status,
+                },
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        tool = CodexParser().parse_jsonl_file(jsonl_file).chat_history[0].tools[0]
+
+        assert tool.status == expected
+        assert tool.result is None
+
     def test_mixed_tool_types_in_one_session(self, tmp_path):
         """Both record shapes can appear in the same session and must both survive."""
         jsonl_file = tmp_path / "rollout-mixed.jsonl"
@@ -427,6 +818,158 @@ class TestCodexParser:
         assert len(entry.chat_history) == 2  # user message + assistant tool turn
         assert len([t for m in entry.chat_history for t in m.tools]) == 1
 
+    def test_skips_malformed_decoded_records(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-malformed.jsonl"
+        records = [
+            None,
+            ["unsupported-record"],
+            {"type": "response_item"},
+            {"type": "response_item", "payload": "unsupported-payload"},
+            {
+                "type": "session_meta",
+                "payload": {"id": {"unexpected": "value"}, "timestamp": {"unexpected": "value"}},
+            },
+            {
+                "type": "session_meta",
+                "payload": {"id": "valid-session", "timestamp": "2025-01-02T03:04:05Z"},
+            },
+            {
+                "type": "response_item",
+                "payload": {"type": "message", "role": "user", "content": "kept message"},
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(record) for record in records))
+
+        entry = CodexParser().parse_jsonl_file(jsonl_file)
+
+        assert entry is not None
+        assert entry.session_id == "codex_valid-session"
+        assert [message.content for message in entry.chat_history] == ["kept message"]
+
+    def test_invalid_session_timestamp_keeps_valid_session_identity(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-invalid-timestamp.jsonl"
+        events = [
+            {
+                "type": "session_meta",
+                "payload": {"id": "valid-session", "timestamp": {"unexpected": "value"}},
+            },
+            {
+                "type": "response_item",
+                "payload": {"type": "message", "role": "user", "content": "kept message"},
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        entry = CodexParser().parse_jsonl_file(jsonl_file)
+
+        assert entry is not None
+        assert entry.session_id == "codex_valid-session"
+        assert [message.content for message in entry.chat_history] == ["kept message"]
+
+    def test_supports_message_content_shapes(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-content.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "content-session"}},
+            {
+                "type": "response_item",
+                "payload": {"type": "message", "role": "user", "content": "string content"},
+            },
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": {"type": "output_text", "text": "mapping content"},
+                },
+            },
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "user",
+                    "content": [
+                        "mixed ",
+                        {"type": "input_text", "text": "content"},
+                        None,
+                        7,
+                        {"type": "input_text", "text": {"unexpected": "value"}},
+                        {"type": "image", "text": "ignored"},
+                        {"type": "output_text", "text": " list"},
+                    ],
+                },
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        entry = CodexParser().parse_jsonl_file(jsonl_file)
+
+        assert [(message.role, message.content) for message in entry.chat_history] == [
+            ("user", "string content"),
+            ("assistant", "mapping content"),
+            ("user", "mixed content list"),
+        ]
+
+    def test_tolerates_malformed_reasoning_summary_items(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-reasoning.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "reasoning-session"}},
+            {
+                "type": "response_item",
+                "payload": {"type": "message", "role": "user", "content": "review this"},
+            },
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "reasoning",
+                    "summary": [
+                        None,
+                        "unsupported-item",
+                        {"type": "summary_text", "text": {"unexpected": "value"}},
+                        {"type": "other", "text": "ignored"},
+                        {"type": "summary_text", "text": "valid summary"},
+                    ],
+                },
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        entry = CodexParser().parse_jsonl_file(jsonl_file)
+
+        assert [message.content for message in entry.chat_history] == [
+            "review this",
+            "[Reasoning]\nvalid summary\n",
+        ]
+
+    def test_first_valid_session_meta_defines_physical_identity(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-identity.jsonl"
+        first_cwd = str(tmp_path / "first-project")
+        later_cwd = str(tmp_path / "later-project")
+        events = [
+            {
+                "type": "session_meta",
+                "payload": {"timestamp": "2024-01-01T00:00:00Z", "cwd": str(tmp_path / "missing-id")},
+            },
+            {
+                "type": "session_meta",
+                "payload": {"id": "physical-session", "timestamp": "2025-01-02T03:04:05Z", "cwd": first_cwd},
+            },
+            {
+                "type": "session_meta",
+                "payload": {"id": "later-session", "timestamp": "2026-02-03T04:05:06Z", "cwd": later_cwd},
+            },
+            {
+                "type": "response_item",
+                "payload": {"type": "message", "role": "user", "content": "identity check"},
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        entry = CodexParser().parse_jsonl_file(jsonl_file)
+
+        assert entry.session_id == "codex_physical-session"
+        assert entry.project_path == first_cwd
+        assert entry.timestamp == datetime(2025, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
+
     def test_parse_no_directory(self):
         """Test parse_all when directory doesn't exist."""
         parser = CodexParser()
@@ -435,11 +978,11 @@ class TestCodexParser:
         assert entries == []
 
 
-def _build_warp_db(db_path: Path, conversations: list) -> None:
+def _build_warp_db(db_path: Path, conversations: list, *, include_ai_blocks: bool = True) -> None:
     """Create a synthetic warp.sqlite matching the schema WarpParser queries.
 
     Each item in `conversations` is a dict with keys:
-        conversation_id, last_modified_at, exchanges
+        conversation_id, last_modified_at, exchanges, and optional model_id
     where `exchanges` is a list of (exchange_id, start_ts, input_json, llm_output_json).
     """
     conn = sqlite3.connect(str(db_path))
@@ -466,7 +1009,8 @@ def _build_warp_db(db_path: Path, conversations: list) -> None:
         )
         """
     )
-    cursor.execute("CREATE TABLE ai_blocks (exchange_id TEXT, output TEXT)")
+    if include_ai_blocks:
+        cursor.execute("CREATE TABLE ai_blocks (exchange_id TEXT, output TEXT)")
 
     for conv in conversations:
         cursor.execute(
@@ -476,9 +1020,17 @@ def _build_warp_db(db_path: Path, conversations: list) -> None:
         for exchange_id, start_ts, input_json, llm_output_json in conv.get("exchanges", []):
             cursor.execute(
                 "INSERT INTO ai_queries VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (exchange_id, conv["conversation_id"], start_ts, input_json, "/tmp/project", "success", "claude"),
+                (
+                    exchange_id,
+                    conv["conversation_id"],
+                    start_ts,
+                    input_json,
+                    "/tmp/project",
+                    "success",
+                    conv.get("model_id", "model-default"),
+                ),
             )
-            if llm_output_json is not None:
+            if include_ai_blocks and llm_output_json is not None:
                 cursor.execute("INSERT INTO ai_blocks VALUES (?, ?)", (exchange_id, llm_output_json))
 
     conn.commit()
@@ -597,6 +1149,93 @@ class TestWarpParser:
         assert len(assistant_msg.tools) == 1
         assert assistant_msg.tools[0].tool_name == "execute_command"
         assert assistant_msg.tools[0].status == "success"
+
+    def test_parses_current_schema_without_ai_blocks(self, tmp_path):
+        """Current databases without ai_blocks should still produce conversation events."""
+        now = datetime.now(timezone.utc).isoformat()
+        conversations = [
+            {
+                "conversation_id": "current-conv",
+                "last_modified_at": now,
+                "exchanges": [self._query_exchange("current-exchange", now)],
+            }
+        ]
+        db_path = tmp_path / "warp.sqlite"
+        _build_warp_db(db_path, conversations, include_ai_blocks=False)
+
+        entries = self._make_parser(tmp_path).parse_all()
+
+        assert len(entries) == 1
+        assert entries[0].session_id == "warp_current-conv"
+        assert entries[0].chat_history[0].content == "hello from current-exchange"
+
+    def test_legacy_schema_retains_llm_output(self, tmp_path):
+        """Legacy databases with ai_blocks should retain their assistant output."""
+        now = datetime.now(timezone.utc).isoformat()
+        action_result_input = json.dumps([{"ActionResult": {"id": "synthetic-tool", "result": {}}}])
+        llm_output = json.dumps({"Received": {"output": [{"Text": {"text": "synthetic response"}}]}})
+        conversations = [
+            {
+                "conversation_id": "legacy-conv",
+                "last_modified_at": now,
+                "exchanges": [("legacy-exchange", now, action_result_input, llm_output)],
+            }
+        ]
+        db_path = tmp_path / "warp.sqlite"
+        _build_warp_db(db_path, conversations)
+
+        entries = self._make_parser(tmp_path).parse_all()
+
+        assert len(entries) == 1
+        assert entries[0].chat_history[0].content == "synthetic response"
+
+    def test_checks_legacy_table_once_per_database(self, tmp_path):
+        """Schema detection should not add one sqlite_master query per conversation."""
+        now = datetime.now(timezone.utc).isoformat()
+        conversations = [
+            {
+                "conversation_id": f"conversation-{index}",
+                "last_modified_at": now,
+                "exchanges": [self._query_exchange(f"exchange-{index}", now)],
+            }
+            for index in range(2)
+        ]
+        db_path = tmp_path / "warp.sqlite"
+        _build_warp_db(db_path, conversations, include_ai_blocks=False)
+        parser = self._make_parser(tmp_path)
+
+        with patch.object(parser, "_has_table", wraps=parser._has_table) as has_table:
+            entries = parser.parse_all()
+
+        assert len(entries) == 2
+        has_table.assert_called_once()
+
+    @pytest.mark.parametrize(
+        ("stored_model_id", "expected_model_id"),
+        [
+            ('"model-quoted"', "model-quoted"),
+            ("model-unquoted", "model-unquoted"),
+            ('"model-malformed', '"model-malformed'),
+        ],
+    )
+    def test_normalizes_model_id(self, tmp_path, stored_model_id, expected_model_id):
+        """Only valid JSON-quoted model IDs should be decoded."""
+        now = datetime.now(timezone.utc).isoformat()
+        conversations = [
+            {
+                "conversation_id": "model-conv",
+                "last_modified_at": now,
+                "model_id": stored_model_id,
+                "exchanges": [self._query_exchange("model-exchange", now)],
+            }
+        ]
+        db_path = tmp_path / "warp.sqlite"
+        _build_warp_db(db_path, conversations, include_ai_blocks=False)
+
+        entries = self._make_parser(tmp_path).parse_all()
+
+        assert len(entries) == 1
+        assert entries[0].model == expected_model_id
 
     def test_parse_all_no_database(self, tmp_path):
         """Test parse_all when the database file doesn't exist."""
@@ -1331,10 +1970,9 @@ class TestWindowsAppDataResolution:
         monkeypatch.delenv("LOCALAPPDATA", raising=False)
         assert windows_local_appdata() == Path.home() / "AppData/Local"
 
-    def test_redirected_appdata_end_to_end(self, tmp_path):
+    def test_redirected_appdata_end_to_end(self, tmp_path, monkeypatch):
         """A Cursor DB under a redirected %APPDATA% (outside the profile) is found."""
         import importlib
-        import os as os_mod
 
         from adr_sensor.parsers import cursor_parser as cursor_parser_module
 
@@ -1343,15 +1981,29 @@ class TestWindowsAppDataResolution:
         db.parent.mkdir(parents=True)
         db.touch()
 
-        original = os_mod.environ.get("APPDATA")
-        os_mod.environ["APPDATA"] = str(redirected)
         try:
-            # DB_PATHS is built at import time, so reload under the redirected env.
-            importlib.reload(cursor_parser_module)
-            assert cursor_parser_module.CursorParser().db_path == db
+            with monkeypatch.context() as isolated:
+                isolated.setenv("APPDATA", str(redirected))
+                # DB_PATHS is built at import time, so reload under the redirected env.
+                importlib.reload(cursor_parser_module)
+
+                reloaded_parser = cursor_parser_module.CursorParser
+                windows_candidate = reloaded_parser.DB_PATHS[-1]
+                assert windows_candidate == db
+
+                # Preserve the parser's actual Windows candidate while preventing real
+                # macOS or Linux Cursor installations from winning the existence check.
+                isolated.setattr(
+                    reloaded_parser,
+                    "DB_PATHS",
+                    [
+                        tmp_path / "missing-macos/state.vscdb",
+                        tmp_path / "missing-linux/state.vscdb",
+                        windows_candidate,
+                    ],
+                )
+
+                assert reloaded_parser().db_path == db
         finally:
-            if original is None:
-                os_mod.environ.pop("APPDATA", None)
-            else:
-                os_mod.environ["APPDATA"] = original
+            # Restore module-level paths using the process's original environment.
             importlib.reload(cursor_parser_module)

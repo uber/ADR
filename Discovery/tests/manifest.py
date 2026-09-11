@@ -161,9 +161,37 @@ def load(directory: str = MANIFEST_DIR) -> "Manifest":
             entries.append(_entry(row, source=name))
     canaries = _load_side_file(directory, "canaries.toml", "canaries")
     sources = _load_side_file(directory, "sources.toml", "sources")
+    _resolve_sites(entries)
     manifest = Manifest(entries=entries, canaries=canaries, sources=sources)
     manifest.validate()
     return manifest
+
+
+def _resolve_sites(entries: List[Entry]) -> None:
+    """Give every declaration a path, using the sites that already name one.
+
+    The fourteen M-SITE rows enumerate the declaration sites and where each one
+    lives per OS. The pinned and special-case rows reuse those sites by name and
+    carry no path of their own, so without this they would be unwritable by the
+    runner and unmatchable by the scorer for reasons that have nothing to do
+    with the collector.
+    """
+    known: Dict[str, Dict[str, str]] = {}
+    for entry in entries:
+        site = entry.declare.get("site")
+        path = entry.declare.get("path")
+        if site and isinstance(path, dict):
+            known.setdefault(str(site), {}).update({k: v for k, v in path.items() if v})
+
+    for entry in entries:
+        if not entry.declare or entry.declare.get("path"):
+            continue
+        names = entry.declare.get("sites") or [entry.declare.get("site")]
+        for name in names:
+            resolved = known.get(str(name))
+            if resolved:
+                entry.declare["path"] = dict(resolved)
+                break
 
 
 def _load_side_file(directory: str, name: str, key: str) -> Any:
