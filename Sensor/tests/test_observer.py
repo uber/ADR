@@ -19,6 +19,11 @@ class TestAgentObserver:
 
         assert observer.cline_parser.max_age_days == 30
 
+    def test_init_passes_max_age_days_to_codex(self, tmp_path):
+        observer = AgentObserver(output_dir=tmp_path, max_age_days=0)
+
+        assert observer.codex_parser.max_age_days == 0
+
     def test_display_summary_empty(self, tmp_path, capsys):
         """Test display summary with no data."""
         observer = AgentObserver(output_dir=tmp_path)
@@ -46,6 +51,45 @@ class TestAgentObserver:
         captured = capsys.readouterr()
         assert "CLAUDE" in captured.out
         assert "INGESTION SUMMARY" in captured.out
+
+    def test_display_summary_limits_recent_entries(self, tmp_path, capsys):
+        observer = AgentObserver(output_dir=tmp_path)
+        entries = [
+            AgentEvent(
+                timestamp=datetime(2025, 1, day, tzinfo=timezone.utc),
+                source="claude",
+                session_id=f"session-{day}",
+                hostname="host",
+                username="user",
+                chat_history=[ChatMessage(role="user", content="hello")],
+            )
+            for day in (1, 2, 3)
+        ]
+
+        observer.display_summary(entries, [], limit=2)
+
+        output = capsys.readouterr().out
+        assert "RECENT ENTRIES" in output
+        assert "2025-01-03" in output
+        assert "2025-01-02" in output
+        assert "2025-01-01" not in output
+
+    def test_display_summary_zero_limit_hides_entries(self, tmp_path, capsys):
+        observer = AgentObserver(output_dir=tmp_path)
+        entry = AgentEvent(
+            timestamp=datetime(2025, 1, 1, tzinfo=timezone.utc),
+            source="claude",
+            session_id="session-1",
+            hostname="host",
+            username="user",
+            chat_history=[ChatMessage(role="user", content="hello")],
+        )
+
+        observer.display_summary([entry], [], limit=0)
+
+        output = capsys.readouterr().out
+        assert "INGESTION SUMMARY" in output
+        assert "RECENT ENTRIES" not in output
 
     def test_save_to_file_json(self, tmp_path):
         """Test saving entries as JSON."""
