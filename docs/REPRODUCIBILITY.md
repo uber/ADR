@@ -14,11 +14,14 @@ This guide covers the evaluation workflow for [ADR (arXiv:2605.17380)](https://a
 | Production deployment results (§6) | **No** — enterprise telemetry not included             |
 
 
-## ADR-Bench task count: 303 vs 302
+## ADR-Bench task count: 304 vs 302
 
-The paper reports **302 tasks** (260 benign, 42 malicious). This repository ships **303 tasks** (261 benign, 42 malicious).
+The paper reports **302 tasks** (260 benign, 42 malicious). `tasks.json` in this repository defines **304 tasks** (261 benign, 43 malicious) — two deltas from the paper set:
 
-The extra benign task was blocked in the original evaluation run by a benchmark pipeline bug. After that bug was fixed, the task completes normally and is included in `tasks.json` and the packed benchmark JSONL. Paper Table 2 numbers were computed on the original 302-task set; re-running on all 303 tasks may differ slightly.
+- One extra **benign** task, blocked in the original evaluation run by a benchmark pipeline bug. After that bug was fixed, the task completes normally and is included in `tasks.json` and the packed benchmark JSONL.
+- One extra **malicious** task (`task_304`, `content_localization_service` — a Tag-Block ASCII-smuggling indirect prompt injection), added to exercise the deterministic Unicode-obfuscation detector. As of this writing it is defined in `tasks.json` but **not yet in the packed `adr_bench_20251017_151604.jsonl`** — it needs a recorded conversation from a live `main_benchmark.py --tasks 304` run before it contributes to any detector metric; until then, `benchmark_pack.py inflate` on the packed JSONL still only produces 303 task directories. Running detection against `tasks.json`'s 304-task definitions without a matching recorded conversation for task 304 will report it dropped (see `run_stats.dropped` in Step 2).
+
+Paper Table 2 numbers were computed on the original 302-task set; re-running on the full task list may differ slightly.
 
 ## Prerequisites
 
