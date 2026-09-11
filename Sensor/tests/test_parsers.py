@@ -1474,7 +1474,7 @@ class TestCursorParser:
         connect.return_value.close.assert_called_once_with()
 
 
-class TestCursorParser:
+class TestCursorToolResults:
     @pytest.mark.parametrize("tool_name", ["list_dir", "read_file", "run_command"])
     def test_extracts_result_for_every_tool(self, tool_name):
         tools = CursorParser().extract_tools_from_bubble(
