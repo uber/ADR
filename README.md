@@ -1,5 +1,7 @@
 # ADR: Agentic AI Detection and Response
 
+[![uber/ADR | Trendshift](https://trendshift.io/api/badge/repositories/100696)](https://trendshift.io/repositories/100696?utm_source=repository-badge&utm_medium=badge&utm_campaign=badge-repository-100696)
+
 ADR (Agentic AI Detection and Response) is an enterprise security system for AI agents. It helps organizations secure employee-facing agents such as Cursor, Claude Code, and Codex, as well as customer-facing agents such as AI support agents.
 
 ADR is **deployed in production at Uber**, and the accompanying paper was accepted to **MLSys 2026**: [Paper PDF](docs/adr-paper.pdf) · [Slides PDF](docs/adr-mlsys-2026-slides.pdf)
@@ -10,7 +12,7 @@ ADR secures enterprise AI agents through five complementary capabilities: discov
 
 1. **ADR Discovery: Find the AI tools present on employee endpoints.** Inventories installed AI applications, CLI agents, IDE extensions, local model runtimes, and MCP servers, and flags unknown surfaces for review.
 2. **ADR Observability: Understand what AI agents are doing and why.** In production, ADR captures agent intent, tool use, and execution traces across 7+ AI coding tools on macOS, Linux, and Windows, as well as internal automation and customer-facing support agents.
-3. **ADR Benchmark: Test agent security under realistic enterprise conditions.** ADR-Bench includes 300+ tasks, 133 MCP servers, and coverage of all 17 agent attack techniques.
+3. **ADR Benchmark: Test agent security under realistic enterprise conditions.** ADR-Bench includes 300+ tasks, 134 MCP servers, and coverage of all 17 agent attack techniques.
 4. **ADR Detection: Detect risky agent behavior efficiently.** Its two-tier architecture combines high-recall triage with deeper agentic reasoning for suspicious sessions.
 5. **ADR Prevention: Stop unsafe actions before they cause harm.** This component is not included in the current open-source release. **Stay tuned.**
 
@@ -22,7 +24,7 @@ This repository contains the open-source **ADR Discovery**, **ADR Sensor**, **AD
 | -------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------ |
 | [Discovery/](Discovery/)                           | ADR Discovery              | Inventory the AI apps, CLI agents, IDE extensions, model runtimes, and MCP servers on an endpoint, and flag unknown surfaces for review |
 | [Sensor/](Sensor/)                                 | ADR Observability          | Collect and normalize agent telemetry from Claude Code, Cursor, Codex, opencode, Claude Desktop, and others |
-| [Detection/](Detection/)                           | ADR Benchmark + Detection  | Dual-agent detector, 133 MCP servers, 303 benchmark tasks, baselines, figure scripts |
+| [Detection/](Detection/)                           | ADR Benchmark + Detection  | Dual-agent detector, 134 MCP servers, 304 benchmark tasks, baselines, figure scripts |
 | [docs/REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md) | Evaluation                 | Step-by-step workflow to reproduce benchmark detection and paper figures             |
 
 ## Quick start: ADR Detection
@@ -56,6 +58,16 @@ Component documentation:
 ```
 
 Or use [CITATION.cff](CITATION.cff).
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=uber%2Fadr&type=date&legend=top-left">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=uber/adr&type=date&theme=dark&legend=top-left" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=uber/adr&type=date&legend=top-left" />
+    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=uber/adr&type=date&legend=top-left" />
+  </picture>
+</a>
 
 ## License
 
