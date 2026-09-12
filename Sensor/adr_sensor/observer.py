@@ -59,7 +59,7 @@ class AgentObserver:
         ("cline", "Cline"),
         ("warp", "Warp Terminal"),
         ("codex", "Codex"),
-        ("copilot", "GitHub Copilot"),
+        ("copilot", "GitHub Copilot CLI"),
         ("opencode", "opencode"),
     )
 

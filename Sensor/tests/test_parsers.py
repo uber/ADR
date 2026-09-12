@@ -1655,6 +1655,30 @@ class TestCopilotParser:
     def test_default_max_age_days(self):
         assert CopilotParser().max_age_days == 14
 
+    def test_uses_copilot_home(self, tmp_path, monkeypatch):
+        copilot_home = tmp_path / "custom-copilot-home"
+        monkeypatch.setenv("COPILOT_HOME", str(copilot_home))
+
+        parser = CopilotParser()
+
+        assert parser.base_path == copilot_home / "session-state"
+
+    def test_empty_copilot_home_defaults_to_dot_copilot(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("COPILOT_HOME", "")
+
+        with patch("adr_sensor.parsers.copilot_parser.Path.home", return_value=tmp_path):
+            parser = CopilotParser()
+
+        assert parser.base_path == tmp_path / ".copilot" / "session-state"
+
+    def test_explicit_base_path_overrides_copilot_home(self, tmp_path, monkeypatch):
+        explicit_path = tmp_path / "explicit-session-state"
+        monkeypatch.setenv("COPILOT_HOME", str(tmp_path / "ignored-copilot-home"))
+
+        parser = CopilotParser(base_path=explicit_path)
+
+        assert parser.base_path == explicit_path
+
     def test_parse_all_filters_old_sessions_by_event_log_mtime(self, tmp_path):
         recent_path = self._write_events(
             tmp_path / "recent-session",

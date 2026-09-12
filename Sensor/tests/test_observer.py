@@ -19,7 +19,7 @@ class TestAgentObserver:
         assert observer.output_dir == tmp_path
         assert hasattr(observer, "copilot_parser")
         assert observer.copilot_parser.max_age_days == 14
-        assert ("copilot", "GitHub Copilot") in observer.SOURCES
+        assert ("copilot", "GitHub Copilot CLI") in observer.SOURCES
 
     def test_init_propagates_max_age_days_to_cline(self, tmp_path):
         observer = AgentObserver(output_dir=tmp_path, max_age_days=30)

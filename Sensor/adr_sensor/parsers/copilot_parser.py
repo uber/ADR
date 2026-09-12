@@ -1,8 +1,10 @@
 """
 Parser for GitHub Copilot session-state logs.
 
-Reads per-session event streams from ``~/.copilot/session-state/<session-id>/``
-and normalizes them into ADR's ``AgentEvent`` schema.
+Reads per-session event streams from
+``$COPILOT_HOME/session-state/<session-id>/`` (defaulting to
+``~/.copilot/session-state/<session-id>/``) and normalizes them into ADR's
+``AgentEvent`` schema.
 
 The primary signal lives in ``events.jsonl``. When available, the parser also
 enriches sessions with lightweight metadata from ``workspace.yaml`` and
@@ -10,6 +12,7 @@ enriches sessions with lightweight metadata from ``workspace.yaml`` and
 """
 
 import json
+import os
 import traceback
 from collections import Counter
 from datetime import datetime, timedelta, timezone
@@ -30,7 +33,9 @@ class CopilotParser(BaseParser):
     """Parser for GitHub Copilot session-state logs."""
 
     def __init__(self, max_age_days: int = MAX_LOG_AGE_DAYS, base_path: Optional[Path] = None):
-        self.base_path = Path(base_path) if base_path else Path.home() / ".copilot" / "session-state"
+        copilot_home_env = os.environ.get("COPILOT_HOME")
+        copilot_home = Path(copilot_home_env).expanduser() if copilot_home_env else Path.home() / ".copilot"
+        self.base_path = Path(base_path).expanduser() if base_path is not None else copilot_home / "session-state"
         self.max_age_days = max_age_days
 
     def parse_all(self) -> List[AgentEvent]:
