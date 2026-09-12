@@ -104,6 +104,17 @@ class TestClaudeParser:
 
 
 class TestClineParser:
+    @staticmethod
+    def _write_task(base_path: Path, name: str, text: str = "hello"):
+        task_dir = base_path / name
+        task_dir.mkdir()
+        api_file = task_dir / "api_conversation_history.json"
+        api_file.write_text(
+            json.dumps([{"role": "user", "content": [{"type": "text", "text": text}]}]),
+            encoding="utf-8",
+        )
+        return task_dir, api_file
+
     def test_parse_cline_log(self, tmp_path):
         """Test parsing a Cline task directory."""
         task_dir = tmp_path / "1234567890"
@@ -133,6 +144,76 @@ class TestClineParser:
         assert entry.source == "cline"
         assert len(entry.chat_history) == 2
 
+    def test_parse_all_filters_tasks_by_conversation_mtime(self, tmp_path):
+        recent_task, _ = self._write_task(tmp_path, "recent", "recent task")
+        old_task, old_api_file = self._write_task(tmp_path, "old", "old task")
+        now = datetime.now(timezone.utc).timestamp()
+        old = (datetime.now(timezone.utc) - timedelta(days=30)).timestamp()
+
+        # The conversation file, not its task directory, determines a task's age.
+        os.utime(recent_task, (old, old))
+        os.utime(old_api_file, (old, old))
+        os.utime(old_task, (now, now))
+
+        parser = ClineParser(max_age_days=14)
+        parser.base_path = tmp_path
+        with patch.object(parser, "parse_cline_log", wraps=parser.parse_cline_log) as parse_log:
+            entries = parser.parse_all()
+
+        assert {entry.session_id for entry in entries} == {"cline_recent"}
+        assert [call.args[0] for call in parse_log.call_args_list] == [recent_task]
+
+    def test_parse_all_uses_directory_mtime_when_conversation_is_missing(self, tmp_path):
+        task_dir = tmp_path / "missing-conversation"
+        task_dir.mkdir()
+        old = (datetime.now(timezone.utc) - timedelta(days=30)).timestamp()
+        os.utime(task_dir, (old, old))
+        parser = ClineParser(max_age_days=14)
+        parser.base_path = tmp_path
+
+        with patch.object(parser, "parse_cline_log", wraps=parser.parse_cline_log) as parse_log:
+            entries = parser.parse_all()
+
+        assert entries == []
+        parse_log.assert_not_called()
+
+    def test_parse_all_falls_back_to_task_mtime_after_file_stat_failure(self, tmp_path, monkeypatch):
+        _, failing_api_file = self._write_task(tmp_path, "stat-failure", "recovered task")
+        self._write_task(tmp_path, "healthy", "healthy task")
+        parser = ClineParser(max_age_days=14)
+        parser.base_path = tmp_path
+        original_stat = Path.stat
+        should_fail = True
+
+        def fail_one_stat(path, *args, **kwargs):
+            nonlocal should_fail
+            if path == failing_api_file and should_fail:
+                should_fail = False
+                raise OSError("stat unavailable")
+            return original_stat(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "stat", fail_one_stat)
+
+        entries = parser.parse_all()
+
+        assert {entry.session_id for entry in entries} == {"cline_stat-failure", "cline_healthy"}
+
+    @pytest.mark.parametrize("max_age_days", [0, -1])
+    def test_parse_all_non_positive_max_age_includes_all_history(self, tmp_path, max_age_days):
+        task_dir, api_file = self._write_task(tmp_path, "old", "old task")
+        old = (datetime.now(timezone.utc) - timedelta(days=30)).timestamp()
+        os.utime(api_file, (old, old))
+        os.utime(task_dir, (old, old))
+        parser = ClineParser(max_age_days=max_age_days)
+        parser.base_path = tmp_path
+
+        entries = parser.parse_all()
+
+        assert {entry.session_id for entry in entries} == {"cline_old"}
+
+    def test_default_max_age_days(self):
+        assert ClineParser().max_age_days == 14
+
     def test_extract_mcp_tools(self):
         """Test MCP tool extraction from text."""
         parser = ClineParser()
@@ -158,6 +239,54 @@ class TestClineParser:
 
 
 class TestCodexParser:
+    @staticmethod
+    def _write_rollout(file_path: Path, session_id: str) -> None:
+        """Write a minimal synthetic Codex rollout with meaningful content."""
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        events = [
+            {
+                "type": "session_meta",
+                "payload": {
+                    "id": session_id,
+                    "timestamp": "2025-01-15T10:00:00Z",
+                    "cwd": "/tmp/example-project",
+                },
+            },
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "Review this example"}],
+                },
+            },
+        ]
+        file_path.write_text("".join(f"{json.dumps(event)}\n" for event in events), encoding="utf-8")
+
+    @staticmethod
+    def _write_catalog(catalog_path: Path, rows: list, timestamp_columns: tuple = ()) -> None:
+        """Write a minimal Codex-shaped state catalog."""
+        catalog_path.parent.mkdir(parents=True, exist_ok=True)
+        columns = ["id TEXT", "rollout_path TEXT", *(f"{name}" for name in timestamp_columns)]
+        connection = sqlite3.connect(str(catalog_path))
+        try:
+            connection.execute(f"CREATE TABLE threads ({', '.join(columns)})")
+            placeholders = ", ".join("?" for _ in columns)
+            for row in rows:
+                values = [row.get("id"), row.get("rollout_path")]
+                values.extend(row.get(name) for name in timestamp_columns)
+                connection.execute(f"INSERT INTO threads VALUES ({placeholders})", values)
+            connection.commit()
+        finally:
+            connection.close()
+
+    @staticmethod
+    def _parser_for_home(codex_home: Path, max_age_days: int = 14) -> CodexParser:
+        parser = CodexParser(max_age_days=max_age_days)
+        parser.codex_home = codex_home
+        parser.base_path = codex_home / "sessions"
+        return parser
+
     def test_parse_jsonl_file(self, tmp_path):
         """Test parsing a Codex CLI JSONL file."""
         jsonl_file = tmp_path / "rollout-001.jsonl"
@@ -317,6 +446,316 @@ class TestCodexParser:
         assert tool.arguments == {"path": "main.py"}
         assert tool.result == "def main(): pass"
 
+    def test_mcp_function_call_is_strictly_classified(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-mcp.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "mcp-session"}},
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "function_call",
+                    "call_id": "mcp-call",
+                    "name": "mcp__sample-server__lookup_item",
+                    "arguments": {"item": "example"},
+                },
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        tool = CodexParser().parse_jsonl_file(jsonl_file).chat_history[0].tools[0]
+
+        assert tool.tool_name == "mcp__sample-server__lookup_item"
+        assert tool.tool_type == "mcp_tool"
+        assert tool.server_name == "sample-server"
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "mcp__sample-server",
+            "mcp____lookup_item",
+            "mcp__sample-server__",
+            "mcp__sample-server__lookup_item__extra",
+            "mcp__sample server__lookup_item",
+            "prefix__sample-server__lookup_item",
+        ],
+    )
+    def test_malformed_mcp_names_keep_their_classic_type(self, name):
+        assert CodexParser._classify_tool(name, "custom_tool_call") == ("custom_tool_call", None)
+
+    def test_tool_arguments_are_normalized_and_recursively_bounded(self):
+        parser = CodexParser()
+        nested = {"leaf": "kept"}
+        for _ in range(12):
+            nested = {"next": nested}
+
+        arguments = parser._parse_tool_arguments(
+            {
+                "items": list(range(150)),
+                "mapping": {f"key-{index}": index for index in range(150)},
+                "long": "x" * 5000,
+                "nested": nested,
+            }
+        )
+
+        assert len(arguments["items"]) == 100
+        assert len(arguments["mapping"]) == 100
+        assert len(arguments["long"]) < 1200
+        assert "[truncated" in arguments["long"]
+        assert "maximum depth" in json.dumps(arguments["nested"])
+        assert parser._parse_tool_arguments('[1, {"key": "value"}]') == {
+            "raw": [1, {"key": "value"}]
+        }
+        assert parser._parse_tool_arguments("") == {}
+        assert parser._parse_tool_arguments(None) == {}
+        assert parser._parse_tool_arguments("false") == {"raw": False}
+        assert parser._parse_tool_arguments(7) == {"raw": 7}
+        assert parser._parse_tool_arguments('"text"') == {"raw": "text"}
+
+    def test_oversized_json_arguments_are_not_decoded(self):
+        raw_arguments = json.dumps({"value": "x" * 100_100})
+
+        arguments = CodexParser()._parse_tool_arguments(raw_arguments)
+
+        assert list(arguments) == ["raw"]
+        assert isinstance(arguments["raw"], str)
+        assert len(arguments["raw"]) < 1200
+        assert "[truncated" in arguments["raw"]
+
+    def test_output_correlates_across_id_aliases_and_flattens_content(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-alias.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "alias-session"}},
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "function_call",
+                    "id": "shared-id",
+                    "name": "lookup",
+                    "arguments": [],
+                },
+            },
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "function_call_output",
+                    "toolCallId": "shared-id",
+                    "output": {
+                        "content": [
+                            {"type": "text", "text": "first"},
+                            {"content": "second"},
+                        ]
+                    },
+                },
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        tool = CodexParser().parse_jsonl_file(jsonl_file).chat_history[0].tools[0]
+
+        assert tool.arguments == {"raw": []}
+        assert tool.result == "first\nsecond"
+        assert tool.status == "success"
+        assert tool.error is None
+
+    @pytest.mark.parametrize(
+        ("output", "expected_status", "expected_result", "expected_error"),
+        [
+            ({"Ok": {"content": [{"text": "complete"}]}}, "success", "complete", None),
+            (
+                {"Ok": {"isError": True, "content": [{"text": "not completed"}]}},
+                "error",
+                "not completed",
+                "not completed",
+            ),
+            (json.dumps({"Err": {"message": "rejected"}}), "error", "rejected", "rejected"),
+            (
+                {"isError": True, "content": [{"type": "text", "text": "not completed"}]},
+                "error",
+                "not completed",
+                "not completed",
+            ),
+            ({"is_error": False, "content": "complete"}, "success", "complete", None),
+            ({"status": "failed", "message": "not completed"}, "error", "not completed", "not completed"),
+            ({"state": "in_progress", "message": "waiting"}, "pending", "waiting", None),
+            ({"state": "completed", "content": "finished"}, "success", "finished", None),
+            ({"exit_code": 3, "stderr": "process detail"}, "error", "process detail", "Exit code: 3"),
+            ({"exitCode": 0, "stdout": "complete"}, "success", "complete", None),
+            ("ERROR: ordinary returned text", "success", "ERROR: ordinary returned text", None),
+        ],
+    )
+    def test_tool_output_uses_structural_outcome_signals(
+        self, tmp_path, output, expected_status, expected_result, expected_error
+    ):
+        jsonl_file = tmp_path / "rollout-outcome.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "outcome-session"}},
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "custom_tool_call",
+                    "callId": "outcome-call",
+                    "name": "run_task",
+                    "input": {"value": 1},
+                },
+            },
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "custom_tool_call_output",
+                    "tool_call_id": "outcome-call",
+                    "output": output,
+                },
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        tool = CodexParser().parse_jsonl_file(jsonl_file).chat_history[0].tools[0]
+
+        assert tool.status == expected_status
+        assert tool.result == expected_result
+        assert tool.error == expected_error
+
+    def test_nested_domain_status_does_not_mark_tool_as_failed(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-domain-status.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "domain-status-session"}},
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "function_call",
+                    "call_id": "domain-status-call",
+                    "name": "lookup_record",
+                    "arguments": {},
+                },
+            },
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "function_call_output",
+                    "call_id": "domain-status-call",
+                    "output": {
+                        "content": [
+                            {"type": "record", "id": "sample-record", "status": "failed"}
+                        ]
+                    },
+                },
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        tool = CodexParser().parse_jsonl_file(jsonl_file).chat_history[0].tools[0]
+
+        assert tool.status == "success"
+        assert tool.result == '{"type":"record","id":"sample-record","status":"failed"}'
+        assert tool.error is None
+
+    def test_unknown_typed_result_item_is_retained(self):
+        result = CodexParser()._normalize_tool_output(
+            [{"type": "artifact", "path": "sample.txt", "state": "ready", "message": "created"}]
+        )
+
+        assert result == '{"type":"artifact","path":"sample.txt","state":"ready","message":"created"}'
+
+    @pytest.mark.parametrize(
+        "output",
+        [
+            {"type": "artifact", "path": "sample.txt", "message": "created"},
+            {"content": {"type": "artifact", "path": "sample.txt", "message": "created"}},
+        ],
+    )
+    def test_unknown_typed_result_mapping_is_retained_outside_lists(self, output):
+        result = CodexParser()._normalize_tool_output(output)
+
+        assert result == '{"type":"artifact","path":"sample.txt","message":"created"}'
+
+    def test_explicit_mcp_namespace_classifies_plain_tool_name(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-mcp-namespace.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "mcp-namespace-session"}},
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "function_call",
+                    "call_id": "mcp-call",
+                    "namespace": "mcp__queryrunner_mcp",
+                    "name": "run_query",
+                    "arguments": {"query": "SELECT 1"},
+                },
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        tool = CodexParser().parse_jsonl_file(jsonl_file).chat_history[0].tools[0]
+
+        assert tool.tool_type == "mcp_tool"
+        assert tool.server_name == "queryrunner_mcp"
+        assert tool.tool_name == "run_query"
+
+    def test_nested_outcome_like_fields_remain_domain_data(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-nested-domain-outcome.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "nested-domain-session"}},
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "function_call",
+                    "call_id": "nested-domain-call",
+                    "name": "lookup_record",
+                    "arguments": {},
+                },
+            },
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "function_call_output",
+                    "call_id": "nested-domain-call",
+                    "output": {
+                        "isError": False,
+                        "content": [
+                            {
+                                "type": "record",
+                                "result": {"status": "failed", "error": "domain value"},
+                                "exit_code": 7,
+                            }
+                        ],
+                    },
+                },
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        tool = CodexParser().parse_jsonl_file(jsonl_file).chat_history[0].tools[0]
+
+        assert tool.status == "success"
+        assert '"status":"failed"' in tool.result
+        assert tool.error is None
+
+    @pytest.mark.parametrize(
+        ("status", "expected"),
+        [("completed", "success"), ("failed", "error"), ("running", "pending")],
+    )
+    def test_call_status_is_canonicalized_without_output(self, tmp_path, status, expected):
+        jsonl_file = tmp_path / f"rollout-{status}.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": f"{status}-session"}},
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "function_call",
+                    "call_id": f"{status}-call",
+                    "name": "sample_tool",
+                    "arguments": {},
+                    "status": status,
+                },
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        tool = CodexParser().parse_jsonl_file(jsonl_file).chat_history[0].tools[0]
+
+        assert tool.status == expected
+        assert tool.result is None
+
     def test_mixed_tool_types_in_one_session(self, tmp_path):
         """Both record shapes can appear in the same session and must both survive."""
         jsonl_file = tmp_path / "rollout-mixed.jsonl"
@@ -403,20 +842,36 @@ class TestCodexParser:
         tool = [t for m in CodexParser().parse_jsonl_file(jsonl_file).chat_history for t in m.tools][0]
         assert tool.result == "bare string\nkept"
 
-    def test_event_msg_records_are_ignored(self, tmp_path):
-        """event_msg records (token_count, web_search_end, ...) must not break parsing.
-
-        They are currently unparsed; this pins that they are skipped cleanly rather
-        than raising or polluting chat_history.
-        """
+    def test_event_msg_token_count_is_normalized(self, tmp_path):
+        """The latest valid token_count snapshot is attached to the session."""
         jsonl_file = tmp_path / "rollout-eventmsg.jsonl"
         events = [
             {"type": "session_meta", "payload": {"id": "s-em", "timestamp": "2026-08-08T17:00:00.000Z"}},
-            {"type": "event_msg", "payload": {"type": "token_count",
-                                              "info": {"total_token_usage": {"input_tokens": 10}}}},
+            {
+                "type": "event_msg",
+                "payload": {
+                    "type": "token_count",
+                    "info": {
+                        "last_token_usage": {"input_tokens": 5, "output_tokens": 2, "total_tokens": 7},
+                        "total_token_usage": {"input_tokens": 10, "output_tokens": 4, "total_tokens": 14},
+                        "model_context_window": 64000,
+                    },
+                },
+            },
+            {
+                "type": "event_msg",
+                "payload": {
+                    "type": "token_count",
+                    "info": {
+                        "last_token_usage": {"input_tokens": 8, "output_tokens": 3, "total_tokens": 11},
+                        "total_token_usage": {"input_tokens": 18, "output_tokens": 7, "total_tokens": 25},
+                        "model_context_window": 128000,
+                    },
+                },
+            },
             {"type": "event_msg", "payload": {"type": "web_search_end", "call_id": "w1", "query": "anything"}},
             {"type": "response_item", "payload": {"type": "message", "role": "user",
-                                                  "content": [{"type": "input_text", "text": "hello there"}]}},
+                                                   "content": [{"type": "input_text", "text": "hello there"}]}},
             {"type": "response_item", "payload": {"type": "custom_tool_call", "call_id": "c1",
                                                   "name": "exec", "input": "true"}},
         ]
@@ -425,13 +880,251 @@ class TestCodexParser:
                 f.write(json.dumps(e) + "\n")
 
         entry = CodexParser().parse_jsonl_file(jsonl_file)
+        assert entry.token_usage == {
+            "last_turn": {"input_tokens": 8, "output_tokens": 3, "total_tokens": 11},
+            "cumulative": {"input_tokens": 18, "output_tokens": 7, "total_tokens": 25},
+            "model_context_window": 128000,
+        }
         assert len(entry.chat_history) == 2  # user message + assistant tool turn
         assert len([t for m in entry.chat_history for t in m.tools]) == 1
 
-    def test_parse_no_directory(self):
+    def test_skips_malformed_decoded_records(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-malformed.jsonl"
+        records = [
+            None,
+            ["unsupported-record"],
+            {"type": "response_item"},
+            {"type": "response_item", "payload": "unsupported-payload"},
+            {
+                "type": "session_meta",
+                "payload": {"id": {"unexpected": "value"}, "timestamp": {"unexpected": "value"}},
+            },
+            {
+                "type": "session_meta",
+                "payload": {"id": "valid-session", "timestamp": "2025-01-02T03:04:05Z"},
+            },
+            {
+                "type": "response_item",
+                "payload": {"type": "message", "role": "user", "content": "kept message"},
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(record) for record in records))
+
+        entry = CodexParser().parse_jsonl_file(jsonl_file)
+
+        assert entry is not None
+        assert entry.session_id == "codex_valid-session"
+        assert [message.content for message in entry.chat_history] == ["kept message"]
+
+    def test_invalid_session_timestamp_keeps_valid_session_identity(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-invalid-timestamp.jsonl"
+        events = [
+            {
+                "type": "session_meta",
+                "payload": {"id": "valid-session", "timestamp": {"unexpected": "value"}},
+            },
+            {
+                "type": "response_item",
+                "payload": {"type": "message", "role": "user", "content": "kept message"},
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        entry = CodexParser().parse_jsonl_file(jsonl_file)
+
+        assert entry is not None
+        assert entry.session_id == "codex_valid-session"
+        assert [message.content for message in entry.chat_history] == ["kept message"]
+
+    def test_supports_message_content_shapes(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-content.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "content-session"}},
+            {
+                "type": "response_item",
+                "payload": {"type": "message", "role": "user", "content": "string content"},
+            },
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": {"type": "output_text", "text": "mapping content"},
+                },
+            },
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "user",
+                    "content": [
+                        "mixed ",
+                        {"type": "input_text", "text": "content"},
+                        None,
+                        7,
+                        {"type": "input_text", "text": {"unexpected": "value"}},
+                        {"type": "image", "text": "ignored"},
+                        {"type": "output_text", "text": " list"},
+                    ],
+                },
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        entry = CodexParser().parse_jsonl_file(jsonl_file)
+
+        assert [(message.role, message.content) for message in entry.chat_history] == [
+            ("user", "string content"),
+            ("assistant", "mapping content"),
+            ("user", "mixed content list"),
+        ]
+
+    def test_tolerates_malformed_reasoning_summary_items(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-reasoning.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "reasoning-session"}},
+            {
+                "type": "response_item",
+                "payload": {"type": "message", "role": "user", "content": "review this"},
+            },
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "reasoning",
+                    "summary": [
+                        None,
+                        "unsupported-item",
+                        {"type": "summary_text", "text": {"unexpected": "value"}},
+                        {"type": "other", "text": "ignored"},
+                        {"type": "summary_text", "text": "valid summary"},
+                    ],
+                },
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        entry = CodexParser().parse_jsonl_file(jsonl_file)
+
+        assert [message.content for message in entry.chat_history] == [
+            "review this",
+            "[Reasoning]\nvalid summary\n",
+        ]
+
+    def test_first_valid_session_meta_defines_physical_identity(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-identity.jsonl"
+        first_cwd = str(tmp_path / "first-project")
+        later_cwd = str(tmp_path / "later-project")
+        events = [
+            {
+                "type": "session_meta",
+                "payload": {"timestamp": "2024-01-01T00:00:00Z", "cwd": str(tmp_path / "missing-id")},
+            },
+            {
+                "type": "session_meta",
+                "payload": {"id": "physical-session", "timestamp": "2025-01-02T03:04:05Z", "cwd": first_cwd},
+            },
+            {
+                "type": "session_meta",
+                "payload": {"id": "later-session", "timestamp": "2026-02-03T04:05:06Z", "cwd": later_cwd},
+            },
+            {
+                "type": "response_item",
+                "payload": {"type": "message", "role": "user", "content": "identity check"},
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events))
+
+        entry = CodexParser().parse_jsonl_file(jsonl_file)
+
+        assert entry.session_id == "codex_physical-session"
+        assert entry.project_path == first_cwd
+        assert entry.timestamp == datetime(2025, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
+
+    def test_token_count_filters_invalid_values_and_ignores_malformed_snapshots(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-token-validation.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "s-tokens", "timestamp": "2026-08-08T17:00:00Z"}},
+            {
+                "type": "event_msg",
+                "payload": {
+                    "type": "token_count",
+                    "info": {
+                        "last_token_usage": {
+                            "input_tokens": 0,
+                            "cached_input_tokens": True,
+                            "cache_write_input_tokens": -1,
+                            "output_tokens": 2.5,
+                            "reasoning_output_tokens": "3",
+                            "total_tokens": 4,
+                            "unknown_tokens": 99,
+                        },
+                        "total_token_usage": {
+                            "input_tokens": 20,
+                            "cached_input_tokens": 5,
+                            "cache_write_input_tokens": 2,
+                            "output_tokens": 6,
+                            "reasoning_output_tokens": 1,
+                            "total_tokens": 27,
+                        },
+                        "model_context_window": 128000,
+                    },
+                },
+            },
+            {"type": "event_msg", "payload": {"type": "token_count", "info": None}},
+            {
+                "type": "event_msg",
+                "payload": {
+                    "type": "token_count",
+                    "info": {
+                        "last_token_usage": [],
+                        "total_token_usage": {"input_tokens": False, "output_tokens": -2},
+                        "model_context_window": True,
+                    },
+                },
+            },
+        ]
+        with open(jsonl_file, "w") as f:
+            for event in events:
+                f.write(json.dumps(event) + "\n")
+
+        entry = CodexParser().parse_jsonl_file(jsonl_file)
+
+        assert entry.token_usage == {
+            "last_turn": {"input_tokens": 0, "total_tokens": 4},
+            "cumulative": {
+                "input_tokens": 20,
+                "cached_input_tokens": 5,
+                "cache_write_input_tokens": 2,
+                "output_tokens": 6,
+                "reasoning_output_tokens": 1,
+                "total_tokens": 27,
+            },
+            "model_context_window": 128000,
+        }
+
+    def test_token_count_accepts_context_window_only_snapshot(self, tmp_path):
+        jsonl_file = tmp_path / "rollout-context-window.jsonl"
+        events = [
+            {"type": "session_meta", "payload": {"id": "s-context-window"}},
+            {
+                "type": "event_msg",
+                "payload": {
+                    "type": "token_count",
+                    "info": {"model_context_window": 128000},
+                },
+            },
+        ]
+        jsonl_file.write_text("\n".join(json.dumps(event) for event in events), encoding="utf-8")
+
+        entry = CodexParser().parse_jsonl_file(jsonl_file)
+
+        assert entry.token_usage == {"model_context_window": 128000}
+
+    def test_parse_no_directory(self, tmp_path):
         """Test parse_all when directory doesn't exist."""
         parser = CodexParser()
-        parser.base_path = Path("/nonexistent/path")
+        parser.codex_home = tmp_path / "missing-codex-home"
+        parser.base_path = parser.codex_home / "sessions"
         entries = parser.parse_all()
         assert entries == []
 
@@ -442,7 +1135,11 @@ class TestCodexParser:
             {
                 "type": "session_meta",
                 "timestamp": "2025-06-15T10:00:00Z",
-                "payload": {"id": "sess-resume", "timestamp": "2025-06-15T10:00:00Z", "cwd": "/tmp"},
+                "payload": {
+                    "id": "sess-resume",
+                    "timestamp": "2025-06-15T10:00:00Z",
+                    "cwd": "/tmp",
+                },
             },
             {
                 "type": "response_item",
@@ -463,19 +1160,350 @@ class TestCodexParser:
                 },
             },
         ]
-        with open(jsonl_file, "w", encoding="utf-8") as f:
-            for event in events:
-                f.write(json.dumps(event) + "\n")
+        jsonl_file.write_text(
+            "\n".join(json.dumps(event) for event in events),
+            encoding="utf-8",
+        )
 
         entry = CodexParser().parse_jsonl_file(jsonl_file)
+
         assert entry is not None
         assert entry.timestamp == datetime(2025, 6, 15, 10, 0, 0, tzinfo=timezone.utc)
         assert entry.chat_history[-1].content == "later follow-up"
         assert entry.session_context["last_event_at"] == "2025-06-16T12:30:00+00:00"
         assert entry.session_context["event_count"] == len(events)
 
+    def test_default_max_age_days(self):
+        assert CodexParser().max_age_days == 14
+
+    def test_uses_codex_home(self, tmp_path):
+        codex_home = tmp_path / "custom-codex-home"
+
+        with patch.dict(os.environ, {"CODEX_HOME": str(codex_home)}):
+            parser = CodexParser()
+
+        assert parser.codex_home == codex_home
+        assert parser.base_path == codex_home / "sessions"
+
+    def test_defaults_to_dot_codex_under_home(self, tmp_path):
+        with patch.dict(os.environ, {"CODEX_HOME": ""}):
+            with patch("adr_sensor.parsers.codex_parser.Path.home", return_value=tmp_path):
+                parser = CodexParser()
+
+        assert parser.codex_home == tmp_path / ".codex"
+        assert parser.base_path == tmp_path / ".codex/sessions"
+
+    def test_parse_all_filters_old_rollouts_by_mtime(self, tmp_path):
+        recent_rollout = tmp_path / "2025/01/15/rollout-recent.jsonl"
+        old_rollout = tmp_path / "2024/01/15/rollout-old.jsonl"
+        self._write_rollout(recent_rollout, "recent")
+        self._write_rollout(old_rollout, "old")
+
+        now = datetime.now(timezone.utc).timestamp()
+        os.utime(recent_rollout, (now, now))
+        old_mtime = now - timedelta(days=30).total_seconds()
+        os.utime(old_rollout, (old_mtime, old_mtime))
+
+        parser = CodexParser(max_age_days=14)
+        parser.codex_home = tmp_path
+        parser.base_path = tmp_path
+
+        entries = parser.parse_all()
+
+        assert [entry.session_id for entry in entries] == ["codex_recent"]
+
+    @pytest.mark.parametrize("max_age_days", [0, -1])
+    def test_non_positive_max_age_days_includes_all_history(self, tmp_path, max_age_days):
+        rollout = tmp_path / "rollout-history.jsonl"
+        self._write_rollout(rollout, "history")
+        old_mtime = datetime.now(timezone.utc).timestamp() - timedelta(days=365).total_seconds()
+        os.utime(rollout, (old_mtime, old_mtime))
+
+        parser = CodexParser(max_age_days=max_age_days)
+        parser.codex_home = tmp_path
+        parser.base_path = tmp_path
+
+        assert [entry.session_id for entry in parser.parse_all()] == ["codex_history"]
+
+    def test_stat_failure_skips_only_inaccessible_rollout(self, tmp_path):
+        inaccessible_rollout = tmp_path / "rollout-inaccessible.jsonl"
+        readable_rollout = tmp_path / "rollout-readable.jsonl"
+        self._write_rollout(inaccessible_rollout, "inaccessible")
+        self._write_rollout(readable_rollout, "readable")
+
+        parser = CodexParser()
+        parser.codex_home = tmp_path
+        parser.base_path = tmp_path
+        original_stat = Path.stat
+
+        def selective_stat(path, *args, **kwargs):
+            if path == inaccessible_rollout:
+                raise PermissionError("metadata unavailable")
+            return original_stat(path, *args, **kwargs)
+
+        with patch.object(Path, "stat", selective_stat):
+            entries = parser.parse_all()
+
+        assert [entry.session_id for entry in entries] == ["codex_readable"]
+
+    def test_glob_failure_keeps_already_discovered_rollouts(self, tmp_path):
+        rollout = tmp_path / "rollout-discovered.jsonl"
+        self._write_rollout(rollout, "discovered")
+
+        parser = CodexParser()
+        parser.codex_home = tmp_path
+        parser.base_path = tmp_path
+
+        def interrupted_glob(path, pattern):
+            if pattern == "state_*.sqlite":
+                assert path == tmp_path
+                return
+            assert path == tmp_path
+            assert pattern == "**/*.jsonl"
+            yield rollout
+            raise OSError("directory scan interrupted")
+
+        with patch.object(Path, "glob", interrupted_glob):
+            entries = parser.parse_all()
+
+        assert [entry.session_id for entry in entries] == ["codex_discovered"]
+
+    def test_discovers_every_compatible_catalog_without_modifying_them(self, tmp_path):
+        codex_home = tmp_path / "codex home #1"
+        relative_rollout = codex_home / "archived" / "relative.jsonl"
+        absolute_rollout = tmp_path / "external" / "absolute.jsonl"
+        ignored_rollout = codex_home / "archived" / "ignored.jsonl"
+        self._write_rollout(relative_rollout, "relative")
+        self._write_rollout(absolute_rollout, "absolute")
+        self._write_rollout(ignored_rollout, "ignored")
+
+        first_catalog = codex_home / "state_1.sqlite"
+        second_catalog = codex_home / "state_2.sqlite"
+        ignored_catalog = codex_home / "other.sqlite"
+        self._write_catalog(
+            first_catalog,
+            [{"id": "thread-relative", "rollout_path": str(relative_rollout.relative_to(codex_home))}],
+        )
+        self._write_catalog(
+            second_catalog,
+            [{"id": "thread-absolute", "rollout_path": str(absolute_rollout)}],
+        )
+        self._write_catalog(
+            ignored_catalog,
+            [{"id": "thread-ignored", "rollout_path": str(ignored_rollout)}],
+        )
+        catalog_snapshots = {
+            path: (path.read_bytes(), path.stat().st_mtime_ns) for path in (first_catalog, second_catalog)
+        }
+
+        entries = self._parser_for_home(codex_home, max_age_days=0).parse_all()
+
+        assert {entry.session_id for entry in entries} == {"codex_relative", "codex_absolute"}
+        for path, (content, mtime_ns) in catalog_snapshots.items():
+            assert path.read_bytes() == content
+            assert path.stat().st_mtime_ns == mtime_ns
+
+    @pytest.mark.parametrize(("timestamp_column", "multiplier"), [("updated_at", 1), ("updated_at_ms", 1000)])
+    def test_catalog_timestamp_can_keep_old_rollout_in_lookback(self, tmp_path, timestamp_column, multiplier):
+        codex_home = tmp_path / "codex-home"
+        rollout = codex_home / "archived" / f"{timestamp_column}.jsonl"
+        self._write_rollout(rollout, timestamp_column)
+
+        now = datetime.now(timezone.utc).timestamp()
+        old_timestamp = now - timedelta(days=30).total_seconds()
+        os.utime(rollout, (old_timestamp, old_timestamp))
+        self._write_catalog(
+            codex_home / f"state_{timestamp_column}.sqlite",
+            [
+                {
+                    "id": f"thread-{timestamp_column}",
+                    "rollout_path": str(rollout.relative_to(codex_home)),
+                    timestamp_column: int(now * multiplier),
+                }
+            ],
+            timestamp_columns=(timestamp_column,),
+        )
+
+        entries = self._parser_for_home(codex_home).parse_all()
+
+        assert [entry.session_id for entry in entries] == [f"codex_{timestamp_column}"]
+
+    def test_lookback_uses_newest_timestamp_and_deduplicates_paths(self, tmp_path):
+        codex_home = tmp_path / "codex-home"
+        catalog_recent = codex_home / "sessions" / "catalog-recent.jsonl"
+        file_recent = codex_home / "sessions" / "file-recent.jsonl"
+        both_old = codex_home / "sessions" / "both-old.jsonl"
+        malformed_recent = codex_home / "sessions" / "malformed-recent.jsonl"
+        malformed_old = codex_home / "archived" / "malformed-old.jsonl"
+
+        for path, session_id in (
+            (catalog_recent, "catalog-recent"),
+            (file_recent, "file-recent"),
+            (both_old, "both-old"),
+            (malformed_recent, "malformed-recent"),
+            (malformed_old, "malformed-old"),
+        ):
+            self._write_rollout(path, session_id)
+
+        now = datetime.now(timezone.utc).timestamp()
+        old_timestamp = now - timedelta(days=30).total_seconds()
+        for path in (catalog_recent, both_old, malformed_old):
+            os.utime(path, (old_timestamp, old_timestamp))
+
+        self._write_catalog(
+            codex_home / "state_seconds.sqlite",
+            [
+                {
+                    "id": "catalog-recent-old-copy",
+                    "rollout_path": str(catalog_recent.relative_to(codex_home)),
+                    "updated_at": int(old_timestamp),
+                },
+                {
+                    "id": "file-recent",
+                    "rollout_path": str(file_recent.relative_to(codex_home)),
+                    "updated_at": int(old_timestamp),
+                },
+                {
+                    "id": "both-old",
+                    "rollout_path": str(both_old.relative_to(codex_home)),
+                    "updated_at": int(old_timestamp),
+                },
+                {
+                    "id": "malformed-recent",
+                    "rollout_path": str(malformed_recent.relative_to(codex_home)),
+                    "updated_at": "not-a-timestamp",
+                },
+                {
+                    "id": "malformed-old",
+                    "rollout_path": str(malformed_old.relative_to(codex_home)),
+                    "updated_at": "not-a-timestamp",
+                },
+            ],
+            timestamp_columns=("updated_at",),
+        )
+        self._write_catalog(
+            codex_home / "state_milliseconds.sqlite",
+            [
+                {
+                    "id": "catalog-recent-new-copy",
+                    "rollout_path": str(catalog_recent.resolve()),
+                    "updated_at_ms": int(now * 1000),
+                }
+            ],
+            timestamp_columns=("updated_at_ms",),
+        )
+
+        entries = self._parser_for_home(codex_home).parse_all()
+
+        assert {entry.session_id for entry in entries} == {
+            "codex_catalog-recent",
+            "codex_file-recent",
+            "codex_malformed-recent",
+        }
+        assert len(entries) == 3
+
+    def test_catalog_rejects_incompatible_schemas_and_non_jsonl_files(self, tmp_path):
+        codex_home = tmp_path / "codex-home"
+        valid_rollout = codex_home / "archived" / "valid.jsonl"
+        wrong_extension = codex_home / "archived" / "wrong.txt"
+        directory_path = codex_home / "archived" / "directory.jsonl"
+        self._write_rollout(valid_rollout, "valid")
+        self._write_rollout(wrong_extension, "wrong-extension")
+        directory_path.mkdir(parents=True)
+
+        self._write_catalog(
+            codex_home / "state_valid.sqlite",
+            [
+                {"id": "valid", "rollout_path": str(valid_rollout)},
+                {"id": "wrong-extension", "rollout_path": str(wrong_extension)},
+                {"id": "directory", "rollout_path": str(directory_path)},
+                {"id": "missing", "rollout_path": str(codex_home / "missing.jsonl")},
+                {"id": "empty", "rollout_path": ""},
+                {"id": "wrong-type", "rollout_path": 42},
+            ],
+        )
+
+        incompatible_schemas = {
+            "state_missing_id.sqlite": "CREATE TABLE threads (rollout_path TEXT)",
+            "state_missing_path.sqlite": "CREATE TABLE threads (id TEXT)",
+            "state_no_threads.sqlite": "CREATE TABLE metadata (id TEXT, rollout_path TEXT)",
+        }
+        for name, statement in incompatible_schemas.items():
+            connection = sqlite3.connect(str(codex_home / name))
+            try:
+                connection.execute(statement)
+                connection.commit()
+            finally:
+                connection.close()
+
+        entries = self._parser_for_home(codex_home, max_age_days=0).parse_all()
+
+        assert [entry.session_id for entry in entries] == ["codex_valid"]
+
+    def test_corrupt_and_locked_catalogs_do_not_hide_other_candidates(self, tmp_path):
+        codex_home = tmp_path / "codex-home"
+        filesystem_rollout = codex_home / "sessions" / "filesystem.jsonl"
+        valid_catalog_rollout = codex_home / "archived" / "valid-catalog.jsonl"
+        locked_catalog_rollout = codex_home / "archived" / "locked-catalog.jsonl"
+        self._write_rollout(filesystem_rollout, "filesystem")
+        self._write_rollout(valid_catalog_rollout, "valid-catalog")
+        self._write_rollout(locked_catalog_rollout, "locked-catalog")
+
+        corrupt_catalog = codex_home / "state_corrupt.sqlite"
+        corrupt_catalog.write_bytes(b"not a sqlite database")
+        corrupt_snapshot = (corrupt_catalog.read_bytes(), corrupt_catalog.stat().st_mtime_ns)
+        self._write_catalog(
+            codex_home / "state_valid.sqlite",
+            [{"id": "valid", "rollout_path": str(valid_catalog_rollout)}],
+        )
+        locked_catalog = codex_home / "state_locked.sqlite"
+        self._write_catalog(
+            locked_catalog,
+            [{"id": "locked", "rollout_path": str(locked_catalog_rollout)}],
+        )
+
+        locking_connection = sqlite3.connect(str(locked_catalog), timeout=0)
+        locking_connection.execute("BEGIN EXCLUSIVE")
+        try:
+            entries = self._parser_for_home(codex_home, max_age_days=0).parse_all()
+        finally:
+            locking_connection.rollback()
+            locking_connection.close()
+
+        assert {entry.session_id for entry in entries} == {"codex_filesystem", "codex_valid-catalog"}
+        assert corrupt_catalog.read_bytes() == corrupt_snapshot[0]
+        assert corrupt_catalog.stat().st_mtime_ns == corrupt_snapshot[1]
+
 
 class TestCopilotParser:
+    @staticmethod
+    def _write_events(session_dir: Path, events: list) -> Path:
+        session_dir.mkdir(parents=True, exist_ok=True)
+        events_path = session_dir / "events.jsonl"
+        events_path.write_text(
+            "\n".join(json.dumps(event) for event in events) + "\n",
+            encoding="utf-8",
+        )
+        return events_path
+
+    @staticmethod
+    def _minimal_events(session_id: str) -> list:
+        return [
+            {
+                "type": "session.start",
+                "timestamp": "2026-08-10T10:00:00.000Z",
+                "data": {
+                    "sessionId": session_id,
+                    "startTime": "2026-08-10T10:00:00.000Z",
+                },
+            },
+            {
+                "type": "user.message",
+                "timestamp": "2026-08-10T10:00:01.000Z",
+                "data": {"content": f"message from {session_id}"},
+            },
+        ]
+
     def test_parse_session_dir(self, tmp_path):
         """Parse Copilot session directories into chat history and tool usage."""
         session_dir = tmp_path / "abc-session"
@@ -539,7 +1567,10 @@ class TestCopilotParser:
                             "toolCallId": "call-1",
                             "name": "powershell",
                             "type": "function",
-                            "arguments": {"command": "Get-ChildItem", "description": "List files"},
+                            "arguments": {
+                                "command": "Get-ChildItem",
+                                "description": "List files",
+                            },
                         }
                     ],
                 },
@@ -555,11 +1586,10 @@ class TestCopilotParser:
                 },
             },
         ]
-        with open(session_dir / "events.jsonl", "w", encoding="utf-8") as f:
-            for event in events:
-                f.write(json.dumps(event) + "\n")
+        self._write_events(session_dir, events)
 
         entry = CopilotParser(base_path=tmp_path).parse_session_dir(session_dir)
+
         assert entry is not None
         assert entry.source == "copilot"
         assert entry.session_id == "copilot_abc-session"
@@ -579,12 +1609,14 @@ class TestCopilotParser:
     def test_tool_failure_uses_error_field_when_result_is_absent(self, tmp_path):
         """Copilot records some failed tools with error but no result."""
         session_dir = tmp_path / "failed-tool"
-        session_dir.mkdir()
         events = [
             {
                 "type": "session.start",
                 "timestamp": "2026-08-10T10:00:00.000Z",
-                "data": {"sessionId": "failed-tool", "startTime": "2026-08-10T10:00:00.000Z"},
+                "data": {
+                    "sessionId": "failed-tool",
+                    "startTime": "2026-08-10T10:00:00.000Z",
+                },
             },
             {
                 "type": "user.message",
@@ -594,30 +1626,158 @@ class TestCopilotParser:
             {
                 "type": "tool.execution_start",
                 "timestamp": "2026-08-10T10:00:02.000Z",
-                "data": {"toolCallId": "call-1", "toolName": "read_file", "arguments": {"path": "missing"}},
+                "data": {
+                    "toolCallId": "call-1",
+                    "toolName": "read_file",
+                    "arguments": {"path": "missing"},
+                },
             },
             {
                 "type": "tool.execution_complete",
                 "timestamp": "2026-08-10T10:00:02.001Z",
-                "data": {"toolCallId": "call-1", "success": False, "error": "File not found"},
+                "data": {
+                    "toolCallId": "call-1",
+                    "success": False,
+                    "error": "File not found",
+                },
             },
         ]
-        with open(session_dir / "events.jsonl", "w", encoding="utf-8") as handle:
-            for event in events:
-                handle.write(json.dumps(event) + "\n")
+        self._write_events(session_dir, events)
 
         entry = CopilotParser(base_path=tmp_path).parse_session_dir(session_dir)
+
+        assert entry is not None
         tool = [tool for message in entry.chat_history for tool in message.tools][0]
         assert tool.status == "error"
         assert tool.result is None
         assert tool.error == "File not found"
 
+    def test_default_max_age_days(self):
+        assert CopilotParser().max_age_days == 14
 
-def _build_warp_db(db_path: Path, conversations: list) -> None:
+    def test_parse_all_filters_old_sessions_by_event_log_mtime(self, tmp_path):
+        recent_path = self._write_events(
+            tmp_path / "recent-session",
+            self._minimal_events("recent-session"),
+        )
+        old_path = self._write_events(
+            tmp_path / "old-session",
+            self._minimal_events("old-session"),
+        )
+        now = datetime.now(timezone.utc).timestamp()
+        os.utime(recent_path, (now, now))
+        old_timestamp = now - timedelta(days=30).total_seconds()
+        os.utime(old_path, (old_timestamp, old_timestamp))
+
+        entries = CopilotParser(max_age_days=14, base_path=tmp_path).parse_all()
+
+        assert [entry.session_id for entry in entries] == ["copilot_recent-session"]
+
+    @pytest.mark.parametrize("max_age_days", [0, -1, 10000])
+    def test_all_history_includes_old_sessions(self, tmp_path, max_age_days):
+        events_path = self._write_events(
+            tmp_path / "old-session",
+            self._minimal_events("old-session"),
+        )
+        old_timestamp = datetime.now(timezone.utc).timestamp() - timedelta(days=365).total_seconds()
+        os.utime(events_path, (old_timestamp, old_timestamp))
+
+        entries = CopilotParser(max_age_days=max_age_days, base_path=tmp_path).parse_all()
+
+        assert [entry.session_id for entry in entries] == ["copilot_old-session"]
+
+
+class TestCursorParser:
+    def test_parse_closes_real_sqlite_connection(self, tmp_path):
+        db_path = tmp_path / "state.vscdb"
+        setup_connection = sqlite3.connect(db_path)
+        setup_connection.execute("CREATE TABLE cursorDiskKV (key TEXT, value TEXT)")
+        setup_connection.close()
+        parser = CursorParser()
+        parser.db_path = db_path
+        connections = []
+        real_connect = sqlite3.connect
+
+        def capture_connection(path):
+            connection = real_connect(path)
+            connections.append(connection)
+            return connection
+
+        with patch("adr_sensor.parsers.cursor_parser.sqlite3.connect", side_effect=capture_connection):
+            assert parser.parse_conversations_from_bubbles() == []
+
+        with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
+            connections[0].execute("SELECT 1")
+
+    def test_parse_closes_connection_once_on_success(self):
+        parser = CursorParser()
+
+        with patch("adr_sensor.parsers.cursor_parser.sqlite3.connect") as connect:
+            connect.return_value.cursor.return_value.fetchmany.return_value = []
+
+            assert parser.parse_conversations_from_bubbles() == []
+
+        connect.assert_called_once_with(parser.db_path)
+        connect.return_value.close.assert_called_once_with()
+
+    def test_parse_closes_connection_once_after_exception(self):
+        parser = CursorParser()
+
+        with patch("adr_sensor.parsers.cursor_parser.sqlite3.connect") as connect:
+            connect.return_value.cursor.side_effect = RuntimeError("cursor unavailable")
+
+            assert parser.parse_conversations_from_bubbles() == []
+
+        connect.assert_called_once_with(parser.db_path)
+        connect.return_value.close.assert_called_once_with()
+
+
+class TestCursorToolResults:
+    @pytest.mark.parametrize("tool_name", ["list_dir", "read_file", "run_command"])
+    def test_extracts_result_for_every_tool(self, tool_name):
+        tools = CursorParser().extract_tools_from_bubble(
+            {"toolFormerData": {"name": tool_name, "params": {}, "result": "completed"}}
+        )
+
+        assert len(tools) == 1
+        assert tools[0].tool_name == tool_name
+        assert tools[0].result == "completed"
+
+    def test_absent_result_remains_none(self):
+        tools = CursorParser().extract_tools_from_bubble(
+            {"toolFormerData": {"name": "read_file", "params": {}}}
+        )
+
+        assert tools[0].result is None
+
+    def test_result_whitespace_is_preserved(self):
+        tools = CursorParser().extract_tools_from_bubble(
+            {"toolFormerData": {"name": "search", "params": {}, "result": " \n  first\nsecond\t "}}
+        )
+
+        assert tools[0].result == " \n  first\nsecond\t "
+
+    def test_non_string_result_is_converted_to_string(self):
+        tools = CursorParser().extract_tools_from_bubble(
+            {"toolFormerData": {"name": "count", "params": {}, "result": 3}}
+        )
+
+        assert tools[0].result == "3"
+
+    def test_result_is_middle_truncated_at_1000_characters(self):
+        result = "a" * 600 + "z" * 600
+        tools = CursorParser().extract_tools_from_bubble(
+            {"toolFormerData": {"name": "read_file", "params": {}, "result": result}}
+        )
+
+        assert tools[0].result == "a" * 400 + "... [truncated 400 chars] ..." + "z" * 400
+
+
+def _build_warp_db(db_path: Path, conversations: list, *, include_ai_blocks: bool = True) -> None:
     """Create a synthetic warp.sqlite matching the schema WarpParser queries.
 
     Each item in `conversations` is a dict with keys:
-        conversation_id, last_modified_at, exchanges
+        conversation_id, last_modified_at, exchanges, and optional model_id
     where `exchanges` is a list of (exchange_id, start_ts, input_json, llm_output_json).
     """
     conn = sqlite3.connect(str(db_path))
@@ -644,7 +1804,8 @@ def _build_warp_db(db_path: Path, conversations: list) -> None:
         )
         """
     )
-    cursor.execute("CREATE TABLE ai_blocks (exchange_id TEXT, output TEXT)")
+    if include_ai_blocks:
+        cursor.execute("CREATE TABLE ai_blocks (exchange_id TEXT, output TEXT)")
 
     for conv in conversations:
         cursor.execute(
@@ -654,9 +1815,17 @@ def _build_warp_db(db_path: Path, conversations: list) -> None:
         for exchange_id, start_ts, input_json, llm_output_json in conv.get("exchanges", []):
             cursor.execute(
                 "INSERT INTO ai_queries VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (exchange_id, conv["conversation_id"], start_ts, input_json, "/tmp/project", "success", "claude"),
+                (
+                    exchange_id,
+                    conv["conversation_id"],
+                    start_ts,
+                    input_json,
+                    "/tmp/project",
+                    "success",
+                    conv.get("model_id", "model-default"),
+                ),
             )
-            if llm_output_json is not None:
+            if include_ai_blocks and llm_output_json is not None:
                 cursor.execute("INSERT INTO ai_blocks VALUES (?, ?)", (exchange_id, llm_output_json))
 
     conn.commit()
@@ -775,6 +1944,93 @@ class TestWarpParser:
         assert len(assistant_msg.tools) == 1
         assert assistant_msg.tools[0].tool_name == "execute_command"
         assert assistant_msg.tools[0].status == "success"
+
+    def test_parses_current_schema_without_ai_blocks(self, tmp_path):
+        """Current databases without ai_blocks should still produce conversation events."""
+        now = datetime.now(timezone.utc).isoformat()
+        conversations = [
+            {
+                "conversation_id": "current-conv",
+                "last_modified_at": now,
+                "exchanges": [self._query_exchange("current-exchange", now)],
+            }
+        ]
+        db_path = tmp_path / "warp.sqlite"
+        _build_warp_db(db_path, conversations, include_ai_blocks=False)
+
+        entries = self._make_parser(tmp_path).parse_all()
+
+        assert len(entries) == 1
+        assert entries[0].session_id == "warp_current-conv"
+        assert entries[0].chat_history[0].content == "hello from current-exchange"
+
+    def test_legacy_schema_retains_llm_output(self, tmp_path):
+        """Legacy databases with ai_blocks should retain their assistant output."""
+        now = datetime.now(timezone.utc).isoformat()
+        action_result_input = json.dumps([{"ActionResult": {"id": "synthetic-tool", "result": {}}}])
+        llm_output = json.dumps({"Received": {"output": [{"Text": {"text": "synthetic response"}}]}})
+        conversations = [
+            {
+                "conversation_id": "legacy-conv",
+                "last_modified_at": now,
+                "exchanges": [("legacy-exchange", now, action_result_input, llm_output)],
+            }
+        ]
+        db_path = tmp_path / "warp.sqlite"
+        _build_warp_db(db_path, conversations)
+
+        entries = self._make_parser(tmp_path).parse_all()
+
+        assert len(entries) == 1
+        assert entries[0].chat_history[0].content == "synthetic response"
+
+    def test_checks_legacy_table_once_per_database(self, tmp_path):
+        """Schema detection should not add one sqlite_master query per conversation."""
+        now = datetime.now(timezone.utc).isoformat()
+        conversations = [
+            {
+                "conversation_id": f"conversation-{index}",
+                "last_modified_at": now,
+                "exchanges": [self._query_exchange(f"exchange-{index}", now)],
+            }
+            for index in range(2)
+        ]
+        db_path = tmp_path / "warp.sqlite"
+        _build_warp_db(db_path, conversations, include_ai_blocks=False)
+        parser = self._make_parser(tmp_path)
+
+        with patch.object(parser, "_has_table", wraps=parser._has_table) as has_table:
+            entries = parser.parse_all()
+
+        assert len(entries) == 2
+        has_table.assert_called_once()
+
+    @pytest.mark.parametrize(
+        ("stored_model_id", "expected_model_id"),
+        [
+            ('"model-quoted"', "model-quoted"),
+            ("model-unquoted", "model-unquoted"),
+            ('"model-malformed', '"model-malformed'),
+        ],
+    )
+    def test_normalizes_model_id(self, tmp_path, stored_model_id, expected_model_id):
+        """Only valid JSON-quoted model IDs should be decoded."""
+        now = datetime.now(timezone.utc).isoformat()
+        conversations = [
+            {
+                "conversation_id": "model-conv",
+                "last_modified_at": now,
+                "model_id": stored_model_id,
+                "exchanges": [self._query_exchange("model-exchange", now)],
+            }
+        ]
+        db_path = tmp_path / "warp.sqlite"
+        _build_warp_db(db_path, conversations, include_ai_blocks=False)
+
+        entries = self._make_parser(tmp_path).parse_all()
+
+        assert len(entries) == 1
+        assert entries[0].model == expected_model_id
 
     def test_parse_all_no_database(self, tmp_path):
         """Test parse_all when the database file doesn't exist."""

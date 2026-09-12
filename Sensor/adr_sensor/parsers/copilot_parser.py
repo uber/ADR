@@ -12,7 +12,7 @@ enriches sessions with lightweight metadata from ``workspace.yaml`` and
 import json
 import traceback
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -23,13 +23,15 @@ from .base_parser import BaseParser
 
 MAX_STRING_LENGTH = 1000
 EDGE_CHARS = 400
+MAX_LOG_AGE_DAYS = 14
 
 
 class CopilotParser(BaseParser):
     """Parser for GitHub Copilot session-state logs."""
 
-    def __init__(self, base_path: Optional[Path] = None):
+    def __init__(self, max_age_days: int = MAX_LOG_AGE_DAYS, base_path: Optional[Path] = None):
         self.base_path = Path(base_path) if base_path else Path.home() / ".copilot" / "session-state"
+        self.max_age_days = max_age_days
 
     def parse_all(self) -> List[AgentEvent]:
         """Parse all available Copilot sessions."""
@@ -39,9 +41,32 @@ class CopilotParser(BaseParser):
             print(f"[COPILOT] No logs found at {self.base_path}")
             return entries
 
-        session_dirs = [path for path in self.base_path.iterdir() if path.is_dir() and (path / "events.jsonl").exists()]
-        session_dirs.sort(key=lambda path: path.stat().st_mtime, reverse=True)
+        cutoff_timestamp = None
+        if self.max_age_days > 0:
+            cutoff_timestamp = (datetime.now(timezone.utc) - timedelta(days=self.max_age_days)).timestamp()
+
+        candidates = []
+        skipped_count = 0
+        for path in self.base_path.iterdir():
+            events_path = path / "events.jsonl"
+            try:
+                if not path.is_dir() or not events_path.is_file():
+                    continue
+                modified_at = events_path.stat().st_mtime
+            except OSError as exc:
+                print(f"[COPILOT] Unable to inspect {events_path}: {exc}")
+                continue
+
+            if cutoff_timestamp is not None and modified_at < cutoff_timestamp:
+                skipped_count += 1
+                continue
+            candidates.append((path, modified_at))
+
+        candidates.sort(key=lambda candidate: candidate[1], reverse=True)
+        session_dirs = [path for path, _ in candidates]
         print(f"[COPILOT] Found {len(session_dirs)} session directories")
+        if skipped_count:
+            print(f"[COPILOT] Skipped {skipped_count} sessions older than {self.max_age_days} days")
 
         for session_dir in session_dirs:
             try:

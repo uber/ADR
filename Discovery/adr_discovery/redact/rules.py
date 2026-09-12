@@ -11,6 +11,7 @@ shapes deliberately, and remove only values.
 
 from __future__ import annotations
 
+import re
 from urllib.parse import urlsplit, urlunsplit
 
 #: Flags whose *operand* is secret. The flag name survives; the value does not.
@@ -22,6 +23,23 @@ CREDENTIAL_FLAGS: frozenset[str] = frozenset(
         "--prompt", "--query", "--secret", "--system-prompt", "--token",
         "-m", "-p", "-H",
     }
+)
+
+#: Short options that accept their secret operand without a separator, such as
+#: MySQL's ``-pPASSWORD`` and curl's ``-HAuthorization: ...``.  This is
+#: intentionally explicit: treating every short option as joined would redact
+#: unrelated argv merely because it begins with the same character.
+JOINED_SHORT_CREDENTIAL_FLAGS: tuple[str, ...] = ("-H", "-m", "-p")
+
+#: Credential-looking assignment keys can appear without a leading dash in
+#: process argv (for example ``password=...`` or ``OPENAI_API_KEY=...``).
+#: Boundaries keep ordinary keys such as ``profile`` and ``port`` intact.
+CREDENTIAL_KEY_RE = re.compile(
+    r"(?:^|[_-])"
+    r"(?:api[_-]?key|access[_-]?token|auth|authorization|client[_-]?secret|"
+    r"password|passwd|secret|token)"
+    r"(?:$|[_-])",
+    re.IGNORECASE,
 )
 
 #: Environment variable names whose presence implies a credential of a kind.
@@ -90,8 +108,9 @@ def credential_kinds(names: tuple[str, ...]) -> tuple[str, ...]:
 def scrub_argv(argv: tuple[str, ...] | list[str]) -> tuple[str, ...]:
     """Keep every flag name and every non-secret operand.
 
-    Values of credential-bearing flags are replaced, in both the separated
-    (`--token X`) and joined (`--token=X`) forms.
+    Values of credential-bearing flags are replaced in separated
+    (``--token X``), assignment (``--token=X`` or ``password=X``), and joined
+    short-option (``-pX``) forms.
     """
     out: list[str] = []
     expect_value = False
@@ -100,17 +119,37 @@ def scrub_argv(argv: tuple[str, ...] | list[str]) -> tuple[str, ...]:
             out.append(REDACTED)
             expect_value = False
             continue
-        if "=" in arg and arg.startswith("-"):
+
+        if arg in CREDENTIAL_FLAGS:
+            out.append(arg)
+            expect_value = True
+            continue
+
+        if "=" in arg:
             flag, _, _ = arg.partition("=")
-            if flag in CREDENTIAL_FLAGS:
+            if flag in CREDENTIAL_FLAGS or _is_credential_key(flag):
                 out.append(f"{flag}={REDACTED}")
                 continue
-            out.append(arg)
+
+        joined_flag = next(
+            (
+                flag
+                for flag in JOINED_SHORT_CREDENTIAL_FLAGS
+                if arg.startswith(flag) and len(arg) > len(flag)
+            ),
+            None,
+        )
+        if joined_flag is not None:
+            out.append(f"{joined_flag}{REDACTED}")
             continue
+
         out.append(arg)
-        if arg in CREDENTIAL_FLAGS:
-            expect_value = True
     return tuple(out)
+
+
+def _is_credential_key(value: str) -> bool:
+    """Whether an assignment key denotes credential material."""
+    return CREDENTIAL_KEY_RE.search(value.lstrip("-")) is not None
 
 
 def is_personal(resolved_path: str) -> bool:
