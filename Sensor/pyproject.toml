@@ -35,9 +35,15 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "opentelemetry-exporter-otlp-proto-http>=1.41.1,<1.42.0",
+    "opentelemetry-sdk>=1.41.1,<1.42.0",
     "pytest>=7.0.0",
     "pytest-cov>=4.1.0",
     "ruff>=0.16.0",
+]
+otel = [
+    "opentelemetry-exporter-otlp-proto-http>=1.41.1,<1.42.0",
+    "opentelemetry-sdk>=1.41.1,<1.42.0",
 ]
 
 [project.scripts]

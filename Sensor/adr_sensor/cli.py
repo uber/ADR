@@ -13,6 +13,7 @@ import argparse
 import json
 import os
 import platform
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,6 +24,8 @@ except Exception:
     resource_mod = None
 
 from . import __version__
+from .exporters import OpenTelemetryConfigError, load_opentelemetry_config
+from .exporters.opentelemetry import OpenTelemetryExportError, OpenTelemetryLogExporter
 from .observer import AgentObserver
 
 
@@ -53,6 +56,7 @@ Examples:
   adr-sensor --source opencode            Ingest opencode logs only
   adr-sensor --save-sessions              Save individual session files
   adr-sensor --output-format jsonl        Export as JSONL
+  adr-sensor --otel-config ./otel.json    Export logs to an OTLP/HTTP endpoint
   adr-sensor --all-history                Include all logs (not just last 2 weeks)
         """,
     )
@@ -92,8 +96,21 @@ Examples:
         action="store_true",
         help="Include all event logs regardless of age (default: last 2 weeks)",
     )
+    parser.add_argument(
+        "--otel-config",
+        type=Path,
+        default=None,
+        help="JSON configuration for OTLP/HTTP log export (disabled when omitted)",
+    )
 
     args = parser.parse_args()
+
+    otel_config = None
+    if args.otel_config is not None:
+        try:
+            otel_config = load_opentelemetry_config(args.otel_config)
+        except OpenTelemetryConfigError as exc:
+            parser.error(str(exc))
 
     host_os = platform.system()
     capture_resource = bool(args.resource and host_os != "Windows" and resource_mod is not None)
@@ -139,9 +156,7 @@ Examples:
                 if args.save_sessions:
                     if entries:
                         saved_files = observer.save_sessions_to_individual_files(entries, output_dir=args.output_dir)
-                        print(
-                            f"\nSession files saved to: {saved_files[0].parent if saved_files else 'No files saved'}"
-                        )
+                        print(f"\nSession files saved to: {saved_files[0].parent if saved_files else 'No files saved'}")
                 else:
                     if args.output_dir is None:
                         project_output_dir = Path.cwd() / "output"
@@ -153,7 +168,20 @@ Examples:
                         entries, system_config_data, output_format=args.output_format, output_dir=project_output_dir
                     )
 
+            if otel_config is not None:
+                otel_exporter = OpenTelemetryLogExporter(otel_config, service_version=get_version())
+                try:
+                    exported_count = otel_exporter.export(entries, system_config_data)
+                finally:
+                    otel_exporter.shutdown()
+                print(f"\nOpenTelemetry logs sent: {exported_count}")
+
         print("\nADR Sensor complete!\n")
+
+    except OpenTelemetryExportError as exc:
+        success = False
+        print(f"OpenTelemetry export failed: {exc}", file=sys.stderr)
+        raise SystemExit(1)
 
     except BaseException:
         success = False

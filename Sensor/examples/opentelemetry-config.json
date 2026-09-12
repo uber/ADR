@@ -1,0 +1,7 @@
+{
+  "endpoint": "http://localhost:4318/v1/logs",
+  "service_name": "adr-sensor",
+  "headers": {},
+  "timeout_seconds": 10,
+  "flush_timeout_seconds": 30
+}
