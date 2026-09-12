@@ -238,6 +238,9 @@ class CodexParser(BaseParser):
             session_data: Dict[str, Any] = {
                 "id": None,
                 "timestamp": None,
+                "first_event_timestamp": None,
+                "last_event_timestamp": None,
+                "event_count": 0,
                 "cwd": None,
                 "model": None,
                 "token_usage": None,
@@ -259,6 +262,7 @@ class CodexParser(BaseParser):
                         if not isinstance(payload, Mapping):
                             continue
 
+                        session_data["event_count"] += 1
                         self._process_event(event, payload, session_data)
                     except Exception:
                         # Rollout records evolve independently; keep a malformed
@@ -295,7 +299,12 @@ class CodexParser(BaseParser):
                 )
 
             return AgentEvent(
-                timestamp=session_data["timestamp"] or datetime.now(timezone.utc),
+                # Keep the filename identity stable; resumed content is detected by the exporter.
+                timestamp=(
+                    session_data["timestamp"]
+                    or session_data["first_event_timestamp"]
+                    or datetime.now(timezone.utc)
+                ),
                 source="codex",
                 session_id=f"codex_{session_data['id']}",
                 project_path=session_data["cwd"],
@@ -303,6 +312,14 @@ class CodexParser(BaseParser):
                 token_usage=session_data["token_usage"],
                 chat_history=chat_history,
                 raw_log_path=str(file_path),
+                session_context=(
+                    {
+                        "last_event_at": session_data["last_event_timestamp"].isoformat(),
+                        "event_count": session_data["event_count"],
+                    }
+                    if session_data["last_event_timestamp"]
+                    else {"event_count": session_data["event_count"]}
+                ),
             )
 
         except Exception as e:
@@ -573,6 +590,19 @@ class CodexParser(BaseParser):
     ):
         """Process a single event."""
         evt_type = event.get("type")
+
+        event_timestamp = event.get("timestamp")
+        if event_timestamp:
+            try:
+                normalized = normalize_timestamp(event_timestamp)
+                current = session_data.get("first_event_timestamp")
+                if current is None or normalized < current:
+                    session_data["first_event_timestamp"] = normalized
+                current = session_data.get("last_event_timestamp")
+                if current is None or normalized > current:
+                    session_data["last_event_timestamp"] = normalized
+            except Exception:
+                pass
 
         if evt_type == "session_meta":
             if session_data["id"] is not None:

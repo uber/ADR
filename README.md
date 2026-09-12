@@ -2,7 +2,7 @@
 
 [![uber/ADR | Trendshift](https://trendshift.io/api/badge/repositories/100696)](https://trendshift.io/repositories/100696?utm_source=repository-badge&utm_medium=badge&utm_campaign=badge-repository-100696)
 
-ADR (Agentic AI Detection and Response) is an enterprise security system for AI agents. It helps organizations secure employee-facing agents such as Cursor, Claude Code, and Codex, as well as customer-facing agents such as AI support agents.
+ADR (Agentic AI Detection and Response) is an enterprise security system for AI agents. It helps organizations secure employee-facing agents such as Cursor, Claude Code, Codex, and GitHub Copilot CLI, as well as customer-facing agents such as AI support agents.
 
 ADR is **deployed in production at Uber**, and the accompanying paper was accepted to **MLSys 2026**: [Paper PDF](docs/adr-paper.pdf) · [Slides PDF](docs/adr-mlsys-2026-slides.pdf)
 
@@ -23,7 +23,7 @@ This repository contains the open-source **ADR Discovery**, **ADR Sensor**, **AD
 | Path                                               | ADR component              | Description                                                                          |
 | -------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------ |
 | [Discovery/](Discovery/)                           | ADR Discovery              | Inventory the AI apps, CLI agents, IDE extensions, model runtimes, and MCP servers on an endpoint, and flag unknown surfaces for review |
-| [Sensor/](Sensor/)                                 | ADR Observability          | Collect and normalize agent telemetry from Claude Code, Cursor, Codex, opencode, Claude Desktop, and others |
+| [Sensor/](Sensor/)                                 | ADR Observability          | Collect and normalize agent telemetry from Claude Code, Cursor, Codex, GitHub Copilot CLI, opencode, Claude Desktop, and others |
 | [Detection/](Detection/)                           | ADR Benchmark + Detection  | Dual-agent detector, 134 MCP servers, 304 benchmark tasks, baselines, figure scripts |
 | [docs/REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md) | Evaluation                 | Step-by-step workflow to reproduce benchmark detection and paper figures             |
 

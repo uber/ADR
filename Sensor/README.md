@@ -17,6 +17,7 @@ ADR Sensor is a Python library that collects telemetry from AI coding agents to 
 | **Cline (Claude Dev)**     | `cline`          | JSON task files                     | macOS, Linux, Windows  |
 | **Claude Desktop**         | `claude_desktop` | JSONL audit logs                    | macOS, Windows         |
 | **OpenAI Codex CLI**       | `codex`          | JSONL + SQLite path catalogs        | macOS, Linux, Windows  |
+| **GitHub Copilot CLI**     | `copilot`        | JSONL (`~/.copilot/session-state/`) | macOS, Linux, Windows  |
 | **Warp Terminal**          | `warp`           | SQLite (`warp.sqlite`)              | macOS, Windows         |
 | **opencode**               | `opencode`       | SQLite (`opencode.db`) or JSON tree | macOS, Linux           |
 
@@ -50,6 +51,30 @@ files found under `sessions/`; malformed timestamps fall back to file modificati
 time. Pass `max_age_days` to `CodexParser` or `AgentObserver` to customize the
 lookback; values less than or equal to zero disable age filtering for `CodexParser`.
 
+### GitHub Copilot CLI
+
+The `copilot` source reads each GitHub Copilot CLI session's `events.jsonl` and
+optional `workspace.yaml` and `vscode.metadata.json` files. Copilot CLI uses the
+same home-relative configuration directory on every supported operating system;
+it does not use `Library/Application Support` or `AppData` for session history:
+
+| Operating system | Default session directory |
+| ---------------- | ------------------------- |
+| macOS            | `/Users/<user>/.copilot/session-state/` |
+| Linux            | `/home/<user>/.copilot/session-state/` |
+| Windows          | `%USERPROFILE%\.copilot\session-state\` (typically `C:\Users\<user>\.copilot\session-state\`) |
+
+Set `COPILOT_HOME` for both Copilot CLI and ADR Sensor when the CLI configuration
+directory has been moved; the Sensor then reads `$COPILOT_HOME/session-state/`.
+Copilot CLI's legacy `--config-dir` option is deprecated in favor of this
+environment variable. These locations and the override are defined by the
+[Copilot CLI configuration directory reference](https://docs.github.com/copilot/reference/copilot-cli-reference/cli-config-dir-reference).
+
+The parser applies a 14-day lookback using each `events.jsonl` modification time.
+Use `--all-history` to include older sessions. This source covers GitHub Copilot
+CLI session state only; it does not read the separate storage used by the VS Code
+Copilot Chat extension.
+
 ### opencode
 
 [opencode](https://github.com/sst/opencode) uses the XDG layout on every platform,
@@ -72,10 +97,10 @@ its `server_name` populated.
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        AI Agent Logs                            │
-│ Claude Code │ Cursor │ Cline │ Codex │ Warp │ Desktop │ opencode│
-└──────┬──────┴───┬────┴───┬───┴───┬───┴──┬───┴───┬────┴─────┬────┘
-       │          │        │       │      │       │          │
-       ▼          ▼        ▼       ▼      ▼       ▼          ▼
+│         Claude, Cursor, Cline, Codex, Copilot CLI, Warp         │
+│                    Claude Desktop, opencode                     │
+└───────────────────────────────┬─────────────────────────────────┘
+                                ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Source-Specific Parsers                      │
 │                  (Each implements BaseParser)                   │
@@ -127,6 +152,7 @@ adr-sensor
 adr-sensor --source claude
 adr-sensor --source cursor
 adr-sensor --source codex
+adr-sensor --source copilot
 adr-sensor --source claude_desktop
 adr-sensor --source opencode
 
@@ -348,6 +374,7 @@ cannot run on the current platform are skipped rather than failing.
 | Variable          | Read by                    | Effect                                                            |
 | ----------------- | -------------------------- | ----------------------------------------------------------------- |
 | `CODEX_HOME`      | Codex parser               | Codex data root containing `sessions/` and optional `state_*.sqlite` catalogs (default `~/.codex`) |
+| `COPILOT_HOME`    | Copilot parser             | Copilot CLI data root containing `session-state/` (default `~/.copilot`) |
 | `XDG_CACHE_HOME`  | `AgentObserver`            | Base for `--save-sessions` output (`$XDG_CACHE_HOME/adr_sensor`, default `~/.cache/adr_sensor`) |
 | `XDG_DATA_HOME`   | opencode parser            | Overrides the opencode data directory (default `~/.local/share/opencode`) |
 | `OPENCODE_DB`     | opencode parser            | Overrides the opencode SQLite filename or path (`:memory:` is ignored) |
@@ -399,6 +426,7 @@ adr-sensor/
 │   │   ├── cline_parser.py
 │   │   ├── claude_desktop_parser.py
 │   │   ├── codex_parser.py
+│   │   ├── copilot_parser.py
 │   │   ├── opencode_parser.py
 │   │   └── warp_parser.py
 │   ├── schemas/
