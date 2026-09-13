@@ -184,3 +184,15 @@ def test_project_registry_and_corrupt_optional_metadata(tmp_path):
     registry.write_text("{", encoding="utf-8")
     assert parser.parse_all()[0].project_path is None
     assert path.exists()
+
+
+def test_mixed_string_and_object_content_parts_and_image_only_messages(tmp_path):
+    rows = records()
+    rows[1]["content"] = ["Inspect this image", {"text": "and report findings"}]
+    image_part = {"inlineData": {"mimeType": "image/png", "data": "abc"}}
+    rows.append({"id": "image", "type": "user", "content": image_part})
+    event = GeminiParser().parse_file(write(tmp_path / "session.jsonl", rows))
+    assert event.chat_history[0].content == "Inspect this image\nand report findings"
+    assert event.chat_history[-1].sequence_id == "image"
+    assert event.chat_history[-1].role == "user" and event.chat_history[-1].content == ""
+    assert event.session_context["message_metadata"]["image"]["content_parts"] == image_part

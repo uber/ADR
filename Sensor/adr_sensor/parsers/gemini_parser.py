@@ -171,7 +171,7 @@ class GeminiParser(BaseParser):
                 tools.append(self._tool(call))
                 details["tool_metadata"].append({k: v for k, v in call.items() if k not in {"args", "result"}})
             content = self._text(message.get("content"))
-            if content or tools:
+            if content or tools or isinstance(message.get("content"), (dict, list)) and message["content"]:
                 history.append(
                     ChatMessage(
                         role="assistant" if role == "gemini" else "user",
@@ -262,7 +262,11 @@ class GeminiParser(BaseParser):
         if isinstance(content, str):
             return content
         parts = content if isinstance(content, list) else [content]
-        return "\n".join(part["text"] for part in parts if isinstance(part, dict) and isinstance(part.get("text"), str))
+        return "\n".join(
+            part if isinstance(part, str) else part["text"]
+            for part in parts
+            if isinstance(part, str) or isinstance(part, dict) and isinstance(part.get("text"), str)
+        )
 
     @staticmethod
     def _tool(call: dict) -> ToolUsage:
