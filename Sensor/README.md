@@ -18,6 +18,7 @@ ADR Sensor is a Python library that collects telemetry from AI coding agents to 
 | **Claude Desktop**         | `claude_desktop` | JSONL audit logs                    | macOS, Windows         |
 | **OpenAI Codex CLI**       | `codex`          | JSONL + SQLite path catalogs        | macOS, Linux, Windows  |
 | **GitHub Copilot CLI**     | `copilot`        | JSONL (`~/.copilot/session-state/`) | macOS, Linux, Windows  |
+| **DeepSeek Harness**       | `dsh`            | JSONL/Zstandard (`~/.dsh/sessions/`) | macOS, Linux, Windows  |
 | **Warp Terminal**          | `warp`           | SQLite (`warp.sqlite`)              | macOS, Windows         |
 | **opencode**               | `opencode`       | SQLite (`opencode.db`) or JSON tree | macOS, Linux           |
 
@@ -91,6 +92,30 @@ MCP tools are namespaced by opencode as `<server>_<tool>`, so any tool that is n
 known built-in and contains an underscore is recorded as `tool_type: "mcp_tool"` with
 its `server_name` populated.
 
+### DeepSeek Harness
+
+The `dsh` source reads current DeepSeek Harness v3 session logs from
+`$DSH_HOME/sessions/`, or `~/.dsh/sessions/` when `DSH_HOME` is unset. DSH uses
+Zstandard-compressed logs by default; uncompressed JSONL v3 logs are also
+supported. When migrations leave several generations in one session directory,
+the parser follows DSH and considers only the highest generation. A session is
+ingested only when that generation is v3, so historical or future formats are
+not silently interpreted with the wrong schema.
+
+Tool arguments and results, PTC sub-dispatches, failure status, approvals,
+provider/model context, sandbox mode, permission preset, typed message content,
+and recorded token usage are normalized into the Sensor schema. Tool names do
+not carry a universal MCP server identity, so the parser does not guess one.
+The standard 14-day file lookback applies; use `--all-history` to include older
+sessions. Storage and event behavior were
+checked against DSH's pinned
+[JSONL persistence contract](https://github.com/deepseek-ai/deepseek-harness/blob/c291e7961a515f6d7af9304e7fd1d257929aef26/packages/session/session-persistence-jsonl/README.md)
+and [v3 event declarations](https://github.com/deepseek-ai/deepseek-harness/blob/c291e7961a515f6d7af9304e7fd1d257929aef26/packages/core/session/src/types.ts).
+
+```bash
+adr-sensor --source dsh
+```
+
 
 ## Architecture
 
@@ -98,7 +123,7 @@ its `server_name` populated.
 ┌─────────────────────────────────────────────────────────────────┐
 │                        AI Agent Logs                            │
 │         Claude, Cursor, Cline, Codex, Copilot CLI, Warp         │
-│                    Claude Desktop, opencode                     │
+│              Claude Desktop, opencode, DeepSeek Harness         │
 └───────────────────────────────┬─────────────────────────────────┘
                                 ▼
 ┌─────────────────────────────────────────────────────────────────┐
@@ -153,6 +178,7 @@ adr-sensor --source claude
 adr-sensor --source cursor
 adr-sensor --source codex
 adr-sensor --source copilot
+adr-sensor --source dsh
 adr-sensor --source claude_desktop
 adr-sensor --source opencode
 
@@ -363,7 +389,7 @@ builds its `--source` choices from `SOURCES`, so it picks the new agent up for f
 | --------------- | ------------------------------------------- |
 | Python          | 3.9, 3.10, 3.11, 3.12, 3.13                 |
 | Operating system| macOS, Linux, Windows                       |
-| Dependencies    | `tabulate` (runtime only — no native deps)  |
+| Dependencies    | `tabulate`, `zstandard`                     |
 
 Which sources yield data depends on the host OS and on which agents are installed;
 see the platform column in [Supported AI Agents](#supported-ai-agents). Sources that
@@ -375,6 +401,7 @@ cannot run on the current platform are skipped rather than failing.
 | ----------------- | -------------------------- | ----------------------------------------------------------------- |
 | `CODEX_HOME`      | Codex parser               | Codex data root containing `sessions/` and optional `state_*.sqlite` catalogs (default `~/.codex`) |
 | `COPILOT_HOME`    | Copilot parser             | Copilot CLI data root containing `session-state/` (default `~/.copilot`) |
+| `DSH_HOME`         | DeepSeek Harness parser    | Harness data root containing `sessions/` (default `~/.dsh`) |
 | `XDG_CACHE_HOME`  | `AgentObserver`            | Base for `--save-sessions` output (`$XDG_CACHE_HOME/adr_sensor`, default `~/.cache/adr_sensor`) |
 | `XDG_DATA_HOME`   | opencode parser            | Overrides the opencode data directory (default `~/.local/share/opencode`) |
 | `OPENCODE_DB`     | opencode parser            | Overrides the opencode SQLite filename or path (`:memory:` is ignored) |
@@ -427,6 +454,7 @@ adr-sensor/
 │   │   ├── claude_desktop_parser.py
 │   │   ├── codex_parser.py
 │   │   ├── copilot_parser.py
+│   │   ├── dsh_parser.py
 │   │   ├── opencode_parser.py
 │   │   └── warp_parser.py
 │   ├── schemas/

@@ -51,6 +51,7 @@ Examples:
   adr-sensor --source cursor              Ingest Cursor IDE logs only
   adr-sensor --source claude_desktop      Ingest Claude Desktop agent-mode logs only (macOS/Windows)
   adr-sensor --source copilot             Ingest GitHub Copilot CLI logs only
+  adr-sensor --source dsh                 Ingest DeepSeek Harness logs only
   adr-sensor --source opencode            Ingest opencode logs only
   adr-sensor --save-sessions              Save individual session files
   adr-sensor --output-format jsonl        Export as JSONL

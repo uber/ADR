@@ -1,0 +1,23 @@
+name: DeepSeek Harness parser platforms
+on:
+  pull_request:
+    paths: ['Sensor/**', '.github/workflows/sensor-dsh.yml']
+  push:
+    branches: [main]
+    paths: ['Sensor/**', '.github/workflows/sensor-dsh.yml']
+permissions:
+  contents: read
+jobs:
+  parser:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --extra dev --python 3.12
+        working-directory: Sensor
+      - run: uv run pytest tests/test_dsh_parser.py -q
+        working-directory: Sensor
