@@ -12,6 +12,7 @@ from .codex_parser import CodexParser
 from .copilot_parser import CopilotParser
 from .cursor_parser import CursorParser
 from .opencode_parser import OpencodeParser
+from .pi_parser import PiParser
 from .warp_parser import WarpParser
 
 __all__ = [
@@ -23,5 +24,6 @@ __all__ = [
     "CopilotParser",
     "CursorParser",
     "OpencodeParser",
+    "PiParser",
     "WarpParser",
 ]
