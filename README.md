@@ -23,7 +23,7 @@ This repository contains the open-source **ADR Discovery**, **ADR Sensor**, **AD
 | Path                                               | ADR component              | Description                                                                          |
 | -------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------ |
 | [Discovery/](Discovery/)                           | ADR Discovery              | Inventory the AI apps, CLI agents, IDE extensions, model runtimes, and MCP servers on an endpoint, and flag unknown surfaces for review |
-| [Sensor/](Sensor/)                                 | ADR Observability          | Collect and normalize agent telemetry from Claude Code, Cursor, Codex, GitHub Copilot CLI, opencode, Claude Desktop, and others |
+| [Sensor/](Sensor/)                                 | ADR Observability          | Collect and normalize agent telemetry from Claude Code, Cursor, Codex, GitHub Copilot CLI, Pi, opencode, Claude Desktop, and others |
 | [Detection/](Detection/)                           | ADR Benchmark + Detection  | Dual-agent detector, 134 MCP servers, 304 benchmark tasks, baselines, figure scripts |
 | [docs/REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md) | Evaluation                 | Step-by-step workflow to reproduce benchmark detection and paper figures             |
 

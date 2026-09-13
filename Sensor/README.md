@@ -20,6 +20,7 @@ ADR Sensor is a Python library that collects telemetry from AI coding agents to 
 | **GitHub Copilot CLI**     | `copilot`        | JSONL (`~/.copilot/session-state/`) | macOS, Linux, Windows  |
 | **Warp Terminal**          | `warp`           | SQLite (`warp.sqlite`)              | macOS, Windows         |
 | **opencode**               | `opencode`       | SQLite (`opencode.db`) or JSON tree | macOS, Linux           |
+| **Pi coding agent**        | `pi`             | JSONL (`~/.pi/agent/sessions/`)     | macOS, Linux, Windows  |
 
 ### Claude Desktop Agent Mode
 
@@ -92,13 +93,68 @@ known built-in and contains an underscore is recorded as `tool_type: "mcp_tool"`
 its `server_name` populated.
 
 
+### Pi coding agent
+
+The `pi` source reads Pi's persisted session JSONL files, including legacy v1
+linear sessions and v2/v3 tree-structured sessions. It captures conversations,
+tool calls with full recorded arguments and results, tool failures, and user-run
+shell commands. No content redaction or additional truncation is applied.
+
+| Operating system | Default session directory |
+| ---------------- | ------------------------- |
+| macOS            | `/Users/<user>/.pi/agent/sessions/` |
+| Linux            | `/home/<user>/.pi/agent/sessions/` |
+| Windows          | `%USERPROFILE%\.pi\agent\sessions\` |
+
+Pi supports native Windows with Git Bash by default; its optional PowerShell tool
+does not change session storage. ADR Sensor only reads the JSONL and does not
+need either shell. Session directories are searched recursively. Set
+`PI_CODING_AGENT_DIR` for both processes if Pi's agent directory was moved, or
+`PI_CODING_AGENT_SESSION_DIR` to override the entire sessions root. If Pi is
+started with `--session-dir`, set the same root through
+`PI_CODING_AGENT_SESSION_DIR` for ADR Sensor, or pass `base_path` to `PiParser`.
+An explicit parser `base_path` takes precedence over environment variables.
+
+The export is a forensic history of **all branches recorded in the file**, not
+just the active model context. Tool results are matched to calls on their own
+ancestor path, so reused call IDs on sibling branches are not mixed. If several
+results refer to a shared ancestor call, its first result stays on the invocation
+and additional results appear as `tool` messages, with `tool_call_entry_id` in
+their metadata. Orphan results are preserved without inventing invocations.
+User shell commands have role `user`, not `assistant`.
+
+`session_context.entries` retains entry IDs/parents, typed content (including
+recorded thinking and images), provider/model details, stop reasons, full tool
+result details, extension entries, labels, branch summaries, and compactions.
+`token_usage.cumulative` sums recorded assistant, nested-tool, compaction, and
+branch-summary usage. Raw usage and cost records remain in entry metadata.
+Custom extension tools are reported as function calls: the session format does
+not establish a universal MCP server identity, so the parser does not guess one.
+
+The default lookback is 14 days by file modification time; `--all-history`
+disables it. Resumed sessions update existing `--save-sessions` exports rather
+than producing duplicate files. Malformed JSONL rows are skipped and counted;
+unsupported future session versions are skipped explicitly. There is no capture
+for `--no-session`/in-memory runs, deleted files, or content Pi itself never wrote.
+Pi can truncate shell output before persistence; the parser preserves its
+`truncated`/`fullOutputPath` metadata but does not follow external output files.
+This source does not collect global settings, credentials, or a tool inventory.
+
+Storage, format, and platform behavior were checked against Pi's
+[session-format reference](https://github.com/earendil-works/pi/blob/71dca871bc80b6bc97be37f0ca3189399d651fff/packages/coding-agent/docs/session-format.md),
+[directory configuration](https://github.com/earendil-works/pi/blob/71dca871bc80b6bc97be37f0ca3189399d651fff/packages/coding-agent/src/config.ts),
+[session manager](https://github.com/earendil-works/pi/blob/71dca871bc80b6bc97be37f0ca3189399d651fff/packages/coding-agent/src/core/session-manager.ts),
+and [Windows guide](https://github.com/earendil-works/pi/blob/71dca871bc80b6bc97be37f0ca3189399d651fff/packages/coding-agent/docs/windows.md).
+CI exercises contract fixtures on native macOS, Linux, and Windows; these tests
+do not run authenticated Pi model sessions.
+
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        AI Agent Logs                            │
 │         Claude, Cursor, Cline, Codex, Copilot CLI, Warp         │
-│                    Claude Desktop, opencode                     │
+│                  Claude Desktop, opencode, Pi                    │
 └───────────────────────────────┬─────────────────────────────────┘
                                 ▼
 ┌─────────────────────────────────────────────────────────────────┐
@@ -155,6 +211,7 @@ adr-sensor --source codex
 adr-sensor --source copilot
 adr-sensor --source claude_desktop
 adr-sensor --source opencode
+adr-sensor --source pi
 
 # Save individual session files (incremental)
 adr-sensor --save-sessions
@@ -378,6 +435,8 @@ cannot run on the current platform are skipped rather than failing.
 | `XDG_CACHE_HOME`  | `AgentObserver`            | Base for `--save-sessions` output (`$XDG_CACHE_HOME/adr_sensor`, default `~/.cache/adr_sensor`) |
 | `XDG_DATA_HOME`   | opencode parser            | Overrides the opencode data directory (default `~/.local/share/opencode`) |
 | `OPENCODE_DB`     | opencode parser            | Overrides the opencode SQLite filename or path (`:memory:` is ignored) |
+| `PI_CODING_AGENT_DIR` | Pi parser              | Agent directory containing `sessions/` (default `~/.pi/agent`) |
+| `PI_CODING_AGENT_SESSION_DIR` | Pi parser      | Sessions root; takes precedence over `PI_CODING_AGENT_DIR` |
 | `APPDATA`         | Cursor, Cline, Claude Desktop parsers | Windows roaming app-data root. Consulted first so redirected/roaming profiles resolve correctly (default `~/AppData/Roaming`) |
 | `LOCALAPPDATA`    | Warp parser                | Windows local app-data root, same redirected-profile handling (default `~/AppData/Local`) |
 
@@ -428,6 +487,7 @@ adr-sensor/
 │   │   ├── codex_parser.py
 │   │   ├── copilot_parser.py
 │   │   ├── opencode_parser.py
+│   │   ├── pi_parser.py
 │   │   └── warp_parser.py
 │   ├── schemas/
 │   │   ├── agent_event_schema.py    # AgentEvent, ChatMessage, ToolUsage

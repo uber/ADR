@@ -52,6 +52,7 @@ Examples:
   adr-sensor --source claude_desktop      Ingest Claude Desktop agent-mode logs only (macOS/Windows)
   adr-sensor --source copilot             Ingest GitHub Copilot CLI logs only
   adr-sensor --source opencode            Ingest opencode logs only
+  adr-sensor --source pi                  Ingest Pi session conversations and tools
   adr-sensor --save-sessions              Save individual session files
   adr-sensor --output-format jsonl        Export as JSONL
   adr-sensor --all-history                Include all logs (not just last 2 weeks)
