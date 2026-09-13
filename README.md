@@ -42,6 +42,9 @@ See **[docs/REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md)** for the full evaluati
 
 Component documentation:
 
+ADR Sensor also captures [Gemini CLI session journals](Sensor/README.md#gemini-cli)
+on macOS, Linux, and Windows, including tool results and nested subagent sessions.
+
 - [Discovery/README.md](Discovery/README.md): endpoint inventory, probes, and the fingerprint catalog
 - [Sensor/README.md](Sensor/README.md): telemetry collection and unified schema
 - [Detection/README.md](Detection/README.md): ADR-Bench, detector baselines, MCP infrastructure

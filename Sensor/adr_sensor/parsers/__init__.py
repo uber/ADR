@@ -11,6 +11,7 @@ from .cline_parser import ClineParser
 from .codex_parser import CodexParser
 from .copilot_parser import CopilotParser
 from .cursor_parser import CursorParser
+from .gemini_parser import GeminiParser
 from .opencode_parser import OpencodeParser
 from .warp_parser import WarpParser
 
@@ -20,6 +21,7 @@ __all__ = [
     "ClaudeParser",
     "ClineParser",
     "CodexParser",
+    "GeminiParser",
     "CopilotParser",
     "CursorParser",
     "OpencodeParser",

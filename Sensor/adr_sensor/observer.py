@@ -28,6 +28,7 @@ from .parsers.cline_parser import ClineParser
 from .parsers.codex_parser import CodexParser
 from .parsers.copilot_parser import CopilotParser
 from .parsers.cursor_parser import CursorParser
+from .parsers.gemini_parser import GeminiParser
 from .parsers.opencode_parser import OpencodeParser
 from .parsers.warp_parser import WarpParser
 from .schemas.agent_event_schema import AgentEvent
@@ -61,6 +62,7 @@ class AgentObserver:
         ("codex", "Codex"),
         ("copilot", "GitHub Copilot CLI"),
         ("opencode", "opencode"),
+        ("gemini", "Gemini CLI"),
     )
 
     #: Sources that only produce logs on some operating systems. A source absent
@@ -69,7 +71,7 @@ class AgentObserver:
         "claude_desktop": ("Darwin", "Windows"),
     }
 
-    CONTENT_AWARE_INCREMENTAL_SOURCES = frozenset({"codex", "copilot"})
+    CONTENT_AWARE_INCREMENTAL_SOURCES = frozenset({"codex", "copilot", "gemini"})
 
     def __init__(self, output_dir: Optional[Path] = None, max_age_days: Optional[int] = None):
         """Initialize the AgentObserver.
@@ -94,6 +96,7 @@ class AgentObserver:
         )
 
         self.output_dir = output_dir if output_dir else Path("output")
+        self.gemini_parser = GeminiParser(max_age_days=max_age_days) if max_age_days is not None else GeminiParser()
         self.output_dir.mkdir(exist_ok=True)
 
     def _emit_error(self, error_payload: Dict[str, Any]) -> None:
@@ -129,7 +132,7 @@ class AgentObserver:
 
         Args:
             source_filter: Which source to ingest. One of 'all', 'claude', 'cursor',
-                'claude_desktop', 'cline', 'warp', 'codex', 'copilot', 'opencode'.
+                'claude_desktop', 'cline', 'warp', 'codex', 'copilot', 'opencode', 'gemini'.
 
         Returns:
             Tuple of (agent_events, system_configs).

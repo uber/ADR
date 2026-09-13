@@ -20,6 +20,7 @@ ADR Sensor is a Python library that collects telemetry from AI coding agents to 
 | **GitHub Copilot CLI**     | `copilot`        | JSONL (`~/.copilot/session-state/`) | macOS, Linux, Windows  |
 | **Warp Terminal**          | `warp`           | SQLite (`warp.sqlite`)              | macOS, Windows         |
 | **opencode**               | `opencode`       | SQLite (`opencode.db`) or JSON tree | macOS, Linux           |
+| **Gemini CLI**             | `gemini`         | JSONL journals + legacy JSON chats | macOS, Linux, Windows  |
 
 ### Claude Desktop Agent Mode
 
@@ -92,13 +93,62 @@ known built-in and contains an underscore is recorded as `tool_type: "mcp_tool"`
 its `server_name` populated.
 
 
+### Gemini CLI
+
+The `gemini` source reads current `chats/**/*.jsonl` journals and legacy
+`chats/*.json` conversation snapshots. It captures user/assistant text, tool
+arguments and results, recorded status and approval requests, model and token
+usage, and nested subagent sessions. Start timestamps remain stable when sessions
+resume; `--save-sessions` refreshes changed snapshots in place.
+
+| Host | Default scan root (per-user home) |
+| ---- | -------------------------------- |
+| macOS / Linux | `~/.gemini/tmp/` |
+| Windows | `%USERPROFILE%\.gemini\tmp\` |
+| macOS Seatbelt sandbox | `~/.cache/.gemini/tmp/` (also scanned on macOS) |
+
+`GEMINI_CLI_HOME` overrides the **parent home directory**, so the path becomes
+`$GEMINI_CLI_HOME/.gemini/tmp`, not `$GEMINI_CLI_HOME/tmp`. Project directories
+can be hashes or readable identifiers. Project paths come from `.project_root`
+or `projects.json`; a project hash alone is not a filesystem path. A custom
+acquired root can be supplied through `GeminiParser(base_path=Path("/capture/tmp"))`.
+WSL/container sessions belong to their own filesystem and home.
+
+ADR consolidates repeated journal messages by ID, so tool progress updates do
+not duplicate messages or token totals. Earlier activity survives rewind and
+checkpoint records. `session_context.history_scope` is `all_recorded_branches`;
+this is recorded activity, not a reconstruction of only the model's current
+context. Source message metadata, typed content, tool IDs, and recorded thought
+summaries remain in `session_context`. The parser adds no redaction or truncation;
+upstream output limits and deleted files cannot be recovered. Unknown or malformed
+records do not abort other sessions, and malformed-record counts are reported.
+
+Only CLI chat records are covered. Prompt-only `logs.json`, editor chat storage,
+shell history, unsaved sessions, and files outside these roots are not collected.
+The default lookback is 14 days by file modification time; `--all-history`
+includes older files. Explicit `mcp_`/qualified tool names identify MCP calls;
+server attribution is left empty when the recorded name is ambiguous.
+
+```bash
+uv run adr-sensor --source gemini --no-save
+uv run adr-sensor --source gemini --save-sessions --all-history
+```
+
+Contracts verified against upstream
+[record types](https://github.com/google-gemini/gemini-cli/blob/9c1b0a610534d6f8120964cf2672c07807d8fc90/packages/core/src/services/chatRecordingTypes.ts),
+[journal writer](https://github.com/google-gemini/gemini-cli/blob/9c1b0a610534d6f8120964cf2672c07807d8fc90/packages/core/src/services/chatRecordingService.ts),
+[storage paths](https://github.com/google-gemini/gemini-cli/blob/9c1b0a610534d6f8120964cf2672c07807d8fc90/packages/core/src/config/storage.ts),
+and [supported platforms](https://geminicli.com/docs/get-started/installation/).
+Tests use synthetic records matching these contracts and run on all three hosts;
+they do not require a Gemini account.
+
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        AI Agent Logs                            │
 │         Claude, Cursor, Cline, Codex, Copilot CLI, Warp         │
-│                    Claude Desktop, opencode                     │
+│                Claude Desktop, opencode, Gemini CLI             │
 └───────────────────────────────┬─────────────────────────────────┘
                                 ▼
 ┌─────────────────────────────────────────────────────────────────┐
@@ -155,6 +205,7 @@ adr-sensor --source codex
 adr-sensor --source copilot
 adr-sensor --source claude_desktop
 adr-sensor --source opencode
+adr-sensor --source gemini
 
 # Save individual session files (incremental)
 adr-sensor --save-sessions
@@ -375,6 +426,7 @@ cannot run on the current platform are skipped rather than failing.
 | ----------------- | -------------------------- | ----------------------------------------------------------------- |
 | `CODEX_HOME`      | Codex parser               | Codex data root containing `sessions/` and optional `state_*.sqlite` catalogs (default `~/.codex`) |
 | `COPILOT_HOME`    | Copilot parser             | Copilot CLI data root containing `session-state/` (default `~/.copilot`) |
+| `GEMINI_CLI_HOME` | Gemini parser              | Parent home containing `.gemini/tmp/`; on macOS also `.cache/.gemini/tmp/` |
 | `XDG_CACHE_HOME`  | `AgentObserver`            | Base for `--save-sessions` output (`$XDG_CACHE_HOME/adr_sensor`, default `~/.cache/adr_sensor`) |
 | `XDG_DATA_HOME`   | opencode parser            | Overrides the opencode data directory (default `~/.local/share/opencode`) |
 | `OPENCODE_DB`     | opencode parser            | Overrides the opencode SQLite filename or path (`:memory:` is ignored) |
@@ -427,6 +479,7 @@ adr-sensor/
 │   │   ├── claude_desktop_parser.py
 │   │   ├── codex_parser.py
 │   │   ├── copilot_parser.py
+│   │   ├── gemini_parser.py
 │   │   ├── opencode_parser.py
 │   │   └── warp_parser.py
 │   ├── schemas/
