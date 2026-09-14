@@ -104,8 +104,10 @@ not silently interpreted with the wrong schema.
 
 Tool arguments and results, PTC sub-dispatches, failure status, approvals,
 provider/model context, sandbox mode, permission preset, typed message content,
-and recorded token usage are normalized into the Sensor schema. Tool names do
-not carry a universal MCP server identity, so the parser does not guess one.
+and recorded token usage are normalized into the Sensor schema. Structured tool
+result content, metadata, and compaction replacement provenance are retained in
+`session_context`. Tool names do not carry a universal MCP server identity, so
+the parser does not guess one.
 The standard 14-day file lookback applies; use `--all-history` to include older
 sessions. Storage and event behavior were
 checked against DSH's pinned

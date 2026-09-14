@@ -80,7 +80,7 @@ def test_parse_session_jsonl_normalizes_messages_and_tools(tmp_path):
 
     assert entry is not None
     assert entry.source == "dsh"
-    assert entry.session_id == "dsh_test"
+    assert entry.session_id == "dsh_session-test"
     assert entry.project_path == "/work"
     assert entry.model == "qwen38"
     assert entry.timestamp == datetime.fromtimestamp(1750000000, timezone.utc)
@@ -133,6 +133,78 @@ def test_parse_session_marks_failed_tool_result(tmp_path):
     tool = DshParser(max_age_days=0).parse_session_file(path).chat_history[0].tools[0]
     assert tool.status == "error"
     assert tool.error == "FsError: FS_SANDBOX_DENIED"
+
+
+def test_parse_session_preserves_tool_result_metadata_and_replacements(tmp_path):
+    original_content = [
+        {
+            "type": "tool-result",
+            "content": [
+                {"type": "text", "text": "original result"},
+                {"type": "image", "attachment": {"id": "attachment-1"}},
+            ],
+        }
+    ]
+    replacement_content = [{"type": "tool-result", "content": [{"type": "text", "text": "[result pruned]"}]}]
+    path = write_session(
+        tmp_path,
+        [
+            {"type": "session", "version": 3, "id": "tool-metadata", "createdAt": 1750000000000},
+            {
+                "type": "assistant/message",
+                "seq": 1,
+                "surfaceOp": "append",
+                "data": {
+                    "message": {
+                        "role": "assistant",
+                        "content": [{"type": "tool-call", "id": "call-1", "name": "read", "arguments": "{}"}],
+                    }
+                },
+            },
+            {
+                "type": "tool/result",
+                "seq": 2,
+                "surfaceOp": "append",
+                "data": {
+                    "turn": 1,
+                    "step": 1,
+                    "message": {"source": {"kind": "tool", "callId": "call-1"}, "content": original_content},
+                    "meta": {"diff": {"before": "old", "after": "new"}},
+                },
+            },
+            {
+                "type": "compaction/prune",
+                "seq": 3,
+                "ignorable": True,
+                "data": {"shadowedRange": {"start": 2, "end": 2}, "shadowedSeqs": [2]},
+            },
+            {
+                "type": "tool/result",
+                "seq": 4,
+                "surfaceOp": {"op": "replace", "startSeq": 2, "endSeq": 2},
+                "sourceEventSeqs": [2],
+                "data": {
+                    "turn": 1,
+                    "step": 1,
+                    "message": {"source": {"kind": "tool", "callId": "call-1"}, "content": replacement_content},
+                    "meta": {"diff": {"before": "old", "after": "new"}},
+                },
+            },
+        ],
+    )
+
+    entry = DshParser().parse_session_file(path)
+    tool = entry.chat_history[0].tools[0]
+    assert tool.result == "original result"
+    results = entry.session_context["tool_result_metadata"]
+    assert len(results) == 2
+    assert results[0]["content_parts"] == original_content
+    assert results[0]["meta"] == {"diff": {"before": "old", "after": "new"}}
+    assert results[0]["is_replacement"] is False
+    assert results[1]["content_parts"] == replacement_content
+    assert results[1]["is_replacement"] is True
+    assert results[1]["surface_op"] == {"op": "replace", "startSeq": 2, "endSeq": 2}
+    assert results[1]["source_event_seqs"] == [2]
 
 
 def test_parse_session_captures_ptc_subdispatch(tmp_path):
@@ -236,7 +308,7 @@ def test_parse_all_selects_highest_generation_once_and_reads_zstd(tmp_path):
     assert entries[0].raw_log_path == str(current)
 
 
-def test_zstd_reader_discards_torn_final_frame(tmp_path):
+def test_zstd_reader_recovers_complete_records_from_torn_final_frame(tmp_path):
     events = [
         {"type": "session", "version": 3, "id": "session-torn", "createdAt": 1750000000000},
         {"type": "user/message", "data": {"role": "user", "content": [{"type": "text", "text": "inspect project"}]}},
@@ -262,7 +334,8 @@ def test_zstd_reader_discards_torn_final_frame(tmp_path):
         handle.write(appended[:-1])
 
     entry = DshParser().parse_session_file(path)
-    assert [message.role for message in entry.chat_history] == ["user"]
+    assert [message.role for message in entry.chat_history] == ["user", "assistant"]
+    assert entry.chat_history[1].content == "uncommitted"
 
 
 def test_future_or_legacy_generation_is_not_parsed_as_v3(tmp_path):
@@ -304,6 +377,24 @@ def test_age_filter_and_duplicate_session_ids(tmp_path):
     write_session(tmp_path, events, session_dir_name="copy-one")
     write_session(tmp_path, events, session_dir_name="copy-two")
     assert len(DshParser(base_path=tmp_path / "sessions", max_age_days=0).parse_all()) == 1
+
+
+def test_parse_all_preserves_distinct_source_session_ids(tmp_path):
+    for session_id in ("session-review", "review"):
+        write_session(
+            tmp_path,
+            [
+                {"type": "session", "version": 3, "id": session_id, "createdAt": 1750000000000},
+                {
+                    "type": "user/message",
+                    "data": {"role": "user", "content": [{"type": "text", "text": "inspect project"}]},
+                },
+            ],
+            session_dir_name=session_id,
+        )
+
+    entries = DshParser(base_path=tmp_path / "sessions", max_age_days=0).parse_all()
+    assert {entry.session_id for entry in entries} == {"dsh_session-review", "dsh_review"}
 
 
 def test_resumed_export_updates_existing_snapshot(tmp_path):

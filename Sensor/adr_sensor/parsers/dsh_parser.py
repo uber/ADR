@@ -154,7 +154,7 @@ class DshParser(BaseParser):
             if event_time:
                 data["first_event_at"] = min(data["first_event_at"] or event_time, event_time)
                 data["last_event_at"] = max(data["last_event_at"] or event_time, event_time)
-            self._process_event(event_type, payload, data, event_time)
+            self._process_event(event_type, payload, data, event_time, event)
 
         if not header_seen:
             return None
@@ -184,7 +184,7 @@ class DshParser(BaseParser):
         return AgentEvent(
             timestamp=data["created_at"] or data["first_event_at"] or datetime.now(timezone.utc),
             source="dsh",
-            session_id=f"dsh_{str(data['id']).removeprefix('session-')}",
+            session_id=f"dsh_{data['id']}",
             project_path=data["cwd"],
             model=data["model"],
             chat_history=chat_history,
@@ -194,7 +194,12 @@ class DshParser(BaseParser):
         )
 
     def _process_event(
-        self, event_type: str, payload: Dict[str, Any], data: Dict[str, Any], event_time: Optional[datetime]
+        self,
+        event_type: str,
+        payload: Dict[str, Any],
+        data: Dict[str, Any],
+        event_time: Optional[datetime],
+        event: Dict[str, Any],
     ):
         if event_type == "user/message":
             message = payload.get("message", payload)
@@ -252,8 +257,9 @@ class DshParser(BaseParser):
                 source = {}
             call_id = source.get("callId") or message.get("toolCallId")
             tool = data["pending_tools"].get(call_id)
-            if tool:
-                blocks = message.get("content", [])
+            blocks = message.get("content", [])
+            is_replacement = self._record_tool_result_metadata(data, payload, message, event, event_time, call_id)
+            if tool and not is_replacement:
                 tool["result"] = self._blocks_text(blocks)
                 is_error = self._has_error_result(blocks)
                 tool["status"] = "error" if is_error else "success"
@@ -336,6 +342,38 @@ class DshParser(BaseParser):
         data["context"].setdefault("message_metadata", {})[sequence_id] = {
             key: value for key, value in metadata.items() if value is not None
         }
+
+    @staticmethod
+    def _record_tool_result_metadata(
+        data: Dict[str, Any],
+        payload: Dict[str, Any],
+        message: Dict[str, Any],
+        event: Dict[str, Any],
+        event_time: Optional[datetime],
+        call_id: Any,
+    ) -> bool:
+        surface_op = event.get("surfaceOp")
+        is_replacement = isinstance(surface_op, dict) and surface_op.get("op") == "replace"
+        metadata = {
+            "call_id": call_id,
+            "seq": event.get("seq"),
+            "turn": payload.get("turn"),
+            "step": payload.get("step"),
+            "timestamp": event_time.isoformat() if event_time else None,
+            "message_source": message.get("source"),
+            "content_parts": message.get("content"),
+            "surface_op": surface_op,
+            "source_event_seqs": event.get("sourceEventSeqs"),
+            "is_replacement": is_replacement,
+        }
+        if "error" in payload:
+            metadata["error"] = payload["error"]
+        if "meta" in payload:
+            metadata["meta"] = payload["meta"]
+        data["context"].setdefault("tool_result_metadata", []).append(
+            {key: value for key, value in metadata.items() if value is not None}
+        )
+        return is_replacement
 
     @staticmethod
     def _attach_tool(data: Dict[str, Any], tool: Dict[str, Any]) -> None:
@@ -421,7 +459,7 @@ class DshParser(BaseParser):
 
     @staticmethod
     def _iter_complete_zstd_frames(raw: Any) -> Iterator[bytes]:
-        """Yield complete frames and discard a torn final frame, matching DSH recovery."""
+        """Yield complete frames and complete JSONL records from a torn final frame."""
         decoder = zstandard.ZstdDecompressor().decompressobj()
         frame_parts = []
         while chunk := raw.read(128 * 1024):
@@ -436,3 +474,8 @@ class DshParser(BaseParser):
                 yield b"".join(frame_parts)
                 decoder = zstandard.ZstdDecompressor().decompressobj()
                 frame_parts = []
+        if frame_parts:
+            recovered = b"".join(frame_parts)
+            last_newline = recovered.rfind(b"\n")
+            if last_newline >= 0:
+                yield recovered[: last_newline + 1]
