@@ -450,12 +450,18 @@ class DshParser(BaseParser):
     @staticmethod
     def _iter_lines(file_path: Path) -> Iterator[str]:
         if not file_path.name.endswith(".zstd"):
-            with open(file_path, encoding="utf-8") as handle:
-                yield from handle
+            with open(file_path, "rb") as handle:
+                for line in handle:
+                    # Only LF-terminated records are committed. Discard a torn
+                    # tail before decoding: it may end inside a UTF-8 character.
+                    if line.endswith(b"\n"):
+                        yield line.decode("utf-8")
             return
         with open(file_path, "rb") as raw:
             for frame in DshParser._iter_complete_zstd_frames(raw):
-                yield from frame.decode("utf-8", errors="replace").splitlines(keepends=True)
+                # Unicode line separators may occur literally inside JSON
+                # strings; JSONL record boundaries are LF only.
+                yield from frame.decode("utf-8", errors="replace").split("\n")
 
     @staticmethod
     def _iter_complete_zstd_frames(raw: Any) -> Iterator[bytes]:

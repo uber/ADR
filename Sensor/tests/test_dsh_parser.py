@@ -2,6 +2,7 @@ import json
 import os
 from datetime import datetime, timezone
 
+import pytest
 import zstandard
 
 from adr_sensor.observer import AgentObserver
@@ -11,7 +12,7 @@ from adr_sensor.parsers.dsh_parser import DshParser
 def write_session(tmp_path, events, filename="session.v3.jsonl", session_dir_name="session-test"):
     session_dir = tmp_path / "sessions" / "workspace" / session_dir_name
     session_dir.mkdir(parents=True, exist_ok=True)
-    content = "\n".join(json.dumps(event) for event in events) + "\n"
+    content = "\n".join(json.dumps(event, ensure_ascii=False) for event in events) + "\n"
     path = session_dir / filename
     if filename.endswith(".zstd"):
         path.write_bytes(zstandard.ZstdCompressor(write_checksum=True).compress(content.encode("utf-8")))
@@ -306,6 +307,65 @@ def test_parse_all_selects_highest_generation_once_and_reads_zstd(tmp_path):
 
     assert len(entries) == 1
     assert entries[0].raw_log_path == str(current)
+
+
+@pytest.mark.parametrize("filename", ["session.v3.jsonl", "session.v3.jsonl.zstd"])
+@pytest.mark.parametrize(
+    "separator", ["\u2028", "\u2029", "\u0085"], ids=["line-separator", "paragraph-separator", "nel"]
+)
+def test_parse_all_preserves_literal_unicode_separators(tmp_path, filename, separator):
+    content = f"Inspect this{separator}project please"
+    path = write_session(
+        tmp_path,
+        [
+            {"type": "session", "version": 3, "id": "unicode-separators", "createdAt": 1750000000000},
+            {"type": "user/message", "data": {"role": "user", "content": [{"type": "text", "text": content}]}},
+        ],
+        filename,
+    )
+    before = path.read_bytes(), path.stat().st_mtime_ns
+
+    entries = DshParser(base_path=tmp_path / "sessions", max_age_days=0).parse_all()
+
+    assert len(entries) == 1
+    assert [message.content for message in entries[0].chat_history] == [content]
+    assert entries[0].session_context["malformed_records"] == 0
+    assert (path.read_bytes(), path.stat().st_mtime_ns) == before
+
+
+@pytest.mark.parametrize(
+    "utf8_prefix_length", [1, 2, 3, None], ids=["utf8-1-byte", "utf8-2-bytes", "utf8-3-bytes", "valid-json"]
+)
+def test_raw_reader_ignores_unterminated_final_record(tmp_path, utf8_prefix_length):
+    path = write_session(
+        tmp_path,
+        [
+            {"type": "session", "version": 3, "id": "raw-torn", "createdAt": 1750000000000},
+            {
+                "type": "user/message",
+                "data": {"role": "user", "content": [{"type": "text", "text": "inspect project"}]},
+            },
+        ],
+    )
+    tail = json.dumps(
+        {
+            "type": "assistant/message",
+            "data": {"message": {"role": "assistant", "content": [{"type": "text", "text": "uncommitted \U0001f600"}]}},
+        },
+        ensure_ascii=False,
+    ).encode("utf-8")
+    if utf8_prefix_length is not None:
+        tail = tail[: tail.index("\U0001f600".encode("utf-8")) + utf8_prefix_length]
+    with path.open("ab") as handle:
+        handle.write(tail)
+    before = path.read_bytes(), path.stat().st_mtime_ns
+
+    entries = DshParser(base_path=tmp_path / "sessions", max_age_days=0).parse_all()
+
+    assert len(entries) == 1
+    assert [message.content for message in entries[0].chat_history] == ["inspect project"]
+    assert entries[0].session_context["event_count"] == 1
+    assert (path.read_bytes(), path.stat().st_mtime_ns) == before
 
 
 def test_zstd_reader_recovers_complete_records_from_torn_final_frame(tmp_path):
