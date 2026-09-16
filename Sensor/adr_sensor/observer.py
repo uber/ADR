@@ -28,6 +28,7 @@ from .parsers.cline_parser import ClineParser
 from .parsers.codex_parser import CodexParser
 from .parsers.copilot_parser import CopilotParser
 from .parsers.cursor_parser import CursorParser
+from .parsers.dsh_parser import DshParser
 from .parsers.gemini_parser import GeminiParser
 from .parsers.opencode_parser import OpencodeParser
 from .parsers.warp_parser import WarpParser
@@ -61,6 +62,7 @@ class AgentObserver:
         ("warp", "Warp Terminal"),
         ("codex", "Codex"),
         ("copilot", "GitHub Copilot CLI"),
+        ("dsh", "DeepSeek Harness"),
         ("opencode", "opencode"),
         ("gemini", "Gemini CLI"),
     )
@@ -71,7 +73,7 @@ class AgentObserver:
         "claude_desktop": ("Darwin", "Windows"),
     }
 
-    CONTENT_AWARE_INCREMENTAL_SOURCES = frozenset({"codex", "copilot", "gemini"})
+    CONTENT_AWARE_INCREMENTAL_SOURCES = frozenset({"codex", "copilot", "dsh", "gemini"})
 
     def __init__(self, output_dir: Optional[Path] = None, max_age_days: Optional[int] = None):
         """Initialize the AgentObserver.
@@ -89,6 +91,7 @@ class AgentObserver:
         self.copilot_parser = (
             CopilotParser(max_age_days=max_age_days) if max_age_days is not None else CopilotParser()
         )
+        self.dsh_parser = DshParser(max_age_days=max_age_days) if max_age_days is not None else DshParser()
         self.cline_parser = ClineParser(max_age_days=max_age_days) if max_age_days is not None else ClineParser()
         self.warp_parser = WarpParser(max_age_days=max_age_days) if max_age_days is not None else WarpParser()
         self.opencode_parser = (
@@ -132,7 +135,7 @@ class AgentObserver:
 
         Args:
             source_filter: Which source to ingest. One of 'all', 'claude', 'cursor',
-                'claude_desktop', 'cline', 'warp', 'codex', 'copilot', 'opencode', 'gemini'.
+                'claude_desktop', 'cline', 'warp', 'codex', 'copilot', 'dsh', 'opencode', 'gemini'.
 
         Returns:
             Tuple of (agent_events, system_configs).

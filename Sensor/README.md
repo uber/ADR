@@ -18,6 +18,7 @@ ADR Sensor is a Python library that collects telemetry from AI coding agents to 
 | **Claude Desktop**         | `claude_desktop` | JSONL audit logs                    | macOS, Windows         |
 | **OpenAI Codex CLI**       | `codex`          | JSONL + SQLite path catalogs        | macOS, Linux, Windows  |
 | **GitHub Copilot CLI**     | `copilot`        | JSONL (`~/.copilot/session-state/`) | macOS, Linux, Windows  |
+| **DeepSeek Harness**       | `dsh`            | JSONL/Zstandard (`~/.dsh/sessions/`) | macOS, Linux, Windows  |
 | **Warp Terminal**          | `warp`           | SQLite (`warp.sqlite`)              | macOS, Windows         |
 | **opencode**               | `opencode`       | SQLite (`opencode.db`) or JSON tree | macOS, Linux           |
 | **Gemini CLI**             | `gemini`         | JSONL journals + legacy JSON chats | macOS, Linux, Windows  |
@@ -92,6 +93,32 @@ MCP tools are namespaced by opencode as `<server>_<tool>`, so any tool that is n
 known built-in and contains an underscore is recorded as `tool_type: "mcp_tool"` with
 its `server_name` populated.
 
+### DeepSeek Harness
+
+The `dsh` source reads current DeepSeek Harness v3 session logs from
+`$DSH_HOME/sessions/`, or `~/.dsh/sessions/` when `DSH_HOME` is unset. DSH uses
+Zstandard-compressed logs by default; uncompressed JSONL v3 logs are also
+supported. When migrations leave several generations in one session directory,
+the parser follows DSH and considers only the highest generation. A session is
+ingested only when that generation is v3, so historical or future formats are
+not silently interpreted with the wrong schema.
+
+Tool arguments and results, PTC sub-dispatches, failure status, approvals,
+provider/model context, sandbox mode, permission preset, typed message content,
+and recorded token usage are normalized into the Sensor schema. Structured tool
+result content, metadata, and compaction replacement provenance are retained in
+`session_context`. Tool names do not carry a universal MCP server identity, so
+the parser does not guess one.
+The standard 14-day file lookback applies; use `--all-history` to include older
+sessions. Storage and event behavior were
+checked against DSH's pinned
+[JSONL persistence contract](https://github.com/deepseek-ai/deepseek-harness/blob/c291e7961a515f6d7af9304e7fd1d257929aef26/packages/session/session-persistence-jsonl/README.md)
+and [v3 event declarations](https://github.com/deepseek-ai/deepseek-harness/blob/c291e7961a515f6d7af9304e7fd1d257929aef26/packages/core/session/src/types.ts).
+
+```bash
+adr-sensor --source dsh
+```
+
 
 ### Gemini CLI
 
@@ -148,7 +175,7 @@ they do not require a Gemini account.
 ┌─────────────────────────────────────────────────────────────────┐
 │                        AI Agent Logs                            │
 │         Claude, Cursor, Cline, Codex, Copilot CLI, Warp         │
-│                Claude Desktop, opencode, Gemini CLI             │
+│       Claude Desktop, opencode, Gemini CLI, DeepSeek Harness      │
 └───────────────────────────────┬─────────────────────────────────┘
                                 ▼
 ┌─────────────────────────────────────────────────────────────────┐
@@ -168,10 +195,12 @@ they do not require a Gemini account.
 │              Ingest → Filter → Display → Export                 │
 └─────────────────────────────┬───────────────────────────────────┘
                               │
-                      ┌───────┴───────┐
-                      ▼               ▼
-                JSON/JSONL      Your Detection
-                 Export          Pipeline / SIEM
+                 ┌────┴────┐
+                 ▼         ▼
+           JSON/JSONL   OTLP Logs
+              Files        │
+                           ▼
+                    Collector / SIEM
 ```
 
 ## Quick Start
@@ -182,6 +211,12 @@ Tagged releases are installed from [PyPI](https://pypi.org/project/adr-sensor/):
 
 ```bash
 pip install adr-sensor
+```
+
+Install the optional OpenTelemetry dependencies when OTLP log export is needed:
+
+```bash
+pip install "adr-sensor[otel]"
 ```
 
 Or install from source:
@@ -203,6 +238,7 @@ adr-sensor --source claude
 adr-sensor --source cursor
 adr-sensor --source codex
 adr-sensor --source copilot
+adr-sensor --source dsh
 adr-sensor --source claude_desktop
 adr-sensor --source opencode
 adr-sensor --source gemini
@@ -218,6 +254,12 @@ adr-sensor --all-history
 
 # Custom output directory
 adr-sensor --output-dir ./my-output
+
+# Export the same records to an OTLP/HTTP logs endpoint
+adr-sensor --otel-config ./opentelemetry-config.json
+
+# Export to OTLP without also writing JSON files
+adr-sensor --no-save --otel-config ./opentelemetry-config.json
 ```
 
 Sources whose agent only runs on some operating systems are skipped automatically
@@ -254,6 +296,45 @@ for event in events:
                 print(f"  Tool: {tool.tool_name} ({tool.tool_type})")
                 print(f"  Args: {tool.arguments}")
 ```
+
+### OpenTelemetry Logs Export
+
+OpenTelemetry export is disabled by default. The Sensor only initializes an
+OTLP exporter when `--otel-config` points to a JSON configuration file. Without
+that argument, CLI and file-export behavior are unchanged and no OpenTelemetry
+logs are sent.
+
+Start from [`examples/opentelemetry-config.json`](examples/opentelemetry-config.json):
+
+```json
+{
+  "endpoint": "http://localhost:4318/v1/logs",
+  "service_name": "adr-sensor",
+  "headers": {},
+  "timeout_seconds": 10,
+  "flush_timeout_seconds": 30
+}
+```
+
+`endpoint` must be the complete OTLP/HTTP logs URL, including `/v1/logs` when
+required by the receiver. `headers` can contain authentication headers. An
+optional `certificate_file` names a PEM certificate bundle; relative paths are
+resolved from the configuration file's directory.
+
+Each `AgentEvent` is sent as an `adr.agent.session` OpenTelemetry LogRecord. Its
+body is the complete dictionary returned by `AgentEvent.get_non_null_fields()`,
+the same content written to JSON/JSONL today. The OpenTelemetry exporter applies
+no redaction or field projection, so prompts, responses, tool arguments, tool
+results, usernames, hostnames, and local paths can be transmitted. Any
+normalization already performed by a source parser still applies.
+
+System-configuration records are sent as `adr.system.configuration` logs. Runs
+are not checkpointed specifically for OTLP: repeated runs can resend the same
+records, and consumers can use `adr.event.uuid` to deduplicate them.
+
+The one-shot Sensor process flushes and shuts down the exporter before exiting.
+Use an OpenTelemetry Collector when vendor-specific routing, transformation,
+retry, or persistent queuing is needed.
 
 ## Output Schema
 
@@ -414,7 +495,7 @@ builds its `--source` choices from `SOURCES`, so it picks the new agent up for f
 | --------------- | ------------------------------------------- |
 | Python          | 3.9, 3.10, 3.11, 3.12, 3.13                 |
 | Operating system| macOS, Linux, Windows                       |
-| Dependencies    | `tabulate` (runtime only — no native deps)  |
+| Dependencies    | `tabulate`, `zstandard`; OpenTelemetry is an optional `otel` extra |
 
 Which sources yield data depends on the host OS and on which agents are installed;
 see the platform column in [Supported AI Agents](#supported-ai-agents). Sources that
@@ -427,6 +508,7 @@ cannot run on the current platform are skipped rather than failing.
 | `CODEX_HOME`      | Codex parser               | Codex data root containing `sessions/` and optional `state_*.sqlite` catalogs (default `~/.codex`) |
 | `COPILOT_HOME`    | Copilot parser             | Copilot CLI data root containing `session-state/` (default `~/.copilot`) |
 | `GEMINI_CLI_HOME` | Gemini parser              | Parent home containing `.gemini/tmp/`; on macOS also `.cache/.gemini/tmp/` |
+| `DSH_HOME`         | DeepSeek Harness parser    | Harness data root containing `sessions/` (default `~/.dsh`) |
 | `XDG_CACHE_HOME`  | `AgentObserver`            | Base for `--save-sessions` output (`$XDG_CACHE_HOME/adr_sensor`, default `~/.cache/adr_sensor`) |
 | `XDG_DATA_HOME`   | opencode parser            | Overrides the opencode data directory (default `~/.local/share/opencode`) |
 | `OPENCODE_DB`     | opencode parser            | Overrides the opencode SQLite filename or path (`:memory:` is ignored) |
@@ -471,6 +553,9 @@ adr-sensor/
 │   ├── __init__.py          # Package exports
 │   ├── cli.py               # CLI entry point
 │   ├── observer.py          # AgentObserver orchestrator
+│   ├── exporters/
+│   │   ├── config.py        # OTLP/HTTP JSON configuration
+│   │   └── opentelemetry.py # OpenTelemetry Logs exporter
 │   ├── parsers/
 │   │   ├── base_parser.py   # Abstract base class
 │   │   ├── claude_parser.py
@@ -479,6 +564,7 @@ adr-sensor/
 │   │   ├── claude_desktop_parser.py
 │   │   ├── codex_parser.py
 │   │   ├── copilot_parser.py
+│   │   ├── dsh_parser.py
 │   │   ├── gemini_parser.py
 │   │   ├── opencode_parser.py
 │   │   └── warp_parser.py
@@ -490,6 +576,7 @@ adr-sensor/
 │       └── timestamp_utils.py
 ├── tests/
 ├── examples/
+│   └── opentelemetry-config.json
 ├── CONTRIBUTING.md
 ├── LICENSE
 ├── pyproject.toml
