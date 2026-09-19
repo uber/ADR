@@ -6,6 +6,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, List, Optional, Tuple
 
+from ..diagnostics import sanitize_health_record
 from ..schemas.agent_event_schema import AgentEvent
 from ..schemas.system_config_schema import SystemConfiguration
 from .config import OpenTelemetryConfig
@@ -63,6 +64,7 @@ class OpenTelemetryLogExporter:
         self._provider.add_log_record_processor(processor)
         self._logger = self._provider.get_logger("adr_sensor", service_version)
         self._info_severity = severity_number_cls.INFO
+        self._warning_severity = severity_number_cls.WARN
         self._flush_timeout_millis = int(config.flush_timeout_seconds * 1000)
         self._closed = False
 
@@ -100,6 +102,28 @@ class OpenTelemetryLogExporter:
             )
 
         return len(entries) + len(system_config_data)
+
+    def export_diagnostics(self, records: List[dict]) -> int:
+        """Send bounded health summaries through the explicitly configured sink."""
+        for record in records:
+            body = sanitize_health_record(record)
+            degraded = body["status"] in {"partial", "failed"}
+            self._logger.emit(
+                timestamp=_datetime_to_unix_nanos(datetime.fromisoformat(body["timestamp"])),
+                observed_timestamp=time.time_ns(),
+                severity_number=self._warning_severity if degraded else self._info_severity,
+                severity_text="WARN" if degraded else "INFO",
+                body=body,
+                attributes={
+                    "adr.event.type": "sensor_health",
+                    "adr.schema.version": SCHEMA_VERSION,
+                    "adr.source": body["source"],
+                    "adr.sensor.stage": body["stage"],
+                    "adr.sensor.status": body["status"],
+                },
+                event_name="adr.sensor.health",
+            )
+        return len(records)
 
     def shutdown(self) -> None:
         """Flush pending records and stop the provider's worker thread."""

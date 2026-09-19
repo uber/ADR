@@ -54,6 +54,7 @@ class WarpParser(BaseParser):
         db_path = Path(self.db_path) if isinstance(self.db_path, str) else self.db_path
 
         if not db_path.exists():
+            self.record_diagnostic("input_missing")
             print(f"[WARP] No logs found at {db_path}")
             return entries
 
@@ -70,6 +71,7 @@ class WarpParser(BaseParser):
             recent_conversations = self._filter_recent_conversations(conversations)
             skipped_count = len(conversations) - len(recent_conversations)
             if skipped_count > 0:
+                self.record_diagnostic("file_age_skipped", skipped_count)
                 print(f"[WARP] Skipped {skipped_count} conversations older than {self.max_age_days} days")
 
             for conversation in recent_conversations:
@@ -80,11 +82,13 @@ class WarpParser(BaseParser):
                     if entry and entry.has_meaningful_content():
                         entries.append(entry)
                 except Exception as e:
+                    self.record_diagnostic("session_build_error")
                     print(f"[WARP] Error processing conversation {conversation_id}: {e}")
 
             conn.close()
 
         except Exception as e:
+            self.record_diagnostic("database_error")
             print(f"[WARP] Error reading database: {e}")
             traceback.print_exc()
 
@@ -121,6 +125,7 @@ class WarpParser(BaseParser):
                 try:
                     conv_timestamp = normalize_timestamp(last_modified)
                 except Exception:
+                    self.record_diagnostic("invalid_timestamp")
                     pass
 
             if conv_timestamp is None or conv_timestamp >= cutoff_time:
@@ -168,7 +173,7 @@ class WarpParser(BaseParser):
             timestamp = normalize_timestamp(most_recent["start_ts"])
             model_id = most_recent.get("model_id")
             if isinstance(model_id, str):
-                parsed_model_id = self._parse_json_safely(model_id)
+                parsed_model_id = self._parse_json_safely(model_id, report_failure=False)
                 if isinstance(parsed_model_id, str):
                     model_id = parsed_model_id
 
@@ -220,17 +225,20 @@ class WarpParser(BaseParser):
             return entry
 
         except Exception as e:
+            self.record_diagnostic("session_build_error")
             print(f"[WARP] Error creating entry for conversation {conversation_id}: {e}")
             traceback.print_exc()
             return None
 
-    def _parse_json_safely(self, json_str: str) -> Optional[Any]:
+    def _parse_json_safely(self, json_str: str, report_failure: bool = True) -> Optional[Any]:
         """Safely parse JSON string."""
         if not json_str:
             return None
         try:
             return json.loads(json_str)
         except json.JSONDecodeError:
+            if report_failure:
+                self.record_diagnostic("record_decode_error")
             return None
 
     def _parse_tool_usage(self, action_result: Dict[str, Any]) -> Optional[ToolUsage]:
@@ -272,6 +280,7 @@ class WarpParser(BaseParser):
             )
 
         except Exception:
+            self.record_diagnostic("record_shape_error")
             return None
 
     def _extract_content_from_action(self, action_result: Dict[str, Any]) -> str:
@@ -308,4 +317,5 @@ class WarpParser(BaseParser):
 
             return "\n".join(text_parts)
         except Exception:
+            self.record_diagnostic("record_shape_error")
             return ""

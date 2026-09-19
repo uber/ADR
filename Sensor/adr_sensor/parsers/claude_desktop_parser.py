@@ -64,6 +64,7 @@ class ClaudeDesktopParser(BaseParser):
         entries: List[AgentEvent] = []
 
         if not self.base_path.exists():
+            self.record_diagnostic("input_missing")
             print(f"[CLAUDE_DESKTOP] No sessions found at {self.base_path}")
             return entries
 
@@ -86,9 +87,11 @@ class ClaudeDesktopParser(BaseParser):
                     try:
                         activity_time = datetime.fromtimestamp(last_activity / 1000, tz=timezone.utc)
                         if activity_time < cutoff_time:
+                            self.record_diagnostic("file_age_skipped")
                             skipped_count += 1
                             continue
                     except (ValueError, OSError, OverflowError, TypeError):
+                        self.record_diagnostic("invalid_timestamp")
                         pass  # If we cannot parse it, process the session anyway.
 
                 audit_path = session_dir / "audit.jsonl"
@@ -101,6 +104,7 @@ class ClaudeDesktopParser(BaseParser):
                     processed_count += 1
 
             except Exception as e:
+                self.record_diagnostic("session_build_error")
                 print(f"[CLAUDE_DESKTOP] Error parsing session {session_dir}: {e}")
 
         if skipped_count > 0:
@@ -143,12 +147,12 @@ class ClaudeDesktopParser(BaseParser):
                         sessions.extend(self._collect_sessions(agent_dir, DISPATCH_DIR_PREFIX))
 
         except (PermissionError, OSError) as e:
+            self.record_diagnostic("file_read_error")
             print(f"[CLAUDE_DESKTOP] Error scanning base path {self.base_path}: {e}")
 
         return sessions
 
-    @staticmethod
-    def _collect_sessions(parent: Path, prefix: str) -> List[Tuple[Path, Path]]:
+    def _collect_sessions(self, parent: Path, prefix: str) -> List[Tuple[Path, Path]]:
         """Collect (session_dir, metadata_path) pairs directly under `parent`."""
         found: List[Tuple[Path, Path]] = []
         try:
@@ -159,11 +163,11 @@ class ClaudeDesktopParser(BaseParser):
                     continue
                 found.append((item, parent / f"{item.name}.json"))
         except (PermissionError, OSError) as e:
+            self.record_diagnostic("file_read_error")
             print(f"[CLAUDE_DESKTOP] Error scanning {parent}: {e}")
         return found
 
-    @staticmethod
-    def _read_session_metadata(metadata_path: Path) -> Optional[Dict[str, Any]]:
+    def _read_session_metadata(self, metadata_path: Path) -> Optional[Dict[str, Any]]:
         """Read a session metadata JSON file.
 
         Returns an empty dict (rather than None) when the file is missing or
@@ -175,8 +179,13 @@ class ClaudeDesktopParser(BaseParser):
         try:
             with open(metadata_path, encoding="utf-8") as f:
                 data = json.load(f)
+            if not isinstance(data, dict):
+                self.record_diagnostic("record_shape_error")
             return data if isinstance(data, dict) else {}
-        except (json.JSONDecodeError, OSError, PermissionError):
+        except (json.JSONDecodeError, OSError, PermissionError) as exc:
+            self.record_diagnostic(
+                "record_decode_error" if isinstance(exc, json.JSONDecodeError) else "file_read_error"
+            )
             return {}
 
     @staticmethod
@@ -231,11 +240,13 @@ class ClaudeDesktopParser(BaseParser):
             try:
                 return datetime.fromtimestamp(value / 1000, tz=timezone.utc)
             except (ValueError, OSError, OverflowError, TypeError) as e:
+                self.record_diagnostic("invalid_timestamp")
                 print(f"[CLAUDE_DESKTOP] Error parsing timestamp from {key}={value}: {e}")
 
         try:
             return datetime.fromtimestamp(audit_path.stat().st_mtime, tz=timezone.utc)
         except OSError:
+            self.record_diagnostic("file_stat_error")
             return datetime.now(timezone.utc)
 
     def _build_session_context(
@@ -318,6 +329,7 @@ class ClaudeDesktopParser(BaseParser):
                     try:
                         obj = json.loads(line)
                     except json.JSONDecodeError:
+                        self.record_diagnostic("record_decode_error")
                         continue
 
                     extracted = self._extract_message_data(obj)
@@ -329,6 +341,7 @@ class ClaudeDesktopParser(BaseParser):
                     del obj
 
         except (OSError, PermissionError) as e:
+            self.record_diagnostic("file_read_error")
             print(f"[CLAUDE_DESKTOP] Error reading {audit_path}: {e}")
             return None
 

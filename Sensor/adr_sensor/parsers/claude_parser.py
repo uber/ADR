@@ -21,6 +21,53 @@ from .base_parser import BaseParser
 
 MAX_LOG_AGE_DAYS = 14
 
+# Transcript bookkeeping is expected even when it has no sessionId or message.
+# Keep these kinds separate from unexpected envelopes; never use input types as
+# diagnostic labels. New kinds still follow the existing extraction behavior.
+_METADATA_RECORD_TYPES = frozenset(
+    {
+        "system",
+        "progress",
+        "attachment",
+        "summary",
+        "file-history-snapshot",
+        "queue-operation",
+        "custom-title",
+        "ai-title",
+        "tag",
+        "agent-name",
+        "agent-color",
+        "last-prompt",
+        "permission-mode",
+        "pr-link",
+        "content-replacement",
+    }
+)
+_KNOWN_CONTENT_TYPES = frozenset(
+    {
+        "text",
+        "tool_use",
+        "tool_result",
+        "image",
+        "document",
+        "thinking",
+        "redacted_thinking",
+        "tool_reference",
+        "search_result",
+        "server_tool_use",
+        "web_search_tool_result",
+        "web_fetch_tool_result",
+        "code_execution_tool_result",
+        "bash_code_execution_tool_result",
+        "text_editor_code_execution_tool_result",
+        "container_upload",
+        "compaction",
+        "resource",
+        "resource_link",
+        "audio",
+    }
+)
+
 
 class ClaudeParser(BaseParser):
     """Parser for Claude Code JSONL log files."""
@@ -33,11 +80,21 @@ class ClaudeParser(BaseParser):
         """Parse all available Claude Code logs."""
         entries = []
 
-        if not self.base_path.exists():
+        try:
+            base_exists = self.base_path.exists()
+        except OSError:
+            self.record_diagnostic("file_stat_error")
+            raise
+        if not base_exists:
+            self.record_diagnostic("input_missing")
             print(f"[CLAUDE] No logs found at {self.base_path}")
             return entries
 
-        jsonl_files = list(self.base_path.glob("**/*.jsonl"))
+        try:
+            jsonl_files = list(self.base_path.glob("**/*.jsonl"))
+        except OSError:
+            self.record_diagnostic("file_read_error")
+            raise
         print(f"[CLAUDE] Found {len(jsonl_files)} JSONL files")
 
         cutoff_time = datetime.now(timezone.utc) - timedelta(days=self.max_age_days)
@@ -50,8 +107,10 @@ class ClaudeParser(BaseParser):
                 if mtime >= cutoff_time:
                     filtered_files.append(jsonl_file)
                 else:
+                    self.record_diagnostic("file_age_skipped")
                     skipped_count += 1
             except (OSError, PermissionError):
+                self.record_diagnostic("file_stat_error")
                 skipped_count += 1
 
         if skipped_count > 0:
@@ -64,6 +123,7 @@ class ClaudeParser(BaseParser):
                 file_entries = self.parse_jsonl_file(jsonl_file)
                 entries.extend(file_entries)
             except Exception as e:
+                self.record_diagnostic("parser_error")
                 print(f"[CLAUDE] Error parsing {jsonl_file}: {e}")
 
         return entries
@@ -74,6 +134,7 @@ class ClaudeParser(BaseParser):
             return result_content
 
         if isinstance(result_content, list):
+            self._diagnose_content_blocks(result_content)
             text_parts = []
             for item in result_content:
                 if isinstance(item, dict):
@@ -97,8 +158,7 @@ class ClaudeParser(BaseParser):
 
         return truncated
 
-    @staticmethod
-    def _decode_jsonl_line(line: str) -> Iterator[Any]:
+    def _decode_jsonl_line(self, line: str) -> Iterator[Any]:
         """Decode complete values on one physical line, retaining a valid prefix.
 
         NUL padding is accepted only between values, never inside JSON strings.
@@ -114,9 +174,44 @@ class ClaudeParser(BaseParser):
                 return
             try:
                 value, offset = decoder.raw_decode(line, offset)
-            except (ValueError, RecursionError):
+            except (ValueError, RecursionError) as exc:
+                # A writer may not have finished its final physical line yet.
+                # Only recognizable JSON prefixes without a newline are expected
+                # tails; terminated malformed records remain corruption signals.
+                incomplete = (
+                    isinstance(exc, json.JSONDecodeError)
+                    and not line.endswith(("\n", "\r"))
+                    and self._is_incomplete_json(exc)
+                )
+                self.record_diagnostic("incomplete_record" if incomplete else "record_decode_error")
                 return
             yield value
+
+    @staticmethod
+    def _is_incomplete_json(error: json.JSONDecodeError) -> bool:
+        """Recognize common interrupted JSON writes without repairing content."""
+        suffix = error.doc[error.pos :].rstrip(" \t")
+        if not suffix or error.msg.startswith("Unterminated string"):
+            return True
+        if error.msg == "Expecting value" and (
+            suffix == "-" or any(token.startswith(suffix) for token in ("true", "false", "null"))
+        ):
+            return True
+        if error.msg == "Expecting ',' delimiter" and suffix in (".", "e", "e+", "e-", "E", "E+", "E-"):
+            return True
+        if error.msg == "Invalid \\uXXXX escape":
+            return suffix.startswith("u") and len(suffix) < 5 and all(c in "0123456789abcdefABCDEF" for c in suffix[1:])
+        return False
+
+    def _diagnose_content_blocks(self, content: List[Any]) -> None:
+        """Observe ignored shapes/types without changing captured message data."""
+        for item in content:
+            if not isinstance(item, dict) or not isinstance(item.get("type"), str):
+                self.record_diagnostic("record_shape_error")
+            elif item["type"] not in _KNOWN_CONTENT_TYPES:
+                self.record_diagnostic("unsupported_content_block")
+            elif item["type"] == "text" and not isinstance(item.get("text"), str):
+                self.record_diagnostic("record_shape_error")
 
     @staticmethod
     def _agent_id(obj: Dict[str, Any], file_path: Path) -> Optional[str]:
@@ -136,16 +231,24 @@ class ClaudeParser(BaseParser):
                 for line in file:
                     for obj in self._decode_jsonl_line(line):
                         if not isinstance(obj, dict):
-                            continue
-                        session_id = obj.get("sessionId")
-                        if not isinstance(session_id, str) or not session_id:
+                            self.record_diagnostic("record_shape_error")
                             continue
                         msg_type = obj.get("type")
+                        is_metadata = isinstance(msg_type, str) and msg_type in _METADATA_RECORD_TYPES
+                        if isinstance(msg_type, str) and msg_type not in ("user", "assistant") and not is_metadata:
+                            self.record_diagnostic("unsupported_record_type")
+                        session_id = obj.get("sessionId")
+                        if not isinstance(session_id, str) or not session_id:
+                            if not is_metadata or "sessionId" in obj:
+                                self.record_diagnostic("record_shape_error")
+                            continue
                         if not isinstance(msg_type, str):
+                            self.record_diagnostic("record_shape_error")
                             continue
                         if msg_type in ("user", "assistant"):
                             message = obj.get("message")
                             if not isinstance(message, dict) or not isinstance(message.get("content", ""), (str, list)):
+                                self.record_diagnostic("record_shape_error")
                                 continue
 
                         agent_id = self._agent_id(obj, file_path)
@@ -171,7 +274,9 @@ class ClaudeParser(BaseParser):
                                 session["timestamp"] = min(session["timestamp"] or ts, ts)
                                 session["last_event_at"] = max(session["last_event_at"] or ts, ts)
                             except (TypeError, ValueError, OverflowError, OSError):
-                                pass
+                                self.record_diagnostic("invalid_timestamp")
+                        elif isinstance(obj.get("timestamp"), bool):
+                            self.record_diagnostic("invalid_timestamp")
 
                         if msg_type == "assistant" and isinstance(obj["message"].get("model"), str):
                             session["model"] = obj["message"]["model"]
@@ -181,6 +286,7 @@ class ClaudeParser(BaseParser):
                             session["messages"].append(extracted_msg)
 
         except (OSError, UnicodeError) as e:
+            self.record_diagnostic("file_read_error")
             print(f"[CLAUDE] Error reading {file_path}: {e}")
 
         for (session_id, _), session_data in sessions.items():
@@ -209,6 +315,7 @@ class ClaudeParser(BaseParser):
         if isinstance(content, str):
             text_parts.append(content)
         elif isinstance(content, list):
+            self._diagnose_content_blocks(content)
             text_parts.extend(
                 item["text"]
                 for item in content
@@ -223,6 +330,7 @@ class ClaudeParser(BaseParser):
                     if isinstance(item, dict) and item.get("type") == "tool_result":
                         tool_use_id = item.get("tool_use_id")
                         if not isinstance(tool_use_id, str) or not tool_use_id:
+                            self.record_diagnostic("record_shape_error")
                             continue
                         result_content = item.get("content", "")
                         if "toolUseResult" in obj and isinstance(obj["toolUseResult"], dict):
@@ -245,8 +353,11 @@ class ClaudeParser(BaseParser):
                     raw_input = item.get("input", {})
                     name = item.get("name", "unknown")
                     if not isinstance(raw_input, dict) or not isinstance(name, str):
+                        self.record_diagnostic("record_shape_error")
                         continue
                     tool_id = item.get("id")
+                    if not isinstance(tool_id, str) or not tool_id:
+                        self.record_diagnostic("record_shape_error")
                     tools.append(
                         {
                             "id": tool_id if isinstance(tool_id, str) else None,
@@ -344,5 +455,6 @@ class ClaudeParser(BaseParser):
             )
 
         except Exception as e:
+            self.record_diagnostic("file_stat_error" if isinstance(e, OSError) else "session_build_error")
             print(f"[CLAUDE] Error creating entry for session {session_id}: {e}")
             return None

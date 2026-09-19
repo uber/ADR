@@ -72,6 +72,7 @@ class CodexParser(BaseParser):
 
         rollout_candidates = self._discover_rollout_files()
         if not rollout_candidates:
+            self.record_diagnostic("input_missing")
             print(f"[CODEX] No logs found under {self.codex_home}")
             return entries
 
@@ -90,6 +91,7 @@ class CodexParser(BaseParser):
                     skipped_count += 1
 
             if skipped_count > 0:
+                self.record_diagnostic("file_age_skipped", skipped_count)
                 print(f"[CODEX] Skipped {skipped_count} files older than {self.max_age_days} days")
 
         print(f"[CODEX] Processing {len(rollout_files)} files")
@@ -100,6 +102,7 @@ class CodexParser(BaseParser):
                 if entry and entry.has_meaningful_content():
                     entries.append(entry)
             except Exception as e:
+                self.record_diagnostic("session_build_error")
                 print(f"[CODEX] Error parsing {jsonl_file}: {e}")
 
         return entries
@@ -112,6 +115,7 @@ class CodexParser(BaseParser):
             for rollout_path in self.base_path.glob("**/*.jsonl"):
                 self._add_rollout_candidate(candidates, rollout_path)
         except OSError as e:
+            self.record_diagnostic("file_read_error")
             # Keep any files yielded before an inaccessible directory interrupted discovery.
             print(f"[CODEX] Error discovering logs under {self.base_path}: {e}")
 
@@ -119,12 +123,13 @@ class CodexParser(BaseParser):
             for catalog_path in self.codex_home.glob("state_*.sqlite"):
                 self._add_catalog_rollouts(candidates, catalog_path)
         except OSError as e:
+            self.record_diagnostic("file_read_error")
             print(f"[CODEX] Error discovering state catalogs under {self.codex_home}: {e}")
 
         return candidates
 
-    @staticmethod
     def _add_rollout_candidate(
+        self,
         candidates: Dict[Path, datetime],
         rollout_path: Path,
         catalog_timestamp: Optional[datetime] = None,
@@ -140,6 +145,7 @@ class CodexParser(BaseParser):
                 return
             file_mtime = datetime.fromtimestamp(file_stat.st_mtime, tz=timezone.utc)
         except (OSError, RuntimeError, ValueError, OverflowError):
+            self.record_diagnostic("file_stat_error")
             return
 
         activity_time = file_mtime
@@ -162,6 +168,7 @@ class CodexParser(BaseParser):
 
             columns = {str(row[1]).lower() for row in connection.execute("PRAGMA table_info(threads)")}
             if not {"id", "rollout_path"}.issubset(columns):
+                self.record_diagnostic("unsupported_schema")
                 return
 
             timestamp_columns = [name for name in ("updated_at", "updated_at_ms") if name in columns]
@@ -171,6 +178,7 @@ class CodexParser(BaseParser):
             for row in connection.execute(query):
                 raw_rollout_path = row[1]
                 if not isinstance(raw_rollout_path, str) or not raw_rollout_path:
+                    self.record_diagnostic("record_shape_error")
                     continue
 
                 rollout_path = Path(raw_rollout_path)
@@ -180,11 +188,14 @@ class CodexParser(BaseParser):
                 catalog_timestamp = None
                 for column_name, value in zip(timestamp_columns, row[2:]):
                     timestamp = self._parse_catalog_timestamp(value, milliseconds=column_name == "updated_at_ms")
+                    if value is not None and timestamp is None:
+                        self.record_diagnostic("invalid_timestamp")
                     if timestamp is not None and (catalog_timestamp is None or timestamp > catalog_timestamp):
                         catalog_timestamp = timestamp
 
                 self._add_rollout_candidate(candidates, rollout_path, catalog_timestamp)
         except (OSError, sqlite3.Error, ValueError) as e:
+            self.record_diagnostic("database_error")
             print(f"[CODEX] Error reading state catalog {catalog_path}: {e}")
         finally:
             if connection is not None:
@@ -256,20 +267,27 @@ class CodexParser(BaseParser):
                     try:
                         event = json.loads(line)
                         if not isinstance(event, Mapping):
+                            self.record_diagnostic("record_shape_error")
                             continue
 
                         payload = event.get("payload")
                         if not isinstance(payload, Mapping):
+                            self.record_diagnostic("record_shape_error")
                             continue
 
                         session_data["event_count"] += 1
                         self._process_event(event, payload, session_data)
-                    except Exception:
+                    except Exception as exc:
+                        self.record_diagnostic(
+                            "record_decode_error" if isinstance(exc, json.JSONDecodeError) else "record_shape_error"
+                        )
                         # Rollout records evolve independently; keep a malformed
                         # record from invalidating the rest of the session.
                         continue
 
             if not session_data["id"]:
+                if session_data["event_count"]:
+                    self.record_diagnostic("record_shape_error")
                 return None
 
             chat_history = []
@@ -323,6 +341,9 @@ class CodexParser(BaseParser):
             )
 
         except Exception as e:
+            self.record_diagnostic(
+                "file_read_error" if isinstance(e, (OSError, UnicodeError)) else "session_build_error"
+            )
             print(f"[CODEX] Error reading {file_path}: {e}")
             traceback.print_exc()
             return None
@@ -602,6 +623,7 @@ class CodexParser(BaseParser):
                 if current is None or normalized > current:
                     session_data["last_event_timestamp"] = normalized
             except Exception:
+                self.record_diagnostic("invalid_timestamp")
                 pass
 
         if evt_type == "session_meta":
@@ -610,6 +632,7 @@ class CodexParser(BaseParser):
 
             session_id = payload.get("id")
             if not isinstance(session_id, str) or not session_id:
+                self.record_diagnostic("record_shape_error")
                 return
 
             timestamp = payload.get("timestamp")
@@ -618,6 +641,7 @@ class CodexParser(BaseParser):
                 try:
                     normalized_timestamp = normalize_timestamp(timestamp)
                 except (TypeError, ValueError, OverflowError, OSError):
+                    self.record_diagnostic("invalid_timestamp")
                     pass
 
             session_data["id"] = session_id

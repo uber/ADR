@@ -34,6 +34,7 @@ class DshParser(BaseParser):
 
     def parse_all(self) -> List[AgentEvent]:
         if not self.base_path.is_dir():
+            self.record_diagnostic("input_missing")
             print(f"[DSH] No logs found at {self.base_path}")
             return []
 
@@ -44,9 +45,12 @@ class DshParser(BaseParser):
         files = self._select_session_generations()
         entries: Dict[str, AgentEvent] = {}
         for path in files:
+            failure_code = "file_stat_error"
             try:
                 if cutoff and datetime.fromtimestamp(path.stat().st_mtime, timezone.utc) < cutoff:
+                    self.record_diagnostic("file_age_skipped")
                     continue
+                failure_code = "file_read_error"
                 entry = self.parse_session_file(path)
                 if not entry or not entry.has_meaningful_content():
                     continue
@@ -54,6 +58,7 @@ class DshParser(BaseParser):
                 if previous is None or self._revision(entry) > self._revision(previous):
                     entries[entry.session_id] = entry
             except (OSError, UnicodeError, ValueError, zstandard.ZstdError) as exc:
+                self.record_diagnostic(failure_code)
                 print(f"[DSH] Unable to read {path}: {exc}")
         print(f"[DSH] Found {len(entries)} sessions")
         return list(entries.values())
@@ -78,6 +83,7 @@ class DshParser(BaseParser):
             try:
                 mtime = path.stat().st_mtime
             except OSError as exc:
+                self.record_diagnostic("file_stat_error")
                 print(f"[DSH] Error inspecting {path}: {exc}")
                 continue
             current = selected.get(path.parent)
@@ -87,6 +93,7 @@ class DshParser(BaseParser):
         current_paths = []
         for version, _, path in sorted(selected.values(), key=lambda item: item[1], reverse=True):
             if version != MAX_SUPPORTED_SESSION_VERSION:
+                self.record_diagnostic("unsupported_schema")
                 print(f"[DSH] Unsupported session generation v{version} in {path.parent}")
                 continue
             current_paths.append(path)
@@ -122,16 +129,20 @@ class DshParser(BaseParser):
             try:
                 event = json.loads(line)
             except json.JSONDecodeError:
+                self.record_diagnostic("record_decode_error")
                 data["malformed_records"] += 1
                 continue
             if not isinstance(event, dict):
+                self.record_diagnostic("record_shape_error")
                 data["malformed_records"] += 1
                 continue
             if not header_seen:
                 if event.get("type") != "session" or event.get("version") != MAX_SUPPORTED_SESSION_VERSION:
+                    self.record_diagnostic("unsupported_schema")
                     print(f"[DSH] Unsupported or malformed session header in {file_path}")
                     return None
                 if not isinstance(event.get("id"), str) or not event["id"]:
+                    self.record_diagnostic("record_shape_error")
                     return None
                 header_seen = True
                 data["id"] = event["id"]
@@ -147,6 +158,7 @@ class DshParser(BaseParser):
             event_type = event.get("type")
             payload = event.get("data")
             if not isinstance(payload, dict):
+                self.record_diagnostic("record_shape_error")
                 data["malformed_records"] += 1
                 continue
             data["event_count"] += 1
@@ -447,8 +459,7 @@ class DshParser(BaseParser):
         except (TypeError, ValueError, OSError, OverflowError):
             return None
 
-    @staticmethod
-    def _iter_lines(file_path: Path) -> Iterator[str]:
+    def _iter_lines(self, file_path: Path) -> Iterator[str]:
         if not file_path.name.endswith(".zstd"):
             with open(file_path, "rb") as handle:
                 for line in handle:
@@ -456,6 +467,8 @@ class DshParser(BaseParser):
                     # tail before decoding: it may end inside a UTF-8 character.
                     if line.endswith(b"\n"):
                         yield line.decode("utf-8")
+                    else:
+                        self.record_diagnostic("incomplete_record")
             return
         with open(file_path, "rb") as raw:
             for frame in DshParser._iter_complete_zstd_frames(raw):

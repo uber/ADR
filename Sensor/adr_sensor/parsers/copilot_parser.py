@@ -43,6 +43,7 @@ class CopilotParser(BaseParser):
         entries: List[AgentEvent] = []
 
         if not self.base_path.exists():
+            self.record_diagnostic("input_missing")
             print(f"[COPILOT] No logs found at {self.base_path}")
             return entries
 
@@ -59,10 +60,12 @@ class CopilotParser(BaseParser):
                     continue
                 modified_at = events_path.stat().st_mtime
             except OSError as exc:
+                self.record_diagnostic("file_stat_error")
                 print(f"[COPILOT] Unable to inspect {events_path}: {exc}")
                 continue
 
             if cutoff_timestamp is not None and modified_at < cutoff_timestamp:
+                self.record_diagnostic("file_age_skipped")
                 skipped_count += 1
                 continue
             candidates.append((path, modified_at))
@@ -79,6 +82,7 @@ class CopilotParser(BaseParser):
                 if entry and entry.has_meaningful_content():
                     entries.append(entry)
             except Exception as exc:
+                self.record_diagnostic("session_build_error")
                 print(f"[COPILOT] Error parsing {session_dir}: {exc}")
 
         return entries
@@ -128,9 +132,13 @@ class CopilotParser(BaseParser):
                     try:
                         event = json.loads(line)
                     except json.JSONDecodeError:
+                        self.record_diagnostic("record_decode_error")
                         continue
                     self._process_event(event, session_data)
         except Exception as exc:
+            self.record_diagnostic(
+                "file_read_error" if isinstance(exc, (OSError, UnicodeError)) else "session_build_error"
+            )
             print(f"[COPILOT] Error reading {events_path}: {exc}")
             traceback.print_exc()
             return None
@@ -529,8 +537,13 @@ class CopilotParser(BaseParser):
         try:
             with open(path, encoding="utf-8") as handle:
                 value = json.load(handle)
+            if not isinstance(value, dict):
+                self.record_diagnostic("record_shape_error")
             return value if isinstance(value, dict) else {}
-        except Exception:
+        except Exception as exc:
+            self.record_diagnostic(
+                "record_decode_error" if isinstance(exc, json.JSONDecodeError) else "file_read_error"
+            )
             return {}
 
     def _load_workspace_yaml(self, path: Path) -> Dict[str, Any]:
@@ -548,6 +561,7 @@ class CopilotParser(BaseParser):
                     key, value = line.split(":", 1)
                     data[key.strip()] = self._coerce_scalar(value.strip())
         except Exception:
+            self.record_diagnostic("file_read_error")
             return {}
         return data
 
@@ -571,6 +585,7 @@ class CopilotParser(BaseParser):
         try:
             return normalize_timestamp(value)
         except Exception:
+            self.record_diagnostic("invalid_timestamp")
             return None
 
     @staticmethod

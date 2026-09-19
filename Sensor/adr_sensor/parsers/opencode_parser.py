@@ -161,6 +161,7 @@ class OpencodeParser(BaseParser):
             return self._parse_json_storage(storage_dir)
 
         print(f"[OPENCODE] No logs found at {self.base_dir}")
+        self.record_diagnostic("input_missing")
         return []
 
     # ------------------------------------------------------------------ #
@@ -190,8 +191,10 @@ class OpencodeParser(BaseParser):
                     if entry and entry.has_meaningful_content():
                         entries.append(entry)
                 except Exception as e:
+                    self.record_diagnostic("session_build_error")
                     print(f"[OPENCODE] Error processing session {session_id}: {e}")
         except Exception as e:
+            self.record_diagnostic("database_error")
             print(f"[OPENCODE] Error reading database: {e}")
         finally:
             if conn is not None:
@@ -258,9 +261,12 @@ class OpencodeParser(BaseParser):
         cutoff_ts = time.time() - (self.max_age_days * 86400) if self.max_age_days > 0 else None
 
         for session_file in session_files:
+            failure_code = "file_stat_error"
             try:
                 if cutoff_ts is not None and session_file.stat().st_mtime < cutoff_ts:
+                    self.record_diagnostic("file_age_skipped")
                     continue
+                failure_code = "file_read_error"
                 session_meta = self._safe_json_file(session_file)
                 if not session_meta or not session_meta.get("id"):
                     continue
@@ -274,6 +280,7 @@ class OpencodeParser(BaseParser):
                 if entry and entry.has_meaningful_content():
                     entries.append(entry)
             except Exception as e:
+                self.record_diagnostic(failure_code if isinstance(e, OSError) else "session_build_error")
                 print(f"[OPENCODE] Error processing session file {session_file}: {e}")
 
         return entries
@@ -344,6 +351,7 @@ class OpencodeParser(BaseParser):
     ) -> Optional[AgentEvent]:
         session_id = session_meta.get("id")
         if not session_id:
+            self.record_diagnostic("record_shape_error")
             return None
 
         chat_history: List[ChatMessage] = []
@@ -392,6 +400,7 @@ class OpencodeParser(BaseParser):
 
         for part in parts:
             if not isinstance(part, dict):
+                self.record_diagnostic("record_shape_error")
                 continue
             part_type = part.get("type")
 
@@ -532,8 +541,7 @@ class OpencodeParser(BaseParser):
         """
         return session_id[len("ses_") :] if session_id.startswith("ses_") else session_id
 
-    @staticmethod
-    def _session_timestamp(session_meta: Dict[str, Any]) -> datetime:
+    def _session_timestamp(self, session_meta: Dict[str, Any]) -> datetime:
         """Best-effort session timestamp (uses last-updated when available)."""
         # SQLite exposes flat epoch-ms columns; JSON nests them under "time".
         ts = session_meta.get("time_updated") or session_meta.get("time_created")
@@ -546,22 +554,27 @@ class OpencodeParser(BaseParser):
         try:
             return normalize_timestamp(ts)
         except (ValueError, TypeError):
+            self.record_diagnostic("invalid_timestamp")
             return datetime.now(timezone.utc)
 
-    @staticmethod
-    def _safe_json(text: Optional[str]) -> Optional[Any]:
+    def _safe_json(self, text: Optional[str]) -> Optional[Any]:
         if not text:
             return None
         try:
             return json.loads(text)
         except (json.JSONDecodeError, TypeError):
+            self.record_diagnostic("record_decode_error")
             return None
 
-    @staticmethod
-    def _safe_json_file(path: Path) -> Optional[Dict[str, Any]]:
+    def _safe_json_file(self, path: Path) -> Optional[Dict[str, Any]]:
         try:
             with open(path, encoding="utf-8") as f:
                 data = json.load(f)
+            if not isinstance(data, dict):
+                self.record_diagnostic("record_shape_error")
             return data if isinstance(data, dict) else None
-        except (OSError, json.JSONDecodeError):
+        except (OSError, json.JSONDecodeError) as exc:
+            self.record_diagnostic(
+                "record_decode_error" if isinstance(exc, json.JSONDecodeError) else "file_read_error"
+            )
             return None
