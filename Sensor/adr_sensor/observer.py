@@ -73,7 +73,7 @@ class AgentObserver:
         "claude_desktop": ("Darwin", "Windows"),
     }
 
-    CONTENT_AWARE_INCREMENTAL_SOURCES = frozenset({"codex", "copilot", "dsh", "gemini"})
+    CONTENT_AWARE_INCREMENTAL_SOURCES = frozenset({"claude", "codex", "copilot", "dsh", "gemini"})
 
     def __init__(self, output_dir: Optional[Path] = None, max_age_days: Optional[int] = None):
         """Initialize the AgentObserver.
