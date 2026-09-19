@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from adr_sensor.observer import AgentObserver
+from adr_sensor.parsers.claude_parser import ClaudeParser
 from adr_sensor.schemas.agent_event_schema import AgentEvent, ChatMessage, ToolUsage
 
 
@@ -194,8 +195,6 @@ class TestAgentObserver:
 
         # Create an existing session file
         existing_file = tmp_path / "adr.claude_session1.20250615_103000.json"
-        existing_file.write_text("{}")
-
         entries = [
             AgentEvent(
                 timestamp=datetime(2025, 6, 15, 10, 30, 0, tzinfo=timezone.utc),
@@ -214,11 +213,100 @@ class TestAgentObserver:
                 chat_history=[ChatMessage(role="user", content="new")],
             ),
         ]
+        existing_file.write_text(json.dumps(entries[0].get_non_null_fields()), encoding="utf-8")
 
         filtered = observer.filter_entries_by_existing_files(entries, output_dir=tmp_path)
-        # session1 has same timestamp, should be filtered; session2 is new
+        # session1 is unchanged, should be filtered; session2 is new
         assert len(filtered) == 1
         assert filtered[0].session_id == "claude_session2"
+
+    def test_claude_exports_refresh_after_tool_results_and_resumed_turns(self, tmp_path):
+        transcript = tmp_path / "session.jsonl"
+        output_dir = tmp_path / "exports"
+        observer = AgentObserver(output_dir=output_dir)
+        records = [
+            {
+                "type": "assistant",
+                "sessionId": "session",
+                "timestamp": "2026-09-19T10:00:00.100000Z",
+                "message": {
+                    "content": [{"type": "tool_use", "id": "call", "name": "Bash", "input": {"command": "pwd"}}]
+                },
+            }
+        ]
+
+        def parse_snapshot():
+            transcript.write_text("\n".join(json.dumps(record) for record in records), encoding="utf-8")
+            return ClaudeParser().parse_jsonl_file(transcript)[0]
+
+        pending = parse_snapshot()
+        saved = observer.save_sessions_to_individual_files([pending], output_dir=output_dir)
+        assert len(saved) == 1
+        assert observer.filter_entries_by_existing_files([pending], output_dir=output_dir) == []
+
+        records.append(
+            {
+                "type": "user",
+                "sessionId": "session",
+                "timestamp": "2026-09-19T10:00:00.900000Z",
+                "message": {
+                    "content": [{"type": "tool_result", "tool_use_id": "call", "content": "/synthetic/project"}]
+                },
+            }
+        )
+        completed = parse_snapshot()
+        assert completed.timestamp == pending.timestamp
+        assert observer.filter_entries_by_existing_files([completed], output_dir=output_dir) == [completed]
+        assert observer.save_sessions_to_individual_files([completed], output_dir=output_dir) == saved
+        assert json.loads(saved[0].read_text())["chat_history"][0]["tools"][0]["result"] == "/synthetic/project"
+
+        records.append(
+            {
+                "type": "user",
+                "sessionId": "session",
+                "timestamp": "2026-09-20T11:00:00Z",
+                "message": {"content": [{"type": "text", "text": "Continue with the next task"}]},
+            }
+        )
+        resumed = parse_snapshot()
+        assert resumed.timestamp == pending.timestamp
+        assert observer.filter_entries_by_existing_files([resumed], output_dir=output_dir) == [resumed]
+        assert observer.save_sessions_to_individual_files([resumed], output_dir=output_dir) == saved
+        assert observer.filter_entries_by_existing_files([resumed], output_dir=output_dir) == []
+        assert observer.save_sessions_to_individual_files([completed], output_dir=output_dir) == []
+        persisted = json.loads(saved[0].read_text())
+        assert persisted["chat_history"][-1]["content"] == "Continue with the next task"
+        assert list(output_dir.glob("adr.*.json")) == saved
+
+    def test_claude_exports_keep_parent_and_subagent_snapshots_separate(self, tmp_path):
+        project = tmp_path / "project"
+        subagents = project / "parent" / "subagents"
+        subagents.mkdir(parents=True)
+        for path, text in [
+            (project / "parent.jsonl", "Inspect this project"),
+            (subagents / "agent-child.jsonl", "Inspect this subtask"),
+        ]:
+            path.write_text(
+                json.dumps(
+                    {
+                        "type": "user",
+                        "sessionId": "parent",
+                        "timestamp": "2026-09-19T10:00:00Z",
+                        "message": {"content": text},
+                    }
+                ),
+                encoding="utf-8",
+            )
+        parser = ClaudeParser()
+        parser.base_path = project
+        entries = parser.parse_all()
+        observer = AgentObserver(output_dir=tmp_path / "exports")
+        saved = observer.save_sessions_to_individual_files(entries, output_dir=observer.output_dir)
+
+        assert len(saved) == 2
+        snapshots = {json.loads(path.read_text())["session_id"]: json.loads(path.read_text()) for path in saved}
+        assert snapshots["claude_parent"]["chat_history"][0]["content"] == "Inspect this project"
+        assert snapshots["claude_parent_agent_child"]["chat_history"][0]["content"] == "Inspect this subtask"
 
     def test_content_filter_ignores_timestamp_identity_migration(self, tmp_path):
         """Changing from activity time to start time must not re-export unchanged history."""

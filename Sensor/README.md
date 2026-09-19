@@ -23,6 +23,32 @@ ADR Sensor is a Python library that collects telemetry from AI coding agents to 
 | **opencode**               | `opencode`       | SQLite (`opencode.db`) or JSON tree | macOS, Linux           |
 | **Gemini CLI**             | `gemini`         | JSONL journals + legacy JSON chats | macOS, Linux, Windows  |
 
+### Claude Code
+
+The `claude` source reads transcripts recursively under `~/.claude/projects/`,
+including [subagent transcripts](https://code.claude.com/docs/en/sub-agents#resume-subagents)
+under `<project>/<sessionId>/subagents/agent-<agentId>.jsonl` and nested workflow
+directories. Main sessions keep the `claude_<sessionId>` identity; subagents use
+`claude_<sessionId>_agent_<agentId>` and include `parent_session_id` and `agent_id`
+in `session_context` so their exports do not overwrite the parent conversation.
+
+String and text-block messages are retained, including user text accompanying
+tool results. Results are matched by tool-call ID. Malformed records are skipped
+without discarding surrounding messages. Complete JSON objects concatenated on
+one physical line and NUL padding between objects are accepted; incomplete tails
+are skipped without joining physical lines or repairing text inside a message.
+
+Each event includes `raw_log_path`, a stable conversation-start `timestamp`, and
+`session_context.last_event_at` and `event_count` for incremental updates. A file
+without any valid timestamp uses its modification time. `--save-sessions` updates
+the saved snapshot when a tool completes or a conversation resumes, even within
+the same timestamp second. All recorded branches are retained in file order.
+
+The default lookback is 14 days by file modification time. Existing limits still
+apply: top-level tool argument strings and tool results are truncated at 1,000
+characters; non-text content blocks and separately spilled tool-output files are
+not imported. Contract tests use synthetic transcripts and do not launch Claude.
+
 ### Claude Desktop Agent Mode
 
 The `claude_desktop` source covers Claude Desktop's local agent mode (released as
