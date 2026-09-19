@@ -354,11 +354,43 @@ no redaction or field projection, so prompts, responses, tool arguments, tool
 results, usernames, hostnames, and local paths can be transmitted. Any
 normalization already performed by a source parser still applies.
 
-System-configuration records are sent as `adr.system.configuration` logs. Runs
-are not checkpointed specifically for OTLP: repeated runs can resend the same
-records, and consumers can use `adr.event.uuid` to deduplicate them.
+System-configuration records are sent as `adr.system.configuration` logs on each
+run. Sensor health logs are also sent on every run, even when all session snapshots
+are already acknowledged. With `--save-sessions`, successful session delivery is tracked independently
+of local session files. A failed export is retried on the next run, even when the
+local JSON already exists. A session is skipped only when its complete normalized
+payload was successfully exported to the same destination configuration. Changes
+to tool results, destination settings, or configured authentication headers cause
+a resend. The checkpoint also accounts for effective OTLP environment headers and
+mTLS client certificate/key paths. It does not read credential files: after
+changing certificate or key contents in place, remove the destination's checkpoint
+to resend sessions. Dynamic HTTP credential-provider plugins
+(`OTEL_PYTHON_EXPORTER_OTLP_HTTP_CREDENTIAL_PROVIDER` and its `LOGS` variant)
+are unsupported and cause an explicit error; use configured headers or mTLS.
 
-The one-shot Sensor process flushes and shuts down the exporter before exiting.
+Delivery checkpoints are hidden `.adr-otel-delivery.<hash>.json` files in the
+session output directory. They contain only hashes, including a destination hash
+that accounts for authentication headers; they do not store raw URLs, credentials,
+session identifiers, or payloads. Missing, unreadable, or corrupt checkpoints cause
+sessions to be retried. The checkpoint is replaced atomically only after flush and
+shutdown succeed; a checkpoint write failure exits with an error. `--no-save`
+disables checkpoint reads and writes. Without `--save-sessions`, every run exports
+all collected sessions.
+
+The one-shot Sensor process drains bounded batches and reconciles submitted and
+successfully exported counts before reporting success, so a full SDK queue cannot
+silently drop records. HTTP success is also checked for an OTLP acknowledgement:
+partial rejection or a malformed response fails delivery and leaves the affected
+run unacknowledged. Resolve persistent collector rejection before rerunning: OTLP
+does not identify individual rejected records, so retrying can resend accepted
+records too. Export or checkpoint failures exit with a nonzero status.
+Delivery is at least once: a collector may receive data before a timeout, process
+interruption, or checkpoint write failure, so retries can duplicate records.
+Checkpointing only covers sessions that are collected again on a later run; it is
+not a persistent payload queue. Consumers can use `adr.event.uuid` and a full
+payload digest to identify repeated snapshots, since a session UUID alone does not
+necessarily change when tool results change.
+
 Use an OpenTelemetry Collector when vendor-specific routing, transformation,
 retry, or persistent queuing is needed.
 

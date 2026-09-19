@@ -15,7 +15,9 @@ DIAGNOSTIC_SOURCES = frozenset(
     {"sensor", "claude", "claude_desktop", "cursor", "cline", "codex", "copilot", "dsh", "gemini", "opencode", "warp"}
 )
 DIAGNOSTIC_STAGES = frozenset({"parse", "save", "save_session", "export", "startup"})
-OPERATIONAL_REASONS = frozenset({"parser_error", "write_error", "export_error", "startup_error"})
+OPERATIONAL_REASONS = frozenset(
+    {"parser_error", "write_error", "export_error", "startup_error", "checkpoint_read_error", "checkpoint_write_error"}
+)
 COUNT_FIELDS = frozenset({"events_returned", "events_emitted", "events_filtered", "attempted", "succeeded", "failed"})
 MAX_LOG_BYTES = 1024 * 1024
 LOG_BACKUP_COUNT = 2
