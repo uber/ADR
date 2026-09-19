@@ -362,6 +362,52 @@ The one-shot Sensor process flushes and shuts down the exporter before exiting.
 Use an OpenTelemetry Collector when vendor-specific routing, transformation,
 retry, or persistent queuing is needed.
 
+### Sensor health and parser diagnostics
+
+Every ingestion run writes a content-free summary for each attempted source,
+including runs that produce no sessions. `diagnostics.jsonl` contains all summaries;
+`error.log` contains only `partial` and `failed` summaries. Both live under
+`--output-dir` (default `./output`), even when `--save-sessions` uses its separate
+default cache directory or `--no-save` suppresses captured session files. Each log
+rotates at 1 MiB with two backups. Use one active sensor process per output directory
+to avoid concurrent rotation races. Diagnostic write failures produce a fixed stderr
+warning and do not discard captured sessions.
+
+The versioned `adr.sensor.health` schema contains timestamp, sensor version, source,
+stage, status, fixed reason codes, and aggregate counts. For example:
+
+```json
+{"schema_version":1,"event":"adr.sensor.health","timestamp":"2026-01-01T00:00:00.000+00:00","sensor_version":"0.0.0","source":"claude","stage":"parse","status":"partial","suspected_schema_drift":false,"counts":{"events_returned":2,"events_emitted":2,"events_filtered":0},"reasons":{"record_decode_error":1}}
+```
+
+Statuses distinguish successful capture (`ok`), no meaningful output (`empty`),
+absent input (`no_input`), usable output with observed errors (`partial`), and
+errors without usable output (`failed`). Age filtering and an incomplete live
+tail are expected skips, not errors. `suspected_schema_drift` is a triage hint for
+explicitly unsupported record/content/schema shapes, not proof of an upstream
+format change. Generic corruption is reported separately.
+
+All ten parsers report observed recovery failures, but coverage is not exhaustive:
+some optional metadata/timestamp fallbacks, unknown record kinds, and compressed
+DSH tail recovery are not classified. Counts describe observed recovery operations,
+not necessarily unique damaged records. A healthy summary does not prove complete
+capture; a missing summary also cannot distinguish an idle endpoint from a sensor
+that never ran. Schedule runs and monitor last-seen health externally.
+
+With `--otel-config`, health is also sent as OTLP logs (`adr.event.type=sensor_health`),
+including when there are no session records. Health errors use WARN severity;
+expected skips use INFO. No OTLP exporter is created without that argument. A failed
+export is recorded locally because a broken destination cannot receive its own alert.
+`--fail-on-error` exits nonzero after preserving available capture when an observed
+parse/save/diagnostic failure occurs; by default these partial failures are reported
+without changing the existing continue-on-error behavior. OTLP failures remain nonzero.
+When `--resource` is enabled, `resource.log` also marks partial runs unsuccessful.
+
+New structured diagnostics never include prompts, tool arguments/results, paths,
+session IDs, exception messages, or tracebacks. This is a separate operational
+schema, **not redaction of captured telemetry**. Legacy console previews/errors and
+older entries already present in `error.log` are not sanitized by this change.
+
 ## Output Schema
 
 ### AgentEvent
@@ -541,8 +587,9 @@ cannot run on the current platform are skipped rather than failing.
 | `APPDATA`         | Cursor, Cline, Claude Desktop parsers | Windows roaming app-data root. Consulted first so redirected/roaming profiles resolve correctly (default `~/AppData/Roaming`) |
 | `LOCALAPPDATA`    | Warp parser                | Windows local app-data root, same redirected-profile handling (default `~/AppData/Local`) |
 
-Errors during ingestion never abort the run: each source is isolated, and failures
-are appended as single-line JSON records to `error.log` in the output directory.
+Each source is isolated during ingestion. See
+[Sensor health and parser diagnostics](#sensor-health-and-parser-diagnostics) for
+structured logs, partial-failure exit behavior, and monitoring limitations.
 
 ## Security Use Cases
 

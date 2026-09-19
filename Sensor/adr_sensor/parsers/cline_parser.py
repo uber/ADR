@@ -40,6 +40,7 @@ class ClineParser(BaseParser):
         entries = []
 
         if not self.base_path.exists():
+            self.record_diagnostic("input_missing")
             print(f"[CLINE] No logs found at {self.base_path}")
             return entries
 
@@ -57,10 +58,15 @@ class ClineParser(BaseParser):
                 api_file = task_dir / "api_conversation_history.json"
                 try:
                     modified_at = api_file.stat().st_mtime
-                except OSError:
+                except OSError as exc:
+                    # A missing conversation file uses the task timestamp; an
+                    # inaccessible task below is a separate inspection failure.
+                    if not isinstance(exc, FileNotFoundError):
+                        self.record_diagnostic("file_stat_error")
                     try:
                         modified_at = task_dir.stat().st_mtime
                     except OSError as e:
+                        self.record_diagnostic("file_stat_error")
                         print(f"[CLINE] Error checking task {task_dir}: {e}")
                         recent_task_dirs.append(task_dir)
                         continue
@@ -72,6 +78,7 @@ class ClineParser(BaseParser):
 
             task_dirs = recent_task_dirs
             if skipped_count > 0:
+                self.record_diagnostic("file_age_skipped", skipped_count)
                 print(f"[CLINE] Skipped {skipped_count} tasks older than {self.max_age_days} days")
 
         print(f"[CLINE] Processing {len(task_dirs)} task directories")
@@ -82,6 +89,7 @@ class ClineParser(BaseParser):
                 if entry:
                     entries.append(entry)
             except Exception as e:
+                self.record_diagnostic("session_build_error")
                 print(f"[CLINE] Error parsing task {task_dir}: {e}")
 
         return entries
@@ -132,6 +140,12 @@ class ClineParser(BaseParser):
             return entry if entry.has_meaningful_content() else None
 
         except Exception as e:
+            if isinstance(e, json.JSONDecodeError):
+                self.record_diagnostic("record_decode_error")
+            elif isinstance(e, (OSError, UnicodeError)):
+                self.record_diagnostic("file_read_error")
+            else:
+                self.record_diagnostic("session_build_error")
             print(f"[CLINE] Error parsing task {task_dir}: {e}")
             return None
 
@@ -175,6 +189,7 @@ class ClineParser(BaseParser):
                 )
                 tools.append(tool)
             except json.JSONDecodeError:
+                self.record_diagnostic("record_decode_error")
                 pass
 
         return tools

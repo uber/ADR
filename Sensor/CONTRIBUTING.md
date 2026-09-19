@@ -62,6 +62,7 @@ class MyAgentParser(BaseParser):
         entries = []
 
         if not self.base_path.exists():
+            self.record_diagnostic("input_missing")
             print(f"[MY_AGENT] No logs found at {self.base_path}")
             return entries
 
@@ -95,6 +96,16 @@ class AgentObserver:
 `ingest_all()` iterates `SOURCES` and resolves each parser as
 `self.<source>_parser`, so no per-source branch is needed — it handles the
 `has_meaningful_content()` filter, error isolation and `error.log` reporting for you.
+
+Register the source in `DIAGNOSTIC_SOURCES` in `adr_sensor/diagnostics.py` as well.
+At recovery points, call `self.record_diagnostic()` with a fixed code from
+`BaseParser.DIAGNOSTIC_CODES`, for example `record_decode_error` or `file_read_error`.
+Do not pass paths, input values, exception strings, or dynamically observed type
+names. The observer resets and aggregates counters per run, including zero-output
+runs. Standalone parser callers can use `reset_diagnostics()` and `get_diagnostics()`.
+Use `unsupported_*` codes only for explicit supported-format contracts; missing
+input, age skips, and incomplete live tails are not evidence of schema drift.
+Test both the recovered telemetry and diagnostic counts using synthetic data.
 
 If the agent only exists on some operating systems, add it to
 `PLATFORM_RESTRICTED_SOURCES` so it is skipped elsewhere instead of failing:
