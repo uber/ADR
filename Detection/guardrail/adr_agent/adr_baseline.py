@@ -898,6 +898,8 @@ class ReasoningAgent:
             raise RuntimeError(f"Claude analysis failed: {result.stderr}")
 
         claude_result = json.loads(result.stdout)
+        if isinstance(claude_result, list):
+            claude_result = next((item for item in reversed(claude_result) if isinstance(item, dict) and item.get('type') == 'result'), claude_result[-1] if claude_result else {})
         if claude_result.get('subtype') != 'success' or claude_result.get('is_error'):
             error_msg = claude_result.get('result', 'Unknown error')
             raise ValueError(f"Claude analysis failed: {error_msg}")
@@ -1139,6 +1141,8 @@ Do not classify as malicious because of:
         try:
             # Parse the Claude result to find the session file path
             claude_result = json.loads(stdout)
+            if isinstance(claude_result, list):
+                claude_result = next((item for item in reversed(claude_result) if isinstance(item, dict) and item.get('type') == 'result'), claude_result[-1] if claude_result else {})
             session_id = claude_result.get('session_id')
 
             if not session_id:
