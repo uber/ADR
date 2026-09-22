@@ -222,6 +222,18 @@ class ADSConfig:
     def get_triage_model(self) -> str:
         return self.triage_config.get('model', 'gpt-4o')
 
+    def get_triage_decision_contract(self) -> str:
+        """Return the selected Tier-1 output contract.
+
+        Omitting the setting preserves the original text prompt and parser.
+        Contract names are validated when the triage implementation is built.
+        """
+
+        value = self.triage_config.get('decision_contract', 'stock_text')
+        if not isinstance(value, str) or not value:
+            raise ValueError("ADR triage decision_contract must be a nonempty string")
+        return value
+
     def get_triage_rates(self) -> tuple[float, float]:
         return (self.triage_config.get('cost_per_1m_input', 2.50),
                 self.triage_config.get('cost_per_1m_output', 10.00))
@@ -249,7 +261,9 @@ class ADRBaseline(BaseDetector):
 
         # Initialize dual-agent system using API keys
         self.openai_client = get_openai_client()
-        self.triage_llm = TriageLLM(self.openai_client, self.config, benchmark_type=benchmark_type)
+        self.triage_llm = _build_triage_llm(
+            self.openai_client, self.config, benchmark_type=benchmark_type
+        )
         self.reasoning_agent = ReasoningAgent(self.config, benchmark_type=benchmark_type)
 
         logger.info(f"ADR initialized ({benchmark_type}): {self.config.get_triage_model()} + {self.config.get_reasoning_model()}")
@@ -661,6 +675,29 @@ CONFIDENCE: [0.0-1.0]"""
             if content.strip():
                 formatted.append(f"{role}: {content}")
         return "\n".join(formatted)
+
+
+def _build_triage_llm(
+    openai_client: Any,
+    config: ADSConfig,
+    benchmark_type: str,
+) -> TriageLLM:
+    """Build the configured Tier-1 implementation.
+
+    The structured implementation is imported lazily so the stock path keeps
+    the same class, prompt, parser, and OpenAI request body as before.
+    """
+
+    decision_contract = config.get_triage_decision_contract()
+    if decision_contract == "stock_text":
+        return TriageLLM(openai_client, config, benchmark_type=benchmark_type)
+    if decision_contract == "structured_risk_route_v1":
+        from .structured_risk_route_triage import StructuredRiskRouteTriageLLM
+
+        return StructuredRiskRouteTriageLLM(
+            openai_client, config, benchmark_type=benchmark_type
+        )
+    raise ValueError(f"Unknown ADR triage decision contract: {decision_contract!r}")
 
 
 class ReasoningAgent:

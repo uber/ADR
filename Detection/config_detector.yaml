@@ -14,6 +14,9 @@ adr_framework:
   # Triage LLM Configuration (High Recall)
   triage_llm:
     model: "gpt-4o"
+    # Optional: "structured_risk_route_v1" enables schema-constrained routing.
+    # Omit this setting (or use "stock_text") to preserve the stock text contract.
+    # decision_contract: "structured_risk_route_v1"
     cost_per_1m_input: 2.50    # USD - update if model changes
     cost_per_1m_output: 10.00
     temperature: 0
