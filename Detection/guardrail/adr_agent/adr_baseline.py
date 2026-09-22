@@ -12,6 +12,7 @@ import time
 import json
 import logging
 import subprocess
+from copy import deepcopy
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 import sys
@@ -347,6 +348,7 @@ class ADRBaseline(BaseDetector):
             # downstream can fail or redact it further.
             logger.warning(f"🔍 {deterministic_result.reason}")
 
+        structured_triage = None
         # Check if triage is enabled
         if self.config.enable_triage:
             # Stage 1: Triage LLM (first line of defense per proposal),
@@ -354,6 +356,17 @@ class ADRBaseline(BaseDetector):
             # need to pay for an LLM call when we already have a
             # definitive signal.
             triage_result = deterministic_result or self.triage_llm.analyze(messages)
+            audit = getattr(triage_result, 'structured_output', None)
+            if isinstance(audit, dict):
+                structured_triage = deepcopy(audit)
+                # Save before Tier 2 so its failure cannot erase the routing audit.
+                # Free-form evidence stays in artifacts, never in the trusted handoff.
+                audit_file = self.reasoning_agent.debug_log_dir / f"{_safe_task_id_for_path(task_id)}_structured_triage.json"
+                try:
+                    with open(audit_file, 'w') as f:
+                        json.dump({'task_id': task_id, 'structured_triage': structured_triage}, f, indent=2)
+                except OSError:
+                    logger.warning("Could not write structured triage audit artifact")
 
             # Fast path for clearly benign (saves Claude resources)
             if not triage_result.is_suspicious:
@@ -376,7 +389,8 @@ class ADRBaseline(BaseDetector):
                         'analysis_time': analysis_time,
                         'input_tokens': triage_result.input_tokens,
                         'output_tokens': triage_result.output_tokens,
-                        'cost_usd': triage_cost
+                        'cost_usd': triage_cost,
+                        **({'structured_triage': structured_triage} if structured_triage is not None else {}),
                     }, f, indent=2)
                 logger.info(f"📝 Triage-only log saved: {triage_log_file}")
 
@@ -397,7 +411,8 @@ class ADRBaseline(BaseDetector):
                     analysis_time=analysis_time,
                     input_tokens=triage_result.input_tokens,
                     output_tokens=triage_result.output_tokens,
-                    cost_usd=triage_cost
+                    cost_usd=triage_cost,
+                    structured_triage=structured_triage,
                 )
 
             triage_reasoning = f"Triage escalation: {triage_result.prompt_reason or triage_result.reason}"
@@ -434,6 +449,8 @@ class ADRBaseline(BaseDetector):
             reasoning_result.output_tokens = triage_tokens_out + (reasoning_result.output_tokens or 0)
             reasoning_result.cost_usd = total_cost
 
+        if structured_triage is not None:
+            reasoning_result.structured_triage = structured_triage
         return reasoning_result
 
 

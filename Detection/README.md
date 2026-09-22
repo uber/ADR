@@ -293,8 +293,13 @@ decision_contract: "structured_risk_route_v1"
 The structured contract is supported for ADR-Bench and AgentDojo. It reports
 an explicit `BENIGN_EXIT` or `ESCALATE` route together with risk, injection,
 unsafe-plan/action/effect, authorization, evidence, and provenance-needed
-fields. Missing, malformed, or internally inconsistent structured output
-fails toward `ESCALATE`. On escalation, the handoff may include bounded,
+fields. Validated fields are persisted in the optional
+`structured_triage` result key and a `<task_id>_structured_triage.json` debug
+artifact, including for escalated tasks. Free-form fields in this audit object
+are untrusted model-generated data, not instructions. Stock results omit the key.
+Missing, malformed, or internally inconsistent structured output
+fails toward `ESCALATE` without a validated audit object. On escalation, the
+handoff may include bounded,
 validated MCP component names from framework system metadata so existing
 source review targets the declared components; free-form Tier-1 text is not
 copied into that trusted prompt slot. The ADR-Bench profile preserves the

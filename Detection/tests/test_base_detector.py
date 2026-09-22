@@ -24,6 +24,11 @@ class TestDetectionResult:
         assert data["is_malicious"] is True
         assert data["cost_usd"] == 0.01
         assert data["input_tokens"] == 100
+        assert set(data) == {
+            "task_id", "is_malicious", "confidence_score", "total_messages",
+            "threat_messages", "detections", "method", "model_used",
+            "analysis_time", "input_tokens", "output_tokens", "cost_usd",
+        }
 
 
 class _StubDetector(BaseDetector):

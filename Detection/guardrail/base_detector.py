@@ -39,9 +39,12 @@ class DetectionResult:
     output_tokens: Optional[int] = None
     cost_usd: Optional[float] = None
 
+    # Optional validated Tier-1 audit data; never used as trusted model input.
+    structured_triage: Optional[Dict[str, Any]] = None
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
-        return {
+        result = {
             'task_id': self.task_id,
             'is_malicious': self.is_malicious,
             'confidence_score': self.confidence_score,
@@ -55,6 +58,9 @@ class DetectionResult:
             'output_tokens': self.output_tokens,
             'cost_usd': self.cost_usd
         }
+        if self.structured_triage is not None:
+            result['structured_triage'] = self.structured_triage
+        return result
 
 
 class BaseDetector(ABC):
