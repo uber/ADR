@@ -1005,18 +1005,24 @@ class BenchmarkRunner:
 
         # Execute tasks concurrently and measure wall clock time
         start_time = time.time()
-        results = await self._execute_tasks_concurrently(tasks, server_configs, run_dir)
+        results, actual_max_concurrent = await self._execute_tasks_concurrently(tasks, server_configs, run_dir)
         wall_clock_time = time.time() - start_time
 
         if benchmark_type == "agentdojo":
             await self._convert_agentdojo_results(run_dir)
 
-        self._generate_summary(results, run_dir, run_id, wall_clock_time, benchmark_type)
+        self._generate_summary(results, run_dir, run_id, wall_clock_time, benchmark_type, actual_max_concurrent)
 
     async def _execute_tasks_concurrently(self, tasks: List[Dict[str, Any]],
                                         server_configs: Dict[str, Dict[str, Any]],
-                                        run_dir: Path) -> List[Dict[str, Any]]:
-        """Execute tasks concurrently with proper coordination."""
+                                        run_dir: Path) -> Tuple[List[Dict[str, Any]], int]:
+        """Execute tasks concurrently with proper coordination.
+
+        Returns (results, actual_max_concurrent) - the concurrency ceiling
+        actually applied, which for AgentDojo runs is forced to 1 regardless
+        of config. Callers must not substitute self.config.max_concurrent_tasks
+        for this value; the two diverge for AgentDojo runs.
+        """
         task_preparations = []
         for task in tasks:
             task_id = task["task_id"]
@@ -1066,7 +1072,7 @@ class BenchmarkRunner:
             progress = (completed / len(tasks)) * 100
             print(f"📊 Progress: {completed}/{len(tasks)} tasks completed ({progress:.1f}%)")
 
-        return results
+        return results, max_concurrent
 
     async def _convert_agentdojo_results(self, run_dir: Path) -> None:
         """Convert AgentDojo results to clean ADR-Bench format and extract ground truth."""
@@ -1260,7 +1266,8 @@ class BenchmarkRunner:
             }
 
     def _generate_summary(self, results: List[Dict[str, Any]], run_dir: Path, run_id: str,
-                         wall_clock_time: float, benchmark_type: str = "adr_bench") -> None:
+                         wall_clock_time: float, benchmark_type: str = "adr_bench",
+                         actual_max_concurrent: Optional[int] = None) -> None:
         """Generate and save benchmark summary."""
         sequential_time = sum(r.get("execution_time", 0) for r in results)
         successful = sum(1 for r in results if r.get("success", False))
@@ -1272,10 +1279,19 @@ class BenchmarkRunner:
 
         sorted_results = sorted(results, key=lambda x: x.get("task_id", 0))
 
+        # Use the concurrency ceiling that was actually applied during
+        # execution, not self.config.max_concurrent_tasks - those two
+        # diverge for AgentDojo runs, which are forced to concurrency=1
+        # regardless of config, making config-based efficiency figures
+        # wrong for that benchmark type.
+        effective_max_concurrent = (
+            actual_max_concurrent if actual_max_concurrent is not None else self.config.max_concurrent_tasks
+        )
+
         summary = {
             "run_id": run_id,
             "execution_mode": "parallel",
-            "max_concurrent_tasks": self.config.max_concurrent_tasks,
+            "max_concurrent_tasks": effective_max_concurrent,
             "total_tasks": len(results),
             "successful_tasks": successful,
             "failed_tasks": len(results) - successful,
@@ -1284,7 +1300,7 @@ class BenchmarkRunner:
             "sequential_time": sequential_time,  # Sum of individual task times
             "avg_task_time": sequential_time / len(results) if results else 0,
             "actual_speedup": actual_speedup,  # Real speedup measurement
-            "concurrency_efficiency": actual_speedup / min(len(results), self.config.max_concurrent_tasks) if results else 0,
+            "concurrency_efficiency": actual_speedup / min(len(results), effective_max_concurrent) if results else 0,
             "total_mcp_tool_calls": total_mcp_calls,
             "total_non_mcp_tool_calls": total_non_mcp_calls,
             "overall_mcp_ratio": total_mcp_calls / (total_mcp_calls + total_non_mcp_calls) if (total_mcp_calls + total_non_mcp_calls) > 0 else 0,
