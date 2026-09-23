@@ -13,15 +13,15 @@ import platform
 import re
 import secrets
 import stat
-import sys
 import time
-import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from tabulate import tabulate
 
+from .diagnostics import DIAGNOSTIC_SOURCES, MAX_COUNT, health_record, write_health_records
+from .parsers.base_parser import BaseParser
 from .parsers.claude_desktop_parser import ClaudeDesktopParser
 from .parsers.claude_parser import ClaudeParser
 from .parsers.cline_parser import ClineParser
@@ -88,9 +88,7 @@ class AgentObserver:
             ClaudeDesktopParser(max_age_days=max_age_days) if max_age_days is not None else ClaudeDesktopParser()
         )
         self.codex_parser = CodexParser(max_age_days=max_age_days) if max_age_days is not None else CodexParser()
-        self.copilot_parser = (
-            CopilotParser(max_age_days=max_age_days) if max_age_days is not None else CopilotParser()
-        )
+        self.copilot_parser = CopilotParser(max_age_days=max_age_days) if max_age_days is not None else CopilotParser()
         self.dsh_parser = DshParser(max_age_days=max_age_days) if max_age_days is not None else DshParser()
         self.cline_parser = ClineParser(max_age_days=max_age_days) if max_age_days is not None else ClineParser()
         self.warp_parser = WarpParser(max_age_days=max_age_days) if max_age_days is not None else WarpParser()
@@ -101,22 +99,64 @@ class AgentObserver:
         self.output_dir = output_dir if output_dir else Path("output")
         self.gemini_parser = GeminiParser(max_age_days=max_age_days) if max_age_days is not None else GeminiParser()
         self.output_dir.mkdir(exist_ok=True)
+        self._diagnostic_records: List[dict] = []
+        self._diagnostics_flushed = 0
+        self._diagnostic_write_failed = False
 
     def _emit_error(self, error_payload: Dict[str, Any]) -> None:
-        """Append a single-line JSON error record to error.log. Best-effort, never raises."""
-        try:
-            record = {
-                "timestamp": datetime.utcnow().isoformat(timespec="milliseconds") + "Z",
-                "host_os": platform.system(),
-                "python_version": sys.version.split()[0],
-                "pid": os.getpid(),
-            }
-            record.update(error_payload)
-            log_path = self.output_dir / "error.log"
-            with open(log_path, "a", encoding="utf-8") as f:
-                f.write(json.dumps(record, separators=(",", ":"), ensure_ascii=False) + "\n")
-        except Exception:
-            pass
+        """Compatibility adapter: never retain exception text or session data."""
+        stage = error_payload.get("stage", "startup")
+        if stage in {"compare_session", "remove_stale_session"}:
+            stage = "save"
+        reason = {"parse": "parser_error", "save_session": "write_error", "export": "export_error"}.get(
+            stage, "startup_error"
+        )
+        if stage == "save":
+            reason = "write_error"
+        self.record_failure(stage, reason, source=error_payload.get("source", "sensor"))
+
+    @property
+    def has_errors(self) -> bool:
+        """Whether this run observed incomplete capture, output, or delivery."""
+        return self._diagnostic_write_failed or any(
+            record["status"] in {"partial", "failed"} for record in self._diagnostic_records
+        )
+
+    def get_diagnostic_records(self) -> List[dict]:
+        """Return content-free health records for optional remote monitoring."""
+        return [
+            {**record, "counts": dict(record["counts"]), "reasons": dict(record["reasons"])}
+            for record in self._diagnostic_records
+        ]
+
+    def record_failure(self, stage: str, reason: str, *, source: str = "sensor") -> None:
+        record = health_record(source, stage, counts={"failed": 1}, reasons={reason: 1})
+        for pending in self._diagnostic_records[self._diagnostics_flushed :]:
+            if (pending["source"], pending["stage"], set(pending["reasons"])) == (
+                record["source"],
+                record["stage"],
+                set(record["reasons"]),
+            ) and set(pending["counts"]) == {"failed"}:
+                pending["counts"]["failed"] = min(pending["counts"]["failed"] + 1, MAX_COUNT)
+                for code in record["reasons"]:
+                    pending["reasons"][code] = min(pending["reasons"][code] + 1, MAX_COUNT)
+                return
+        self._diagnostic_records.append(record)
+
+    def flush_diagnostics(self) -> bool:
+        """Persist each summary once; keep failures visible without stopping capture."""
+        pending = self._diagnostic_records[self._diagnostics_flushed :]
+        if self._diagnostic_write_failed:
+            return False
+        if not pending:
+            return True
+        written = write_health_records(self.output_dir, pending)
+        if not written:
+            self._diagnostic_write_failed = True
+            self.record_failure("save", "write_error")
+        # Do not repeatedly flood stderr if the diagnostic destination is broken.
+        self._diagnostics_flushed = len(self._diagnostic_records)
+        return written
 
     def _get_default_session_dir(self) -> Path:
         """Get the default directory for session files."""
@@ -128,9 +168,7 @@ class AgentObserver:
 
         return cache_dir / "adr_sensor"
 
-    def ingest_all(
-        self, source_filter: str = "all"
-    ) -> Tuple[List[AgentEvent], List[SystemConfiguration]]:
+    def ingest_all(self, source_filter: str = "all") -> Tuple[List[AgentEvent], List[SystemConfiguration]]:
         """Ingest logs from all supported sources.
 
         Args:
@@ -142,6 +180,9 @@ class AgentObserver:
         """
         all_entries: List[AgentEvent] = []
         system_config_data: List[SystemConfiguration] = []
+        self._diagnostic_records = []
+        self._diagnostics_flushed = 0
+        self._diagnostic_write_failed = False
 
         print("\n" + "=" * 80)
         print("ADR Sensor Starting...")
@@ -158,21 +199,41 @@ class AgentObserver:
                 continue
 
             print(f"Ingesting {label} logs...")
+            parser_instance = getattr(self, f"{source}_parser")
+            if isinstance(parser_instance, BaseParser):
+                parser_instance.reset_diagnostics()
+            entries = []
+            filtered = []
+            parser_failed = False
             try:
-                entries = getattr(self, f"{source}_parser").parse_all()
+                parsed = parser_instance.parse_all()
+                if not isinstance(parsed, list):
+                    raise TypeError("parser must return a list of events")
+                entries = parsed
                 filtered = [e for e in entries if e.has_meaningful_content()]
                 all_entries.extend(filtered)
                 print(f"Found {len(filtered)} entries\n")
             except Exception as e:
                 print(f"Error ingesting {label} logs: {e}")
-                self._emit_error({
-                    "source": source,
-                    "stage": "parse",
-                    "error_type": e.__class__.__name__,
-                    "message": str(e),
-                    "trace": traceback.format_exc(limit=5),
-                })
+                parser_failed = True
+            finally:
+                reasons = parser_instance.get_diagnostics() if isinstance(parser_instance, BaseParser) else {}
+                if parser_failed:
+                    reasons["parser_error"] = reasons.get("parser_error", 0) + 1
+                self._diagnostic_records.append(
+                    health_record(
+                        source,
+                        "parse",
+                        counts={
+                            "events_returned": len(entries),
+                            "events_emitted": len(filtered),
+                            "events_filtered": len(entries) - len(filtered),
+                        },
+                        reasons=reasons,
+                    )
+                )
 
+        self.flush_diagnostics()
         return all_entries, system_config_data
 
     def display_summary(
@@ -206,8 +267,7 @@ class AgentObserver:
             else:
                 msg_count = sum(len(e.chat_history) for e in source_entries)
                 tool_count = sum(
-                    sum(len(msg.tools) for msg in e.chat_history if msg.role == "assistant")
-                    for e in source_entries
+                    sum(len(msg.tools) for msg in e.chat_history if msg.role == "assistant") for e in source_entries
                 )
                 summary_data.append([source.upper(), len(source_entries), msg_count, tool_count])
 
@@ -309,6 +369,8 @@ class AgentObserver:
 
         output_dir.mkdir(parents=True, exist_ok=True)
         saved_files = []
+        save_failures: Dict[str, int] = {}
+        save_successes: Dict[str, int] = {}
         session_file_index = (
             self._build_session_file_index(output_dir)
             if any(entry.source in self.CONTENT_AWARE_INCREMENTAL_SOURCES for entry in entries)
@@ -338,10 +400,7 @@ class AgentObserver:
                     )
                     filename = file_path.name
                     fresh_target = self._session_file_info(file_path)
-                    if (
-                        fresh_target is not None
-                        and fresh_target["data"].get("session_id") == entry.session_id
-                    ):
+                    if fresh_target is not None and fresh_target["data"].get("session_id") == entry.session_id:
                         existing_info = self._newer_session_file(existing_info, fresh_target)
                     if self._session_revision_regresses(entry, existing_info):
                         print(f"Skipped stale session: {filename}")
@@ -368,18 +427,13 @@ class AgentObserver:
                     self._index_session_file(session_file_index, file_path, entry_data)
 
                 saved_files.append(file_path)
+                source = entry.source if entry.source in DIAGNOSTIC_SOURCES else "sensor"
+                save_successes[source] = save_successes.get(source, 0) + 1
                 print(f"Saved session: {filename}")
             except Exception as e:
                 print(f"Error saving session {filename}: {e}")
-                self._emit_error(
-                    {
-                        "source": entry.source,
-                        "stage": "save_session",
-                        "error_type": e.__class__.__name__,
-                        "message": str(e),
-                        "session_id": entry.session_id,
-                    }
-                )
+                source = entry.source if entry.source in DIAGNOSTIC_SOURCES else "sensor"
+                save_failures[source] = save_failures.get(source, 0) + 1
             finally:
                 if temp_path is not None and temp_path.exists():
                     try:
@@ -389,6 +443,18 @@ class AgentObserver:
                 if lock_fd is not None and lock_path is not None:
                     self._release_session_lock(lock_fd)
 
+        for source in sorted(set(save_successes) | set(save_failures)):
+            failed = save_failures.get(source, 0)
+            succeeded = save_successes.get(source, 0)
+            self._diagnostic_records.append(
+                health_record(
+                    source,
+                    "save_session",
+                    counts={"attempted": failed + succeeded, "succeeded": succeeded, "failed": failed},
+                    reasons={"write_error": failed} if failed else {},
+                )
+            )
+        self.flush_diagnostics()
         print(f"\nSaved {len(saved_files)} sessions to: {output_dir}")
         return saved_files
 
@@ -518,18 +584,19 @@ class AgentObserver:
         candidate_event_count = AgentObserver._session_file_event_count(candidate)
         current_event_count = AgentObserver._session_file_event_count(current)
         if (
-            candidate_revision is not None
-            and (current_revision is None or candidate_revision > current_revision)
-        ) or (
-            candidate_revision == current_revision
-            and (
-                candidate_event_count is not None
-                and (current_event_count is None or candidate_event_count > current_event_count)
+            (candidate_revision is not None and (current_revision is None or candidate_revision > current_revision))
+            or (
+                candidate_revision == current_revision
+                and (
+                    candidate_event_count is not None
+                    and (current_event_count is None or candidate_event_count > current_event_count)
+                )
             )
-        ) or (
-            candidate_revision == current_revision
-            and candidate_event_count == current_event_count
-            and candidate["timestamp"] > current["timestamp"]
+            or (
+                candidate_revision == current_revision
+                and candidate_event_count == current_event_count
+                and candidate["timestamp"] > current["timestamp"]
+            )
         ):
             return candidate
         return current
@@ -635,9 +702,8 @@ class AgentObserver:
         preferred = output_dir / f"adr.{filename_session_id}.{timestamp_str}.json"
         if existing_info is not None and format_timestamp_for_filename(existing_info["timestamp"]) == timestamp_str:
             existing_session_part = existing_info["file_path"].name[4:-5].rsplit(".", 1)[0]
-            if (
-                existing_session_part == filename_session_id
-                or existing_session_part.startswith(f"{filename_session_id}_")
+            if existing_session_part == filename_session_id or existing_session_part.startswith(
+                f"{filename_session_id}_"
             ):
                 return existing_info["file_path"]
 
@@ -657,9 +723,7 @@ class AgentObserver:
                 return alternate
             counter += 1
 
-    def _session_revision_regresses(
-        self, entry: AgentEvent, existing_info: Optional[Dict[str, Any]]
-    ) -> bool:
+    def _session_revision_regresses(self, entry: AgentEvent, existing_info: Optional[Dict[str, Any]]) -> bool:
         """Prevent an older concurrent parse from replacing a newer snapshot."""
         if existing_info is None:
             return False
@@ -862,9 +926,19 @@ class AgentObserver:
     def _clean_filename(self, session_id: str) -> str:
         """Clean session_id for use in filename."""
         replacements = {
-            "\n": "_", "\r": "_", "\t": "_",
-            "/": "_", "\\": "_", ":": "_", "*": "_", "?": "_",
-            '"': "_", "<": "_", ">": "_", "|": "_", " ": "_",
+            "\n": "_",
+            "\r": "_",
+            "\t": "_",
+            "/": "_",
+            "\\": "_",
+            ":": "_",
+            "*": "_",
+            "?": "_",
+            '"': "_",
+            "<": "_",
+            ">": "_",
+            "|": "_",
+            " ": "_",
         }
 
         clean_id = session_id

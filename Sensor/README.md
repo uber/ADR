@@ -354,13 +354,91 @@ no redaction or field projection, so prompts, responses, tool arguments, tool
 results, usernames, hostnames, and local paths can be transmitted. Any
 normalization already performed by a source parser still applies.
 
-System-configuration records are sent as `adr.system.configuration` logs. Runs
-are not checkpointed specifically for OTLP: repeated runs can resend the same
-records, and consumers can use `adr.event.uuid` to deduplicate them.
+System-configuration records are sent as `adr.system.configuration` logs on each
+run. Sensor health logs are also sent on every run, even when all session snapshots
+are already acknowledged. With `--save-sessions`, successful session delivery is tracked independently
+of local session files. A failed export is retried on the next run, even when the
+local JSON already exists. A session is skipped only when its complete normalized
+payload was successfully exported to the same destination configuration. Changes
+to tool results, destination settings, or configured authentication headers cause
+a resend. The checkpoint also accounts for effective OTLP environment headers and
+mTLS client certificate/key paths. It does not read credential files: after
+changing certificate or key contents in place, remove the destination's checkpoint
+to resend sessions. Dynamic HTTP credential-provider plugins
+(`OTEL_PYTHON_EXPORTER_OTLP_HTTP_CREDENTIAL_PROVIDER` and its `LOGS` variant)
+are unsupported and cause an explicit error; use configured headers or mTLS.
 
-The one-shot Sensor process flushes and shuts down the exporter before exiting.
+Delivery checkpoints are hidden `.adr-otel-delivery.<hash>.json` files in the
+session output directory. They contain only hashes, including a destination hash
+that accounts for authentication headers; they do not store raw URLs, credentials,
+session identifiers, or payloads. Missing, unreadable, or corrupt checkpoints cause
+sessions to be retried. The checkpoint is replaced atomically only after flush and
+shutdown succeed; a checkpoint write failure exits with an error. `--no-save`
+disables checkpoint reads and writes. Without `--save-sessions`, every run exports
+all collected sessions.
+
+The one-shot Sensor process drains bounded batches and reconciles submitted and
+successfully exported counts before reporting success, so a full SDK queue cannot
+silently drop records. HTTP success is also checked for an OTLP acknowledgement:
+partial rejection or a malformed response fails delivery and leaves the affected
+run unacknowledged. Resolve persistent collector rejection before rerunning: OTLP
+does not identify individual rejected records, so retrying can resend accepted
+records too. Export or checkpoint failures exit with a nonzero status.
+Delivery is at least once: a collector may receive data before a timeout, process
+interruption, or checkpoint write failure, so retries can duplicate records.
+Checkpointing only covers sessions that are collected again on a later run; it is
+not a persistent payload queue. Consumers can use `adr.event.uuid` and a full
+payload digest to identify repeated snapshots, since a session UUID alone does not
+necessarily change when tool results change.
+
 Use an OpenTelemetry Collector when vendor-specific routing, transformation,
 retry, or persistent queuing is needed.
+
+### Sensor health and parser diagnostics
+
+Every ingestion run writes a content-free summary for each attempted source,
+including runs that produce no sessions. `diagnostics.jsonl` contains all summaries;
+`error.log` contains only `partial` and `failed` summaries. Both live under
+`--output-dir` (default `./output`), even when `--save-sessions` uses its separate
+default cache directory or `--no-save` suppresses captured session files. Each log
+rotates at 1 MiB with two backups. Use one active sensor process per output directory
+to avoid concurrent rotation races. Diagnostic write failures produce a fixed stderr
+warning and do not discard captured sessions.
+
+The versioned `adr.sensor.health` schema contains timestamp, sensor version, source,
+stage, status, fixed reason codes, and aggregate counts. For example:
+
+```json
+{"schema_version":1,"event":"adr.sensor.health","timestamp":"2026-01-01T00:00:00.000+00:00","sensor_version":"0.0.0","source":"claude","stage":"parse","status":"partial","suspected_schema_drift":false,"counts":{"events_returned":2,"events_emitted":2,"events_filtered":0},"reasons":{"record_decode_error":1}}
+```
+
+Statuses distinguish successful capture (`ok`), no meaningful output (`empty`),
+absent input (`no_input`), usable output with observed errors (`partial`), and
+errors without usable output (`failed`). Age filtering and an incomplete live
+tail are expected skips, not errors. `suspected_schema_drift` is a triage hint for
+explicitly unsupported record/content/schema shapes, not proof of an upstream
+format change. Generic corruption is reported separately.
+
+All ten parsers report observed recovery failures, but coverage is not exhaustive:
+some optional metadata/timestamp fallbacks, unknown record kinds, and compressed
+DSH tail recovery are not classified. Counts describe observed recovery operations,
+not necessarily unique damaged records. A healthy summary does not prove complete
+capture; a missing summary also cannot distinguish an idle endpoint from a sensor
+that never ran. Schedule runs and monitor last-seen health externally.
+
+With `--otel-config`, health is also sent as OTLP logs (`adr.event.type=sensor_health`),
+including when there are no session records. Health errors use WARN severity;
+expected skips use INFO. No OTLP exporter is created without that argument. A failed
+export is recorded locally because a broken destination cannot receive its own alert.
+`--fail-on-error` exits nonzero after preserving available capture when an observed
+parse/save/diagnostic failure occurs; by default these partial failures are reported
+without changing the existing continue-on-error behavior. OTLP failures remain nonzero.
+When `--resource` is enabled, `resource.log` also marks partial runs unsuccessful.
+
+New structured diagnostics never include prompts, tool arguments/results, paths,
+session IDs, exception messages, or tracebacks. This is a separate operational
+schema, **not redaction of captured telemetry**. Legacy console previews/errors and
+older entries already present in `error.log` are not sanitized by this change.
 
 ## Output Schema
 
@@ -541,8 +619,9 @@ cannot run on the current platform are skipped rather than failing.
 | `APPDATA`         | Cursor, Cline, Claude Desktop parsers | Windows roaming app-data root. Consulted first so redirected/roaming profiles resolve correctly (default `~/AppData/Roaming`) |
 | `LOCALAPPDATA`    | Warp parser                | Windows local app-data root, same redirected-profile handling (default `~/AppData/Local`) |
 
-Errors during ingestion never abort the run: each source is isolated, and failures
-are appended as single-line JSON records to `error.log` in the output directory.
+Each source is isolated during ingestion. See
+[Sensor health and parser diagnostics](#sensor-health-and-parser-diagnostics) for
+structured logs, partial-failure exit behavior, and monitoring limitations.
 
 ## Security Use Cases
 

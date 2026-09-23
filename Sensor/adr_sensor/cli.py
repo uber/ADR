@@ -24,7 +24,9 @@ except Exception:
     resource_mod = None
 
 from . import __version__
+from .diagnostics import health_record, write_health_records
 from .exporters import OpenTelemetryConfigError, load_opentelemetry_config
+from .exporters.delivery_checkpoint import DeliveryCheckpoint, DeliveryCheckpointError
 from .exporters.opentelemetry import OpenTelemetryExportError, OpenTelemetryLogExporter
 from .observer import AgentObserver
 
@@ -88,7 +90,12 @@ Examples:
         help="Directory to save output files (default: ./output)",
     )
     parser.add_argument("--limit", type=_non_negative_int, default=2, help="Number of entries to display")
-    parser.add_argument("--no-save", action="store_true", help="Do not save to file")
+    parser.add_argument(
+        "--no-save", action="store_true", help="Do not save captured sessions (diagnostics still written)"
+    )
+    parser.add_argument(
+        "--fail-on-error", action="store_true", help="Exit nonzero after partial capture or output failures"
+    )
     parser.add_argument(
         "--save-sessions",
         action="store_true",
@@ -130,6 +137,7 @@ Examples:
 
     success = True
     observer = None
+    stage = "startup"
 
     try:
         # Determine max_age_days
@@ -140,9 +148,24 @@ Examples:
         observer = AgentObserver(output_dir=args.output_dir, max_age_days=max_age_days)
 
         # Ingest logs
+        stage = "parse"
         entries, system_config_data = observer.ingest_all(args.source)
 
+        # A local file is not an OTLP acknowledgement. Keep remote candidates
+        # independent of local incremental filtering, including after a failed run.
+        otel_entries = entries
+        delivery_checkpoint = None
+        if otel_config is not None and args.save_sessions and not args.no_save:
+            stage = "export"
+            checkpoint_dir = args.output_dir if args.output_dir is not None else observer._get_default_session_dir()
+            delivery_checkpoint = DeliveryCheckpoint(checkpoint_dir, otel_config)
+            otel_entries = delivery_checkpoint.pending_entries(entries)
+            if delivery_checkpoint.load_failed:
+                observer.record_failure("export", "checkpoint_read_error")
+                print("OpenTelemetry delivery checkpoint unreadable or invalid; retrying sessions.", file=sys.stderr)
+
         # Apply incremental filtering
+        stage = "save"
         if args.save_sessions and entries:
             print("\nSession-based incremental mode: Checking existing session files...")
             original_count = len(entries)
@@ -154,6 +177,7 @@ Examples:
         observer.display_summary(entries, system_config_data, limit=args.limit)
 
         # Save
+        stage = "save"
         if entries or system_config_data:
             if not args.no_save:
                 if args.save_sessions:
@@ -171,26 +195,65 @@ Examples:
                         entries, system_config_data, output_format=args.output_format, output_dir=project_output_dir
                     )
 
-            if otel_config is not None:
-                otel_exporter = OpenTelemetryLogExporter(otel_config, service_version=get_version())
-                try:
-                    exported_count = otel_exporter.export(entries, system_config_data)
-                finally:
-                    otel_exporter.shutdown()
-                print(f"\nOpenTelemetry logs sent: {exported_count}")
+        if otel_config is not None:
+            # Health records must reach monitoring even when parsing produced
+            # no sessions, or all local session snapshots were unchanged.
+            stage = "export"
+            otel_exporter = OpenTelemetryLogExporter(otel_config, service_version=get_version())
+            try:
+                exported_count = otel_exporter.export(otel_entries, system_config_data)
+                otel_exporter.export_diagnostics(observer.get_diagnostic_records())
+            finally:
+                otel_exporter.shutdown()
+            if delivery_checkpoint is not None:
+                delivery_checkpoint.commit()
+            print(f"\nOpenTelemetry session/configuration logs sent: {exported_count}")
 
-        print("\nADR Sensor complete!\n")
+        success = observer.has_errors is not True
+        if success:
+            print("\nADR Sensor complete!\n")
+        else:
+            print("\nADR Sensor completed with errors; see diagnostics.jsonl.\n")
+            if args.fail_on_error:
+                raise SystemExit(1)
 
     except OpenTelemetryExportError as exc:
         success = False
+        if observer is not None:
+            observer.record_failure("export", "export_error")
         print(f"OpenTelemetry export failed: {exc}", file=sys.stderr)
         raise SystemExit(1)
+
+    except DeliveryCheckpointError as exc:
+        success = False
+        if observer is not None:
+            observer.record_failure("export", "checkpoint_write_error")
+        print(f"OpenTelemetry checkpoint failed: {exc}", file=sys.stderr)
+        raise SystemExit(1)
+
+    except Exception:
+        success = False
+        if observer is not None:
+            reason = {"parse": "parser_error", "save": "write_error", "export": "export_error"}.get(
+                stage, "startup_error"
+            )
+            observer.record_failure(stage, reason)
+        else:
+            write_health_records(
+                args.output_dir or Path.cwd() / "output",
+                [health_record("sensor", "startup", reasons={"startup_error": 1})],
+            )
+        raise
 
     except BaseException:
         success = False
         raise
 
     finally:
+        if observer is not None:
+            observer.flush_diagnostics()
+            if observer.has_errors is True:
+                success = False
         if capture_resource:
             try:
                 end_time = time.monotonic()

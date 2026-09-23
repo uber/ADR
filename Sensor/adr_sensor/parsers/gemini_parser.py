@@ -36,17 +36,21 @@ class GeminiParser(BaseParser):
         seen_paths = set()
         for base in self.base_paths:
             if not base.is_dir():
+                self.record_diagnostic("input_missing")
                 continue
             for chats in sorted(base.glob("*/chats")):
                 for path in sorted(chats.rglob("*")):
                     if path.suffix not in {".json", ".jsonl"}:
                         continue
+                    failure_code = "file_stat_error"
                     try:
                         if not path.is_file() or path.resolve() in seen_paths:
                             continue
                         seen_paths.add(path.resolve())
                         if self.max_age_days > 0 and path.stat().st_mtime < cutoff:
+                            self.record_diagnostic("file_age_skipped")
                             continue
+                        failure_code = "file_read_error"
                         entry = self.parse_file(path)
                         if entry is None or not entry.has_meaningful_content():
                             continue
@@ -55,6 +59,7 @@ class GeminiParser(BaseParser):
                         if old is None or self._revision(entry) > self._revision(old):
                             entries[entry.session_id] = entry
                     except (OSError, ValueError) as exc:
+                        self.record_diagnostic(failure_code)
                         print(f"[GEMINI] Unable to read {path}: {exc}")
         return list(entries.values())
 
@@ -88,6 +93,7 @@ class GeminiParser(BaseParser):
 
         def add_message(message: Any) -> None:
             if not isinstance(message, dict) or not isinstance(message.get("id"), str):
+                self.record_diagnostic("record_shape_error")
                 return
             messages[message["id"]] = message
             timestamp = self._timestamp(message.get("timestamp"))
@@ -96,6 +102,7 @@ class GeminiParser(BaseParser):
             calls = message.get("toolCalls")
             for call in calls if isinstance(calls, list) else []:
                 if not isinstance(call, dict):
+                    self.record_diagnostic("record_shape_error")
                     continue
                 timestamp = self._timestamp(call.get("timestamp"))
                 if timestamp:
@@ -105,10 +112,12 @@ class GeminiParser(BaseParser):
                     if permission not in permissions:
                         permissions.append(permission)
 
+        failure_code = "file_stat_error"
         try:
             # Capture before reading: appended records can advance the revision,
             # but later writes must not give a partial read a newer file timestamp.
             modified_at = datetime.fromtimestamp(path.stat().st_mtime, timezone.utc)
+            failure_code = "file_read_error"
             with path.open(encoding="utf-8") as handle:
                 if path.suffix == ".json":
                     records = [json.load(handle)]
@@ -120,9 +129,11 @@ class GeminiParser(BaseParser):
                         try:
                             records.append(json.loads(line))
                         except json.JSONDecodeError:
+                            self.record_diagnostic("record_decode_error")
                             malformed += 1
             for record in records:
                 if not isinstance(record, dict):
+                    self.record_diagnostic("record_shape_error")
                     malformed += 1
                     continue
                 event_count += 1
@@ -134,6 +145,7 @@ class GeminiParser(BaseParser):
                     continue
                 update = record.get("$set", record)
                 if not isinstance(update, dict):
+                    self.record_diagnostic("record_shape_error")
                     malformed += 1
                     continue
                 if "$set" in record:
@@ -143,11 +155,16 @@ class GeminiParser(BaseParser):
                 for message in checkpoint if isinstance(checkpoint, list) else []:
                     add_message(message)
         except (OSError, UnicodeError, ValueError) as exc:
+            self.record_diagnostic(
+                "record_decode_error" if isinstance(exc, json.JSONDecodeError) else failure_code
+            )
             print(f"[GEMINI] Unable to parse {path}: {exc}")
             return None
 
         session_id = metadata.get("sessionId")
         if not isinstance(session_id, str) or not session_id:
+            if event_count:
+                self.record_diagnostic("record_shape_error")
             return None
         history = []
         message_metadata = {}
@@ -167,6 +184,9 @@ class GeminiParser(BaseParser):
             details["tool_metadata"] = []
             for call in calls if isinstance(calls, list) else []:
                 if not isinstance(call, dict) or not isinstance(call.get("name"), str):
+                    # Non-object calls were counted while collecting messages.
+                    if isinstance(call, dict):
+                        self.record_diagnostic("record_shape_error")
                     continue
                 tools.append(self._tool(call))
                 details["tool_metadata"].append({k: v for k, v in call.items() if k not in {"args", "result"}})
@@ -236,8 +256,7 @@ class GeminiParser(BaseParser):
             else None,
         )
 
-    @staticmethod
-    def _project_path(path: Path) -> Optional[str]:
+    def _project_path(self, path: Path) -> Optional[str]:
         chats = next((parent for parent in path.parents if parent.name == "chats"), None)
         if chats is None:
             return None
@@ -246,14 +265,20 @@ class GeminiParser(BaseParser):
             marker = (project / ".project_root").read_text(encoding="utf-8").strip()
             if marker:
                 return marker
-        except (OSError, UnicodeError):
+        except (OSError, UnicodeError) as exc:
+            if not isinstance(exc, FileNotFoundError):
+                self.record_diagnostic("file_read_error")
             pass
         try:
             registry = json.loads((project.parent.parent / "projects.json").read_text(encoding="utf-8"))
             projects = registry.get("projects", {}) if isinstance(registry, dict) else {}
             if isinstance(projects, dict):
                 return next((key for key, value in projects.items() if value == project.name), None)
-        except (OSError, UnicodeError, ValueError):
+        except (OSError, UnicodeError, ValueError) as exc:
+            if not isinstance(exc, FileNotFoundError):
+                self.record_diagnostic(
+                    "record_decode_error" if isinstance(exc, json.JSONDecodeError) else "file_read_error"
+                )
             pass
         return None
 

@@ -45,6 +45,7 @@ class CursorParser(BaseParser):
         entries = []
 
         if not self.db_path.exists():
+            self.record_diagnostic("input_missing")
             print(f"[CURSOR] No database found at {self.db_path}")
             return entries
 
@@ -52,6 +53,7 @@ class CursorParser(BaseParser):
             entries = self.parse_conversations_from_bubbles()
             print(f"[CURSOR] Found {len(entries)} entries")
         except Exception as e:
+            self.record_diagnostic("database_error")
             print(f"[CURSOR] Error parsing database: {e}")
 
         return entries
@@ -77,11 +79,13 @@ class CursorParser(BaseParser):
                         try:
                             conv_timestamp = normalize_timestamp(metadata["lastUpdatedAt"])
                         except Exception:
+                            self.record_diagnostic("invalid_timestamp")
                             pass
                     if conv_timestamp is None and "createdAt" in metadata:
                         try:
                             conv_timestamp = normalize_timestamp(metadata["createdAt"])
                         except Exception:
+                            self.record_diagnostic("invalid_timestamp")
                             pass
 
                     if conv_timestamp is None or conv_timestamp >= cutoff_time:
@@ -90,6 +94,7 @@ class CursorParser(BaseParser):
                         skipped_count += 1
 
                 if skipped_count > 0:
+                    self.record_diagnostic("file_age_skipped", skipped_count)
                     print(f"[CURSOR] Skipped {skipped_count} conversations older than {self.max_age_days} days")
 
                 cursor.execute("SELECT key, value FROM cursorDiskKV WHERE key LIKE 'bubbleId:%'")
@@ -112,10 +117,12 @@ class CursorParser(BaseParser):
                                     bubble_data = json.loads(value)
                                     conversations[conv_id].append(bubble_data)
                                 except json.JSONDecodeError:
+                                    self.record_diagnostic("record_decode_error")
                                     continue
                             else:
                                 conversations[conv_id].append(value)
                     except Exception:
+                        self.record_diagnostic("record_shape_error")
                         continue
 
                 for conv_id, bubbles in conversations.items():
@@ -124,11 +131,13 @@ class CursorParser(BaseParser):
                         if entry:
                             entries.append(entry)
                     except Exception:
+                        self.record_diagnostic("session_build_error")
                         pass
             finally:
                 conn.close()
 
         except Exception as e:
+            self.record_diagnostic("database_error")
             print(f"[CURSOR] Error parsing conversations: {e}")
 
         return entries
@@ -168,13 +177,18 @@ class CursorParser(BaseParser):
                                 metadata_entry["lastUpdatedAt"] = data["lastUpdatedAt"]
                             if metadata_entry:
                                 metadata[composer_id] = metadata_entry
+                        else:
+                            self.record_diagnostic("record_shape_error")
                     except json.JSONDecodeError:
+                        self.record_diagnostic("record_decode_error")
                         pass
 
                 except Exception:
+                    self.record_diagnostic("record_shape_error")
                     continue
 
         except Exception as e:
+            self.record_diagnostic("database_error")
             print(f"[CURSOR] Error getting composer metadata: {e}")
 
         return metadata
@@ -185,6 +199,8 @@ class CursorParser(BaseParser):
         """Parse a single conversation from its bubbles."""
         try:
             valid_bubbles = [b for b in bubbles if isinstance(b, dict)]
+            if len(valid_bubbles) < len(bubbles):
+                self.record_diagnostic("record_shape_error", len(bubbles) - len(valid_bubbles))
 
             if not valid_bubbles:
                 return None
@@ -198,11 +214,13 @@ class CursorParser(BaseParser):
                     try:
                         timestamp = normalize_timestamp(metadata["lastUpdatedAt"])
                     except Exception:
+                        self.record_diagnostic("invalid_timestamp")
                         pass
                 elif "createdAt" in metadata:
                     try:
                         timestamp = normalize_timestamp(metadata["createdAt"])
                     except Exception:
+                        self.record_diagnostic("invalid_timestamp")
                         pass
 
             entry = AgentEvent(timestamp=timestamp, source="cursor", session_id=f"cursor_{conv_id}")
@@ -234,6 +252,7 @@ class CursorParser(BaseParser):
             return entry
 
         except Exception:
+            self.record_diagnostic("session_build_error")
             pass
 
         return None
@@ -250,6 +269,7 @@ class CursorParser(BaseParser):
                 if extracted_text:
                     return extracted_text.strip()
             except json.JSONDecodeError:
+                self.record_diagnostic("record_decode_error")
                 pass
 
         if isinstance(text, str):
@@ -313,5 +333,6 @@ class CursorParser(BaseParser):
             elif isinstance(node, list):
                 return " ".join(self._extract_text_recursive(item) for item in node)
         except Exception:
+            self.record_diagnostic("record_shape_error")
             pass
         return ""
