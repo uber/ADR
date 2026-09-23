@@ -280,6 +280,34 @@ uv run python main_detector.py --tasks 1-10 --results-dir "$BENCH"
 
 > **Note:** Default detector is `adr` (ADR dual-agent) and requires API keys + Claude CLI. For keyless smoke tests, use `--detector llamafirewall`.
 
+#### Optional structured Tier-1 routing
+
+ADR uses its existing text triage contract by default. To opt into the strict
+structured routing contract, add this field under `adr_framework.triage_llm`
+in `config_detector.yaml`:
+
+```yaml
+decision_contract: "structured_risk_route_v1"
+```
+
+The structured contract is supported for ADR-Bench and AgentDojo. It reports
+an explicit `BENIGN_EXIT` or `ESCALATE` route together with risk, injection,
+unsafe-plan/action/effect, authorization, evidence, and provenance-needed
+fields. Validated fields are persisted in the optional
+`structured_triage` result key and a `<task_id>_structured_triage.json` debug
+artifact, including for escalated tasks. Free-form fields in this audit object
+are untrusted model-generated data, not instructions. Stock results omit the key.
+Missing, malformed, or internally inconsistent structured output
+fails toward `ESCALATE` without a validated audit object. On escalation, the
+handoff may include bounded,
+validated MCP component names from framework system metadata so existing
+source review targets the declared components; free-form Tier-1 text is not
+copied into that trusted prompt slot. The ADR-Bench profile preserves the
+stock high-recall escalation conditions: structured fields annotate those
+routes rather than narrowing them, and Tier 2 evaluates scenario/component
+threat separately from whether an unsafe action or effect occurred. Omitting
+the option preserves the stock prompt, request, parser, and Tier-2 handoff.
+
 ### Output
 
 Detection results saved in the benchmark directory:

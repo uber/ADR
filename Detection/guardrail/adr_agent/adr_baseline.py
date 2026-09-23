@@ -12,6 +12,7 @@ import time
 import json
 import logging
 import subprocess
+from copy import deepcopy
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 import sys
@@ -222,6 +223,18 @@ class ADSConfig:
     def get_triage_model(self) -> str:
         return self.triage_config.get('model', 'gpt-4o')
 
+    def get_triage_decision_contract(self) -> str:
+        """Return the selected Tier-1 output contract.
+
+        Omitting the setting preserves the original text prompt and parser.
+        Contract names are validated when the triage implementation is built.
+        """
+
+        value = self.triage_config.get('decision_contract', 'stock_text')
+        if not isinstance(value, str) or not value:
+            raise ValueError("ADR triage decision_contract must be a nonempty string")
+        return value
+
     def get_triage_rates(self) -> tuple[float, float]:
         return (self.triage_config.get('cost_per_1m_input', 2.50),
                 self.triage_config.get('cost_per_1m_output', 10.00))
@@ -249,7 +262,9 @@ class ADRBaseline(BaseDetector):
 
         # Initialize dual-agent system using API keys
         self.openai_client = get_openai_client()
-        self.triage_llm = TriageLLM(self.openai_client, self.config, benchmark_type=benchmark_type)
+        self.triage_llm = _build_triage_llm(
+            self.openai_client, self.config, benchmark_type=benchmark_type
+        )
         self.reasoning_agent = ReasoningAgent(self.config, benchmark_type=benchmark_type)
 
         logger.info(f"ADR initialized ({benchmark_type}): {self.config.get_triage_model()} + {self.config.get_reasoning_model()}")
@@ -333,6 +348,7 @@ class ADRBaseline(BaseDetector):
             # downstream can fail or redact it further.
             logger.warning(f"🔍 {deterministic_result.reason}")
 
+        structured_triage = None
         # Check if triage is enabled
         if self.config.enable_triage:
             # Stage 1: Triage LLM (first line of defense per proposal),
@@ -340,6 +356,17 @@ class ADRBaseline(BaseDetector):
             # need to pay for an LLM call when we already have a
             # definitive signal.
             triage_result = deterministic_result or self.triage_llm.analyze(messages)
+            audit = getattr(triage_result, 'structured_output', None)
+            if isinstance(audit, dict):
+                structured_triage = deepcopy(audit)
+                # Save before Tier 2 so its failure cannot erase the routing audit.
+                # Free-form evidence stays in artifacts, never in the trusted handoff.
+                audit_file = self.reasoning_agent.debug_log_dir / f"{_safe_task_id_for_path(task_id)}_structured_triage.json"
+                try:
+                    with open(audit_file, 'w') as f:
+                        json.dump({'task_id': task_id, 'structured_triage': structured_triage}, f, indent=2)
+                except OSError:
+                    logger.warning("Could not write structured triage audit artifact")
 
             # Fast path for clearly benign (saves Claude resources)
             if not triage_result.is_suspicious:
@@ -362,7 +389,8 @@ class ADRBaseline(BaseDetector):
                         'analysis_time': analysis_time,
                         'input_tokens': triage_result.input_tokens,
                         'output_tokens': triage_result.output_tokens,
-                        'cost_usd': triage_cost
+                        'cost_usd': triage_cost,
+                        **({'structured_triage': structured_triage} if structured_triage is not None else {}),
                     }, f, indent=2)
                 logger.info(f"📝 Triage-only log saved: {triage_log_file}")
 
@@ -383,7 +411,8 @@ class ADRBaseline(BaseDetector):
                     analysis_time=analysis_time,
                     input_tokens=triage_result.input_tokens,
                     output_tokens=triage_result.output_tokens,
-                    cost_usd=triage_cost
+                    cost_usd=triage_cost,
+                    structured_triage=structured_triage,
                 )
 
             triage_reasoning = f"Triage escalation: {triage_result.prompt_reason or triage_result.reason}"
@@ -420,6 +449,8 @@ class ADRBaseline(BaseDetector):
             reasoning_result.output_tokens = triage_tokens_out + (reasoning_result.output_tokens or 0)
             reasoning_result.cost_usd = total_cost
 
+        if structured_triage is not None:
+            reasoning_result.structured_triage = structured_triage
         return reasoning_result
 
 
@@ -663,6 +694,29 @@ CONFIDENCE: [0.0-1.0]"""
         return "\n".join(formatted)
 
 
+def _build_triage_llm(
+    openai_client: Any,
+    config: ADSConfig,
+    benchmark_type: str,
+) -> TriageLLM:
+    """Build the configured Tier-1 implementation.
+
+    The structured implementation is imported lazily so the stock path keeps
+    the same class, prompt, parser, and OpenAI request body as before.
+    """
+
+    decision_contract = config.get_triage_decision_contract()
+    if decision_contract == "stock_text":
+        return TriageLLM(openai_client, config, benchmark_type=benchmark_type)
+    if decision_contract == "structured_risk_route_v1":
+        from .structured_risk_route_triage import StructuredRiskRouteTriageLLM
+
+        return StructuredRiskRouteTriageLLM(
+            openai_client, config, benchmark_type=benchmark_type
+        )
+    raise ValueError(f"Unknown ADR triage decision contract: {decision_contract!r}")
+
+
 class ReasoningAgent:
     """High-precision reasoning with persistent workspace and enterprise MCP intelligence"""
 
@@ -898,6 +952,8 @@ class ReasoningAgent:
             raise RuntimeError(f"Claude analysis failed: {result.stderr}")
 
         claude_result = json.loads(result.stdout)
+        if isinstance(claude_result, list):
+            claude_result = next((item for item in reversed(claude_result) if isinstance(item, dict) and item.get('type') == 'result'), claude_result[-1] if claude_result else {})
         if claude_result.get('subtype') != 'success' or claude_result.get('is_error'):
             error_msg = claude_result.get('result', 'Unknown error')
             raise ValueError(f"Claude analysis failed: {error_msg}")
@@ -1139,6 +1195,8 @@ Do not classify as malicious because of:
         try:
             # Parse the Claude result to find the session file path
             claude_result = json.loads(stdout)
+            if isinstance(claude_result, list):
+                claude_result = next((item for item in reversed(claude_result) if isinstance(item, dict) and item.get('type') == 'result'), claude_result[-1] if claude_result else {})
             session_id = claude_result.get('session_id')
 
             if not session_id:
