@@ -9,6 +9,7 @@ Performance-optimized: Skips log files older than 2 weeks by default.
 """
 
 import json
+import logging
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -18,6 +19,8 @@ from ..schemas.agent_event_schema import AgentEvent, ChatMessage, ToolUsage
 from ..utils.string_utils import truncate_middle
 from ..utils.timestamp_utils import normalize_timestamp
 from .base_parser import BaseParser
+
+logger = logging.getLogger(__name__)
 
 MAX_LOG_AGE_DAYS = 14
 
@@ -87,7 +90,7 @@ class ClaudeParser(BaseParser):
             raise
         if not base_exists:
             self.record_diagnostic("input_missing")
-            print(f"[CLAUDE] No logs found at {self.base_path}")
+            logger.info("[CLAUDE] No logs found at %s", self.base_path)
             return entries
 
         try:
@@ -95,7 +98,7 @@ class ClaudeParser(BaseParser):
         except OSError:
             self.record_diagnostic("file_read_error")
             raise
-        print(f"[CLAUDE] Found {len(jsonl_files)} JSONL files")
+        logger.info("[CLAUDE] Found %s JSONL files", len(jsonl_files))
 
         cutoff_time = datetime.now(timezone.utc) - timedelta(days=self.max_age_days)
         filtered_files = []
@@ -114,9 +117,9 @@ class ClaudeParser(BaseParser):
                 skipped_count += 1
 
         if skipped_count > 0:
-            print(f"[CLAUDE] Skipped {skipped_count} files older than {self.max_age_days} days")
+            logger.info("[CLAUDE] Skipped %s files older than %s days", skipped_count, self.max_age_days)
 
-        print(f"[CLAUDE] Processing {len(filtered_files)} recent files")
+        logger.info("[CLAUDE] Processing %s recent files", len(filtered_files))
 
         for jsonl_file in filtered_files:
             try:
@@ -124,7 +127,7 @@ class ClaudeParser(BaseParser):
                 entries.extend(file_entries)
             except Exception as e:
                 self.record_diagnostic("parser_error")
-                print(f"[CLAUDE] Error parsing {jsonl_file}: {e}")
+                logger.warning("[CLAUDE] Error parsing %s: %s", jsonl_file, e)
 
         return entries
 
@@ -287,7 +290,7 @@ class ClaudeParser(BaseParser):
 
         except (OSError, UnicodeError) as e:
             self.record_diagnostic("file_read_error")
-            print(f"[CLAUDE] Error reading {file_path}: {e}")
+            logger.warning("[CLAUDE] Error reading %s: %s", file_path, e)
 
         for (session_id, _), session_data in sessions.items():
             entry = self._create_entry_from_extracted_session(session_id, session_data, file_path)
@@ -456,5 +459,5 @@ class ClaudeParser(BaseParser):
 
         except Exception as e:
             self.record_diagnostic("file_stat_error" if isinstance(e, OSError) else "session_build_error")
-            print(f"[CLAUDE] Error creating entry for session {session_id}: {e}")
+            logger.warning("[CLAUDE] Error creating entry for session %s: %s", session_id, e)
             return None
