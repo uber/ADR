@@ -19,10 +19,14 @@ Runtime logs are separate from the content-free health records written by
 ``diagnostics.py``: they describe what the sensor did, not how healthy a run was.
 """
 
+import json
 import logging
 import sys
+from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+
+from . import __version__
 
 LOGGER_NAME = "adr_sensor"
 
@@ -66,6 +70,48 @@ def component_for(record: logging.LogRecord) -> str:
         return "sensor"
     prefix = LOGGER_NAME + "."
     return name[len(prefix) :] if name.startswith(prefix) else name
+
+
+def _exception_type(record: logging.LogRecord):
+    """Name the exception attached to *record*, or the first one passed as an argument."""
+    if record.exc_info and record.exc_info[0] is not None:
+        return record.exc_info[0].__name__
+    args = record.args if isinstance(record.args, tuple) else ()
+    for arg in args:
+        if isinstance(arg, BaseException):
+            return type(arg).__name__
+    return None
+
+
+class JsonRecordFormatter(logging.Formatter):
+    """Format records as one JSON object per line for the runtime log files.
+
+    Every record carries ``timestamp``, ``level``, ``component``, ``function``,
+    ``phase``, ``sensor_version`` and ``exception_type``. The rendered
+    ``message`` and, when an exception is attached, its ``stack`` are included
+    unless *include_details* is false, which keeps records free of paths and
+    error text.
+    """
+
+    def __init__(self, *, include_details: bool = True) -> None:
+        super().__init__()
+        self.include_details = include_details
+
+    def format(self, record: logging.LogRecord) -> str:
+        data = {
+            "timestamp": datetime.fromtimestamp(record.created, timezone.utc).isoformat(timespec="milliseconds"),
+            "level": record.levelname,
+            "component": component_for(record),
+            "function": record.funcName,
+            "phase": getattr(record, "phase", None),
+            "sensor_version": __version__,
+            "exception_type": _exception_type(record),
+        }
+        if self.include_details:
+            data["message"] = record.getMessage()
+            if record.exc_info:
+                data["stack"] = self.formatException(record.exc_info)
+        return json.dumps(data, ensure_ascii=False, separators=(",", ":"), default=str)
 
 
 def _console_handlers():

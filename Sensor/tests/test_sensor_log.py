@@ -1,14 +1,16 @@
 """Tests for the leveled sensor logger."""
 
 import importlib
+import json
 import logging
 import pkgutil
+import sys
 from unittest.mock import patch
 
 import pytest
 
 import adr_sensor.parsers as parsers
-from adr_sensor import sensor_log
+from adr_sensor import __version__, sensor_log
 from adr_sensor.cli import main
 
 
@@ -138,3 +140,47 @@ def test_every_parser_logs_through_a_sensor_child_logger():
             continue
         module = importlib.import_module(f"adr_sensor.parsers.{module_info.name}")
         assert module.logger.name == f"adr_sensor.parsers.{module_info.name}"
+
+
+def _record(msg="[EXAMPLE] Error reading %s: %s", args=("/tmp/example.jsonl", OSError("denied")), **extra):
+    record = logging.LogRecord("adr_sensor.parsers.example_parser", logging.WARNING, "", 0, msg, args, None)
+    record.funcName = "parse_all"
+    record.__dict__.update(extra)
+    return record
+
+
+def test_json_formatter_includes_the_message_by_default():
+    data = json.loads(sensor_log.JsonRecordFormatter().format(_record(phase="parse")))
+    assert data["level"] == "WARNING"
+    assert data["component"] == "parsers.example_parser"
+    assert data["function"] == "parse_all"
+    assert data["phase"] == "parse"
+    assert data["sensor_version"] == __version__
+    assert data["exception_type"] == "OSError"
+    assert data["message"] == "[EXAMPLE] Error reading /tmp/example.jsonl: denied"
+    assert "stack" not in data
+
+
+def test_json_formatter_includes_the_stack_of_an_attached_exception():
+    try:
+        raise ValueError("synthetic")
+    except ValueError:
+        record = _record(msg="failed", args=())
+        record.exc_info = sys.exc_info()
+    data = json.loads(sensor_log.JsonRecordFormatter().format(record))
+    assert data["exception_type"] == "ValueError"
+    assert "Traceback" in data["stack"]
+    assert data["stack"].rstrip().endswith("ValueError: synthetic")
+
+
+def test_json_formatter_can_omit_message_and_stack():
+    try:
+        raise ValueError("SECRET_CANARY")
+    except ValueError:
+        record = _record()
+        record.exc_info = sys.exc_info()
+    line = sensor_log.JsonRecordFormatter(include_details=False).format(record)
+    data = json.loads(line)
+    assert "message" not in data and "stack" not in data
+    assert data["exception_type"] == "ValueError"
+    assert "SECRET_CANARY" not in line and "/tmp/example.jsonl" not in line
