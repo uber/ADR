@@ -184,3 +184,90 @@ def test_json_formatter_can_omit_message_and_stack():
     assert "message" not in data and "stack" not in data
     assert data["exception_type"] == "ValueError"
     assert "SECRET_CANARY" not in line and "/tmp/example.jsonl" not in line
+
+
+@pytest.fixture
+def runtime_log(tmp_path):
+    yield tmp_path
+    sensor_log.disable_runtime_log()
+
+
+def _lines(path):
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+
+
+def test_runtime_log_splits_records_by_level(runtime_log, capsys):
+    assert sensor_log.enable_runtime_log(runtime_log)
+    log = logging.getLogger("adr_sensor.observer")
+    log.debug("detail")
+    log.info("progress")
+    log.warning("skipped")
+    log.error("failed")
+    sensor_log.disable_runtime_log()
+
+    debug = _lines(runtime_log / "sensor_runtime_debug.jsonl")
+    errors = _lines(runtime_log / "sensor_runtime_errors.jsonl")
+    assert [(r["level"], r["message"]) for r in debug] == [("DEBUG", "detail"), ("INFO", "progress")]
+    assert [(r["level"], r["message"]) for r in errors] == [("WARNING", "skipped"), ("ERROR", "failed")]
+    assert "detail" not in capsys.readouterr().out
+
+
+def test_runtime_log_can_be_content_free(runtime_log):
+    sensor_log.enable_runtime_log(runtime_log, include_details=False)
+    logging.getLogger("adr_sensor.observer").warning("Error saving session %s", "SECRET_CANARY")
+    sensor_log.disable_runtime_log()
+    text = (runtime_log / "sensor_runtime_errors.jsonl").read_text(encoding="utf-8")
+    assert "SECRET_CANARY" not in text
+    assert json.loads(text)["component"] == "observer"
+
+
+def test_enabling_the_runtime_log_again_replaces_the_files(runtime_log):
+    sensor_log.enable_runtime_log(runtime_log / "first")
+    sensor_log.enable_runtime_log(runtime_log / "second")
+    logging.getLogger("adr_sensor.cli").warning("once")
+    sensor_log.disable_runtime_log()
+    assert len(sensor_log._runtime_handlers()) == 0
+    assert (runtime_log / "first" / "sensor_runtime_errors.jsonl").read_text() == ""
+    assert len(_lines(runtime_log / "second" / "sensor_runtime_errors.jsonl")) == 1
+
+
+def test_runtime_log_rotates_by_size(runtime_log, monkeypatch):
+    monkeypatch.setattr(sensor_log, "MAX_LOG_BYTES", 200)
+    sensor_log.enable_runtime_log(runtime_log)
+    for index in range(10):
+        logging.getLogger("adr_sensor.cli").warning("record %d", index)
+    sensor_log.disable_runtime_log()
+    assert (runtime_log / "sensor_runtime_errors.jsonl.1").exists()
+    assert (runtime_log / "sensor_runtime_errors.jsonl.2").exists()
+    assert not (runtime_log / "sensor_runtime_errors.jsonl.3").exists()
+
+
+def test_unwritable_runtime_log_falls_back_to_stderr(runtime_log, capsys):
+    blocked = runtime_log / "blocked"
+    blocked.write_text("not a directory", encoding="utf-8")
+    assert sensor_log.enable_runtime_log(blocked) is False
+    logging.getLogger("adr_sensor.cli").error("still visible")
+    err = capsys.readouterr().err
+    assert "Unable to open the runtime log" in err
+    assert "still visible" in err
+    assert sensor_log._runtime_handlers() == []
+
+
+def test_runtime_log_write_failure_is_reported_once(runtime_log, capsys):
+    sensor_log.enable_runtime_log(runtime_log)
+    class _FullDisk:
+        def write(self, text):
+            raise OSError("no space left on device")
+
+        def flush(self):
+            raise OSError("no space left on device")
+
+    for handler in sensor_log._runtime_handlers():
+        handler.stream.close()
+        handler.stream = _FullDisk()
+    log = logging.getLogger("adr_sensor.cli")
+    log.warning("first")
+    log.warning("second")
+    err = capsys.readouterr().err
+    assert err.count("Unable to write the runtime log sensor_runtime_errors.jsonl") == 1
+    assert "first\n" in err and "second\n" in err

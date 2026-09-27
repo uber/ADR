@@ -29,6 +29,8 @@ from pathlib import Path
 from . import __version__
 
 LOGGER_NAME = "adr_sensor"
+RUNTIME_ERRORS_LOG = "sensor_runtime_errors.jsonl"
+RUNTIME_DEBUG_LOG = "sensor_runtime_debug.jsonl"
 
 # Size-based rotation shared by the sensor's append-only files.
 MAX_LOG_BYTES = 1024 * 1024
@@ -140,6 +142,65 @@ def set_console_level(level) -> None:
         raise ValueError(f"unknown log level: {level!r}")
     for handler in _console_handlers():
         handler.setLevel(level)
+
+
+class _RuntimeFileHandler(RotatingFileHandler):
+    """Rotating runtime log file that never interrupts or floods a run."""
+
+    def handleError(self, record: logging.LogRecord) -> None:
+        if getattr(self, "_reported_error", False):
+            return
+        self._reported_error = True
+        sys.stderr.write(f"[ADR] Unable to write the runtime log {Path(self.baseFilename).name}; continuing.\n")
+
+
+def _runtime_handlers():
+    return [handler for handler in logger.handlers if isinstance(handler, _RuntimeFileHandler)]
+
+
+def disable_runtime_log() -> None:
+    """Detach and close the runtime log files, if any."""
+    for handler in _runtime_handlers():
+        logger.removeHandler(handler)
+        try:
+            handler.close()
+        except (OSError, ValueError):
+            pass
+
+
+def enable_runtime_log(directory: Path, *, include_details: bool = True) -> bool:
+    """Also write sensor log records to rotating JSON-lines files in *directory*.
+
+    WARNING and above go to ``sensor_runtime_errors.jsonl``; DEBUG and INFO go
+    to ``sensor_runtime_debug.jsonl`` whatever the console level is. Each file
+    rotates at 1 MiB with two backups. Calling it again replaces the previous
+    files. If the files cannot be opened, warnings and errors still reach
+    stderr through the console handlers and this returns ``False``.
+    """
+    disable_runtime_log()
+    formatter = JsonRecordFormatter(include_details=include_details)
+    handlers = []
+    try:
+        directory = Path(directory)
+        directory.mkdir(parents=True, exist_ok=True)
+        for name, level_filter in (
+            (RUNTIME_ERRORS_LOG, _WarningAndAboveFilter()),
+            (RUNTIME_DEBUG_LOG, _BelowWarningFilter()),
+        ):
+            handler = _RuntimeFileHandler(
+                directory / name, maxBytes=MAX_LOG_BYTES, backupCount=LOG_BACKUP_COUNT, encoding="utf-8"
+            )
+            handler.addFilter(level_filter)
+            handler.setFormatter(formatter)
+            handlers.append(handler)
+    except OSError:
+        for handler in handlers:
+            handler.close()
+        logger.warning("[ADR] Unable to open the runtime log; warnings and errors are printed to stderr only.")
+        return False
+    for handler in handlers:
+        logger.addHandler(handler)
+    return True
 
 
 def append_rotating_line(
