@@ -82,3 +82,25 @@ def test_sensor_records_do_not_propagate_to_root():
 def test_component_is_derived_from_logger_name(name, component):
     record = logging.LogRecord(name, logging.INFO, "", 0, "msg", (), None)
     assert sensor_log.component_for(record) == component
+
+
+def test_append_rotating_line_appends_lines(tmp_path):
+    path = tmp_path / "resource.log"
+    sensor_log.append_rotating_line(path, '{"n":1}')
+    sensor_log.append_rotating_line(path, '{"n":2}')
+    assert path.read_text(encoding="utf-8") == '{"n":1}\n{"n":2}\n'
+
+
+def test_append_rotating_line_rotates_by_size_and_keeps_backups(tmp_path):
+    path = tmp_path / "resource.log"
+    for index in range(6):
+        sensor_log.append_rotating_line(path, f"line-{index}-" + "x" * 20, max_bytes=40, backup_count=2)
+    assert path.read_text(encoding="utf-8").startswith("line-5-")
+    assert (tmp_path / "resource.log.1").read_text(encoding="utf-8").startswith("line-4-")
+    assert (tmp_path / "resource.log.2").read_text(encoding="utf-8").startswith("line-3-")
+    assert not (tmp_path / "resource.log.3").exists()
+
+
+def test_append_rotating_line_raises_when_the_file_cannot_be_written(tmp_path):
+    with pytest.raises(OSError):
+        sensor_log.append_rotating_line(tmp_path / "missing" / "resource.log", "line")

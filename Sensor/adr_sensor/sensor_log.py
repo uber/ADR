@@ -21,8 +21,14 @@ Runtime logs are separate from the content-free health records written by
 
 import logging
 import sys
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 LOGGER_NAME = "adr_sensor"
+
+# Size-based rotation shared by the sensor's append-only files.
+MAX_LOG_BYTES = 1024 * 1024
+LOG_BACKUP_COUNT = 2
 
 logger = logging.getLogger(LOGGER_NAME)
 
@@ -88,6 +94,30 @@ def set_console_level(level) -> None:
         raise ValueError(f"unknown log level: {level!r}")
     for handler in _console_handlers():
         handler.setLevel(level)
+
+
+def append_rotating_line(
+    path: Path, line: str, *, max_bytes: int = MAX_LOG_BYTES, backup_count: int = LOG_BACKUP_COUNT
+) -> None:
+    """Append one line to *path*, rotating it by size first when needed.
+
+    Rotation renames the active file to ``<name>.1`` (and so on up to
+    *backup_count*) instead of rewriting it, so tailing readers never see a
+    truncated file. Use one sensor process per output directory: rotation is
+    not coordinated between concurrent writers.
+    """
+    handler = RotatingFileHandler(Path(path), maxBytes=max_bytes, backupCount=backup_count, encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(message)s"))
+
+    # Handler.emit normally reports write failures itself; let the caller decide.
+    def handle_error(record):
+        raise OSError("rotating append failed")
+
+    handler.handleError = handle_error
+    try:
+        handler.handle(logging.LogRecord(LOGGER_NAME, logging.INFO, "", 0, line, (), None))
+    finally:
+        handler.close()
 
 
 logger.setLevel(logging.DEBUG)
