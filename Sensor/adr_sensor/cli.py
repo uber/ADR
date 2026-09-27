@@ -29,7 +29,7 @@ from .exporters import OpenTelemetryConfigError, load_opentelemetry_config
 from .exporters.delivery_checkpoint import DeliveryCheckpoint, DeliveryCheckpointError
 from .exporters.opentelemetry import OpenTelemetryExportError, OpenTelemetryLogExporter
 from .observer import AgentObserver
-from .sensor_log import append_rotating_line
+from .sensor_log import append_rotating_line, set_console_level
 
 
 def get_version():
@@ -113,8 +113,19 @@ Examples:
         default=None,
         help="JSON configuration for OTLP/HTTP log export (disabled when omitted)",
     )
+    verbosity = parser.add_mutually_exclusive_group()
+    verbosity.add_argument(
+        "--log-level",
+        choices=["debug", "info", "warning", "error"],
+        default="info",
+        help="Minimum level of progress and error messages printed to the console (default: info)",
+    )
+    verbosity.add_argument(
+        "-q", "--quiet", action="store_true", help="Print only warnings and errors (same as --log-level warning)"
+    )
 
     args = parser.parse_args()
+    set_console_level("warning" if args.quiet else args.log_level)
 
     otel_config = None
     if args.otel_config is not None:
