@@ -21,6 +21,7 @@ try:
 except PackageNotFoundError:
     __version__ = "0+unknown"
 
+from . import sensor_log  # noqa: F401  (installs the console handlers before any module logs)
 from .observer import AgentObserver
 from .schemas.agent_event_schema import AgentEvent, ChatMessage, ToolUsage
 from .schemas.system_config_schema import SystemConfiguration
