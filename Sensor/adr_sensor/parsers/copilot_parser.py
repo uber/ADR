@@ -12,8 +12,8 @@ enriches sessions with lightweight metadata from ``workspace.yaml`` and
 """
 
 import json
+import logging
 import os
-import traceback
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -23,6 +23,8 @@ from ..schemas.agent_event_schema import AgentEvent, ChatMessage, ToolUsage
 from ..utils.string_utils import truncate_middle
 from ..utils.timestamp_utils import normalize_timestamp
 from .base_parser import BaseParser
+
+logger = logging.getLogger(__name__)
 
 MAX_STRING_LENGTH = 1000
 EDGE_CHARS = 400
@@ -44,7 +46,7 @@ class CopilotParser(BaseParser):
 
         if not self.base_path.exists():
             self.record_diagnostic("input_missing")
-            print(f"[COPILOT] No logs found at {self.base_path}")
+            logger.info("[COPILOT] No logs found at %s", self.base_path)
             return entries
 
         cutoff_timestamp = None
@@ -61,7 +63,7 @@ class CopilotParser(BaseParser):
                 modified_at = events_path.stat().st_mtime
             except OSError as exc:
                 self.record_diagnostic("file_stat_error")
-                print(f"[COPILOT] Unable to inspect {events_path}: {exc}")
+                logger.warning("[COPILOT] Unable to inspect %s: %s", events_path, exc)
                 continue
 
             if cutoff_timestamp is not None and modified_at < cutoff_timestamp:
@@ -72,9 +74,9 @@ class CopilotParser(BaseParser):
 
         candidates.sort(key=lambda candidate: candidate[1], reverse=True)
         session_dirs = [path for path, _ in candidates]
-        print(f"[COPILOT] Found {len(session_dirs)} session directories")
+        logger.info("[COPILOT] Found %s session directories", len(session_dirs))
         if skipped_count:
-            print(f"[COPILOT] Skipped {skipped_count} sessions older than {self.max_age_days} days")
+            logger.info("[COPILOT] Skipped %s sessions older than %s days", skipped_count, self.max_age_days)
 
         for session_dir in session_dirs:
             try:
@@ -83,7 +85,7 @@ class CopilotParser(BaseParser):
                     entries.append(entry)
             except Exception as exc:
                 self.record_diagnostic("session_build_error")
-                print(f"[COPILOT] Error parsing {session_dir}: {exc}")
+                logger.warning("[COPILOT] Error parsing %s: %s", session_dir, exc)
 
         return entries
 
@@ -139,8 +141,7 @@ class CopilotParser(BaseParser):
             self.record_diagnostic(
                 "file_read_error" if isinstance(exc, (OSError, UnicodeError)) else "session_build_error"
             )
-            print(f"[COPILOT] Error reading {events_path}: {exc}")
-            traceback.print_exc()
+            logger.warning("[COPILOT] Error reading %s: %s", events_path, exc, exc_info=True)
             return None
 
         chat_history: List[ChatMessage] = []
