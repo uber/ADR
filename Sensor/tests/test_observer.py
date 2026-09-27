@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from adr_sensor import sensor_log
 from adr_sensor.observer import AgentObserver
 from adr_sensor.parsers.claude_parser import ClaudeParser
 from adr_sensor.schemas.agent_event_schema import AgentEvent, ChatMessage, ToolUsage
@@ -106,6 +107,33 @@ class TestAgentObserver:
         output = capsys.readouterr().out
         assert "INGESTION SUMMARY" in output
         assert "RECENT ENTRIES" not in output
+
+    def test_ingest_progress_goes_to_stdout_and_parser_errors_to_stderr(self, tmp_path, capsys):
+        observer = AgentObserver(output_dir=tmp_path)
+        observer.SOURCES = (("claude", "Claude Code"),)
+        observer.claude_parser = MagicMock()
+        observer.claude_parser.parse_all.side_effect = RuntimeError("synthetic failure")
+
+        observer.ingest_all("claude")
+
+        captured = capsys.readouterr()
+        assert "ADR Sensor Starting..." in captured.out
+        assert "Ingesting Claude Code logs..." in captured.out
+        assert captured.err == "Error ingesting Claude Code logs: synthetic failure\n"
+
+    def test_ingest_progress_is_hidden_at_warning_level(self, tmp_path, capsys):
+        observer = AgentObserver(output_dir=tmp_path)
+        observer.SOURCES = (("claude", "Claude Code"),)
+        observer.claude_parser = MagicMock()
+        observer.claude_parser.parse_all.return_value = []
+
+        sensor_log.set_console_level("warning")
+        try:
+            observer.ingest_all("claude")
+        finally:
+            sensor_log.set_console_level("info")
+
+        assert capsys.readouterr().out == ""
 
     def test_save_to_file_json(self, tmp_path):
         """Test saving entries as JSON."""
