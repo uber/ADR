@@ -271,3 +271,44 @@ def test_runtime_log_write_failure_is_reported_once(runtime_log, capsys):
     err = capsys.readouterr().err
     assert err.count("Unable to write the runtime log sensor_runtime_errors.jsonl") == 1
     assert "first\n" in err and "second\n" in err
+
+
+def _run_cli(tmp_path, monkeypatch, *flags):
+    def ingest_all(source):
+        logging.getLogger("adr_sensor.parsers.example_parser").warning(
+            "[EXAMPLE] Error reading %s: %s", "/synthetic/path.jsonl", OSError("denied")
+        )
+        return [], []
+
+    monkeypatch.setattr("sys.argv", ["adr-sensor", "--no-save", "--output-dir", str(tmp_path), *flags])
+    with patch("adr_sensor.cli.AgentObserver") as observer_cls:
+        observer_cls.return_value.has_errors = False
+        observer_cls.return_value.ingest_all.side_effect = ingest_all
+        main()
+
+
+def test_cli_log_file_writes_runtime_logs_to_the_output_dir(tmp_path, monkeypatch):
+    _run_cli(tmp_path, monkeypatch, "--log-file")
+    errors = _lines(tmp_path / "sensor_runtime_errors.jsonl")
+    assert errors[0]["message"] == "[EXAMPLE] Error reading /synthetic/path.jsonl: denied"
+    assert any(r["message"].strip() == "ADR Sensor complete!" for r in _lines(tmp_path / "sensor_runtime_debug.jsonl"))
+    assert sensor_log._runtime_handlers() == []
+
+
+def test_cli_log_file_content_free_omits_messages(tmp_path, monkeypatch):
+    _run_cli(tmp_path, monkeypatch, "--log-file", "--log-file-content-free")
+    text = (tmp_path / "sensor_runtime_errors.jsonl").read_text(encoding="utf-8")
+    assert "/synthetic/path.jsonl" not in text
+    assert json.loads(text)["exception_type"] == "OSError"
+
+
+def test_cli_writes_no_runtime_log_by_default(tmp_path, monkeypatch):
+    _run_cli(tmp_path, monkeypatch)
+    assert not list(tmp_path.glob("sensor_runtime_*"))
+
+
+def test_cli_log_file_content_free_requires_log_file(monkeypatch):
+    monkeypatch.setattr("sys.argv", ["adr-sensor", "--log-file-content-free"])
+    with pytest.raises(SystemExit) as error:
+        main()
+    assert error.value.code == 2
