@@ -1,10 +1,13 @@
 """Tests for the leveled sensor logger."""
 
+import importlib
 import logging
+import pkgutil
 from unittest.mock import patch
 
 import pytest
 
+import adr_sensor.parsers as parsers
 from adr_sensor import sensor_log
 from adr_sensor.cli import main
 
@@ -127,3 +130,11 @@ def test_cli_rejects_quiet_with_log_level(monkeypatch):
     with pytest.raises(SystemExit) as error:
         main()
     assert error.value.code == 2
+
+
+def test_every_parser_logs_through_a_sensor_child_logger():
+    for module_info in pkgutil.iter_modules(parsers.__path__):
+        if not module_info.name.endswith("_parser") or module_info.name == "base_parser":
+            continue
+        module = importlib.import_module(f"adr_sensor.parsers.{module_info.name}")
+        assert module.logger.name == f"adr_sensor.parsers.{module_info.name}"
