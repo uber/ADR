@@ -14,8 +14,8 @@ Performance-optimized: Skips conversations older than 2 weeks by default.
 """
 
 import json
+import logging
 import sqlite3
-import traceback
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -24,6 +24,8 @@ from ..schemas.agent_event_schema import AgentEvent, ChatMessage, ToolUsage
 from ..utils.platform_paths import windows_local_appdata
 from ..utils.timestamp_utils import normalize_timestamp
 from .base_parser import BaseParser
+
+logger = logging.getLogger(__name__)
 
 MAX_CONVERSATION_AGE_DAYS = 14
 
@@ -55,10 +57,10 @@ class WarpParser(BaseParser):
 
         if not db_path.exists():
             self.record_diagnostic("input_missing")
-            print(f"[WARP] No logs found at {db_path}")
+            logger.info("[WARP] No logs found at %s", db_path)
             return entries
 
-        print(f"[WARP] Reading logs from {db_path}")
+        logger.info("[WARP] Reading logs from %s", db_path)
 
         try:
             conn = sqlite3.connect(str(db_path))
@@ -66,13 +68,13 @@ class WarpParser(BaseParser):
 
             conversations = self._get_all_conversations(conn)
             has_ai_blocks = self._has_table(conn, "ai_blocks")
-            print(f"[WARP] Found {len(conversations)} conversations")
+            logger.info("[WARP] Found %s conversations", len(conversations))
 
             recent_conversations = self._filter_recent_conversations(conversations)
             skipped_count = len(conversations) - len(recent_conversations)
             if skipped_count > 0:
                 self.record_diagnostic("file_age_skipped", skipped_count)
-                print(f"[WARP] Skipped {skipped_count} conversations older than {self.max_age_days} days")
+                logger.info("[WARP] Skipped %s conversations older than %s days", skipped_count, self.max_age_days)
 
             for conversation in recent_conversations:
                 conversation_id = conversation["conversation_id"]
@@ -83,14 +85,13 @@ class WarpParser(BaseParser):
                         entries.append(entry)
                 except Exception as e:
                     self.record_diagnostic("session_build_error")
-                    print(f"[WARP] Error processing conversation {conversation_id}: {e}")
+                    logger.warning("[WARP] Error processing conversation %s: %s", conversation_id, e)
 
             conn.close()
 
         except Exception as e:
             self.record_diagnostic("database_error")
-            print(f"[WARP] Error reading database: {e}")
-            traceback.print_exc()
+            logger.error("[WARP] Error reading database: %s", e, exc_info=True)
 
         return entries
 
@@ -226,8 +227,7 @@ class WarpParser(BaseParser):
 
         except Exception as e:
             self.record_diagnostic("session_build_error")
-            print(f"[WARP] Error creating entry for conversation {conversation_id}: {e}")
-            traceback.print_exc()
+            logger.warning("[WARP] Error creating entry for conversation %s: %s", conversation_id, e, exc_info=True)
             return None
 
     def _parse_json_safely(self, json_str: str, report_failure: bool = True) -> Optional[Any]:
