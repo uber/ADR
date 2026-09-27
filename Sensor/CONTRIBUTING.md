@@ -44,11 +44,15 @@ This is the most common contribution. To add support for a new AI agent:
 Create `adr_sensor/parsers/my_agent_parser.py`:
 
 ```python
+import logging
 from pathlib import Path
 from typing import List
 
 from ..parsers.base_parser import BaseParser
 from ..schemas.agent_event_schema import AgentEvent, ChatMessage, ToolUsage
+
+logger = logging.getLogger(__name__)
+
 
 class MyAgentParser(BaseParser):
     """Parser for MyAgent logs."""
@@ -63,7 +67,7 @@ class MyAgentParser(BaseParser):
 
         if not self.base_path.exists():
             self.record_diagnostic("input_missing")
-            print(f"[MY_AGENT] No logs found at {self.base_path}")
+            logger.info("[MY_AGENT] No logs found at %s", self.base_path)
             return entries
 
         # Your parsing logic here
