@@ -32,6 +32,7 @@ which is normalized into ``AgentEvent`` / ``ChatMessage`` / ``ToolUsage``.
 """
 
 import json
+import logging
 import os
 import sqlite3
 import time
@@ -43,6 +44,8 @@ from ..schemas.agent_event_schema import AgentEvent, ChatMessage, ToolUsage
 from ..utils.string_utils import truncate_middle
 from ..utils.timestamp_utils import normalize_timestamp
 from .base_parser import BaseParser
+
+logger = logging.getLogger(__name__)
 
 MAX_LOG_AGE_DAYS = 14
 
@@ -152,15 +155,15 @@ class OpencodeParser(BaseParser):
     def parse_all(self) -> List[AgentEvent]:
         """Parse all available opencode sessions."""
         if self.backend == "sqlite":
-            print(f"[OPENCODE] Reading SQLite logs from {self.db_path}")
+            logger.info("[OPENCODE] Reading SQLite logs from %s", self.db_path)
             return self._parse_sqlite(self.db_path)
 
         if self.backend == "json":
             storage_dir = self.base_dir / "storage"
-            print(f"[OPENCODE] Reading JSON logs from {storage_dir}")
+            logger.info("[OPENCODE] Reading JSON logs from %s", storage_dir)
             return self._parse_json_storage(storage_dir)
 
-        print(f"[OPENCODE] No logs found at {self.base_dir}")
+        logger.info("[OPENCODE] No logs found at %s", self.base_dir)
         self.record_diagnostic("input_missing")
         return []
 
@@ -177,7 +180,7 @@ class OpencodeParser(BaseParser):
             conn.row_factory = sqlite3.Row
 
             sessions = self._get_sqlite_sessions(conn)
-            print(f"[OPENCODE] Found {len(sessions)} sessions")
+            logger.info("[OPENCODE] Found %s sessions", len(sessions))
 
             for session in sessions:
                 session_id = session["id"]
@@ -192,10 +195,10 @@ class OpencodeParser(BaseParser):
                         entries.append(entry)
                 except Exception as e:
                     self.record_diagnostic("session_build_error")
-                    print(f"[OPENCODE] Error processing session {session_id}: {e}")
+                    logger.warning("[OPENCODE] Error processing session %s: %s", session_id, e)
         except Exception as e:
             self.record_diagnostic("database_error")
-            print(f"[OPENCODE] Error reading database: {e}")
+            logger.error("[OPENCODE] Error reading database: %s", e)
         finally:
             if conn is not None:
                 conn.close()
@@ -256,7 +259,7 @@ class OpencodeParser(BaseParser):
         project_scoped = (storage_dir / "message").exists()  # newer layout
 
         session_files = self._discover_session_files(storage_dir)
-        print(f"[OPENCODE] Found {len(session_files)} sessions")
+        logger.info("[OPENCODE] Found %s sessions", len(session_files))
 
         cutoff_ts = time.time() - (self.max_age_days * 86400) if self.max_age_days > 0 else None
 
@@ -281,7 +284,7 @@ class OpencodeParser(BaseParser):
                     entries.append(entry)
             except Exception as e:
                 self.record_diagnostic(failure_code if isinstance(e, OSError) else "session_build_error")
-                print(f"[OPENCODE] Error processing session file {session_file}: {e}")
+                logger.warning("[OPENCODE] Error processing session file %s: %s", session_file, e)
 
         return entries
 

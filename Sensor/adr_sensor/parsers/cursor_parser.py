@@ -8,6 +8,7 @@ Performance-optimized: Skips conversations older than 2 weeks.
 """
 
 import json
+import logging
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -18,6 +19,8 @@ from ..utils.platform_paths import windows_appdata
 from ..utils.string_utils import truncate_middle
 from ..utils.timestamp_utils import normalize_timestamp
 from .base_parser import BaseParser
+
+logger = logging.getLogger(__name__)
 
 DB_BATCH_SIZE = 500
 MAX_CONVERSATION_AGE_DAYS = 14
@@ -46,15 +49,15 @@ class CursorParser(BaseParser):
 
         if not self.db_path.exists():
             self.record_diagnostic("input_missing")
-            print(f"[CURSOR] No database found at {self.db_path}")
+            logger.info("[CURSOR] No database found at %s", self.db_path)
             return entries
 
         try:
             entries = self.parse_conversations_from_bubbles()
-            print(f"[CURSOR] Found {len(entries)} entries")
+            logger.info("[CURSOR] Found %s entries", len(entries))
         except Exception as e:
             self.record_diagnostic("database_error")
-            print(f"[CURSOR] Error parsing database: {e}")
+            logger.error("[CURSOR] Error parsing database: %s", e)
 
         return entries
 
@@ -95,7 +98,9 @@ class CursorParser(BaseParser):
 
                 if skipped_count > 0:
                     self.record_diagnostic("file_age_skipped", skipped_count)
-                    print(f"[CURSOR] Skipped {skipped_count} conversations older than {self.max_age_days} days")
+                    logger.info(
+                        "[CURSOR] Skipped %s conversations older than %s days", skipped_count, self.max_age_days
+                    )
 
                 cursor.execute("SELECT key, value FROM cursorDiskKV WHERE key LIKE 'bubbleId:%'")
 
@@ -138,7 +143,7 @@ class CursorParser(BaseParser):
 
         except Exception as e:
             self.record_diagnostic("database_error")
-            print(f"[CURSOR] Error parsing conversations: {e}")
+            logger.error("[CURSOR] Error parsing conversations: %s", e)
 
         return entries
 
@@ -189,7 +194,7 @@ class CursorParser(BaseParser):
 
         except Exception as e:
             self.record_diagnostic("database_error")
-            print(f"[CURSOR] Error getting composer metadata: {e}")
+            logger.warning("[CURSOR] Error getting composer metadata: %s", e)
 
         return metadata
 
