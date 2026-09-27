@@ -11,9 +11,9 @@ Usage:
 
 import argparse
 import json
+import logging
 import os
 import platform
-import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -30,6 +30,8 @@ from .exporters.delivery_checkpoint import DeliveryCheckpoint, DeliveryCheckpoin
 from .exporters.opentelemetry import OpenTelemetryExportError, OpenTelemetryLogExporter
 from .observer import AgentObserver
 from .sensor_log import append_rotating_line, set_console_level
+
+logger = logging.getLogger(__name__)
 
 
 def get_version():
@@ -174,16 +176,20 @@ Examples:
             otel_entries = delivery_checkpoint.pending_entries(entries)
             if delivery_checkpoint.load_failed:
                 observer.record_failure("export", "checkpoint_read_error")
-                print("OpenTelemetry delivery checkpoint unreadable or invalid; retrying sessions.", file=sys.stderr)
+                logger.warning("OpenTelemetry delivery checkpoint unreadable or invalid; retrying sessions.")
 
         # Apply incremental filtering
         stage = "save"
         if args.save_sessions and entries:
-            print("\nSession-based incremental mode: Checking existing session files...")
+            logger.info("\nSession-based incremental mode: Checking existing session files...")
             original_count = len(entries)
             entries = observer.filter_entries_by_existing_files(entries, args.output_dir)
             filtered_count = len(entries)
-            print(f"  -> Filtered {original_count - filtered_count} existing sessions, processing {filtered_count} new")
+            logger.info(
+                "  -> Filtered %d existing sessions, processing %d new",
+                original_count - filtered_count,
+                filtered_count,
+            )
 
         # Display summary
         observer.display_summary(entries, system_config_data, limit=args.limit)
@@ -195,7 +201,9 @@ Examples:
                 if args.save_sessions:
                     if entries:
                         saved_files = observer.save_sessions_to_individual_files(entries, output_dir=args.output_dir)
-                        print(f"\nSession files saved to: {saved_files[0].parent if saved_files else 'No files saved'}")
+                        logger.info(
+                            "\nSession files saved to: %s", saved_files[0].parent if saved_files else "No files saved"
+                        )
                 else:
                     if args.output_dir is None:
                         project_output_dir = Path.cwd() / "output"
@@ -219,13 +227,13 @@ Examples:
                 otel_exporter.shutdown()
             if delivery_checkpoint is not None:
                 delivery_checkpoint.commit()
-            print(f"\nOpenTelemetry session/configuration logs sent: {exported_count}")
+            logger.info("\nOpenTelemetry session/configuration logs sent: %d", exported_count)
 
         success = observer.has_errors is not True
         if success:
-            print("\nADR Sensor complete!\n")
+            logger.info("\nADR Sensor complete!\n")
         else:
-            print("\nADR Sensor completed with errors; see diagnostics.jsonl.\n")
+            logger.warning("\nADR Sensor completed with errors; see diagnostics.jsonl.\n")
             if args.fail_on_error:
                 raise SystemExit(1)
 
@@ -233,14 +241,14 @@ Examples:
         success = False
         if observer is not None:
             observer.record_failure("export", "export_error")
-        print(f"OpenTelemetry export failed: {exc}", file=sys.stderr)
+        logger.error("OpenTelemetry export failed: %s", exc)
         raise SystemExit(1)
 
     except DeliveryCheckpointError as exc:
         success = False
         if observer is not None:
             observer.record_failure("export", "checkpoint_write_error")
-        print(f"OpenTelemetry checkpoint failed: {exc}", file=sys.stderr)
+        logger.error("OpenTelemetry checkpoint failed: %s", exc)
         raise SystemExit(1)
 
     except Exception:
