@@ -19,8 +19,10 @@ Runtime logs are separate from the content-free health records written by
 ``diagnostics.py``: they describe what the sensor did, not how healthy a run was.
 """
 
+import getpass
 import json
 import logging
+import socket
 import sys
 from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
@@ -85,6 +87,19 @@ def _exception_type(record: logging.LogRecord):
     return None
 
 
+def _local_identity():
+    """Return the local ``(username, hostname)``, with ``None`` for unknown parts."""
+    try:
+        username = getpass.getuser()
+    except Exception:
+        username = None
+    try:
+        hostname = socket.gethostname() or None
+    except OSError:
+        hostname = None
+    return username, hostname
+
+
 class JsonRecordFormatter(logging.Formatter):
     """Format records as one JSON object per line for the runtime log files.
 
@@ -92,12 +107,14 @@ class JsonRecordFormatter(logging.Formatter):
     ``phase``, ``sensor_version`` and ``exception_type``. The rendered
     ``message`` and, when an exception is attached, its ``stack`` are included
     unless *include_details* is false, which keeps records free of paths and
-    error text.
+    error text. *include_identity* adds the local ``username`` and ``hostname``,
+    looked up once.
     """
 
-    def __init__(self, *, include_details: bool = True) -> None:
+    def __init__(self, *, include_details: bool = True, include_identity: bool = False) -> None:
         super().__init__()
         self.include_details = include_details
+        self.identity = _local_identity() if include_identity else None
 
     def format(self, record: logging.LogRecord) -> str:
         data = {
@@ -113,6 +130,8 @@ class JsonRecordFormatter(logging.Formatter):
             data["message"] = record.getMessage()
             if record.exc_info:
                 data["stack"] = self.formatException(record.exc_info)
+        if self.identity is not None:
+            data["username"], data["hostname"] = self.identity
         return json.dumps(data, ensure_ascii=False, separators=(",", ":"), default=str)
 
 
@@ -168,7 +187,7 @@ def disable_runtime_log() -> None:
             pass
 
 
-def enable_runtime_log(directory: Path, *, include_details: bool = True) -> bool:
+def enable_runtime_log(directory: Path, *, include_details: bool = True, include_identity: bool = False) -> bool:
     """Also write sensor log records to rotating JSON-lines files in *directory*.
 
     WARNING and above go to ``sensor_runtime_errors.jsonl``; DEBUG and INFO go
@@ -178,7 +197,7 @@ def enable_runtime_log(directory: Path, *, include_details: bool = True) -> bool
     stderr through the console handlers and this returns ``False``.
     """
     disable_runtime_log()
-    formatter = JsonRecordFormatter(include_details=include_details)
+    formatter = JsonRecordFormatter(include_details=include_details, include_identity=include_identity)
     handlers = []
     try:
         directory = Path(directory)

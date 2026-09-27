@@ -135,13 +135,23 @@ Examples:
         action="store_true",
         help="Omit messages and tracebacks from --log-file records (no paths or error text)",
     )
+    parser.add_argument(
+        "--log-identity",
+        action="store_true",
+        help="Add the local username and hostname to --log-file records",
+    )
 
     args = parser.parse_args()
-    if args.log_file_content_free and not args.log_file:
-        parser.error("--log-file-content-free requires --log-file")
+    for option in ("log_file_content_free", "log_identity"):
+        if getattr(args, option) and not args.log_file:
+            parser.error(f"--{option.replace('_', '-')} requires --log-file")
     set_console_level("warning" if args.quiet else args.log_level)
     if args.log_file:
-        enable_runtime_log(args.output_dir or Path.cwd() / "output", include_details=not args.log_file_content_free)
+        enable_runtime_log(
+            args.output_dir or Path.cwd() / "output",
+            include_details=not args.log_file_content_free,
+            include_identity=args.log_identity,
+        )
 
     otel_config = None
     if args.otel_config is not None:

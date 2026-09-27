@@ -312,3 +312,36 @@ def test_cli_log_file_content_free_requires_log_file(monkeypatch):
     with pytest.raises(SystemExit) as error:
         main()
     assert error.value.code == 2
+
+
+def test_json_formatter_adds_identity_only_when_asked(monkeypatch):
+    monkeypatch.setattr(sensor_log.getpass, "getuser", lambda: "synthetic-user")
+    monkeypatch.setattr(sensor_log.socket, "gethostname", lambda: "synthetic-host")
+    plain = json.loads(sensor_log.JsonRecordFormatter().format(_record()))
+    with_identity = json.loads(sensor_log.JsonRecordFormatter(include_identity=True).format(_record()))
+    assert "username" not in plain and "hostname" not in plain
+    assert (with_identity["username"], with_identity["hostname"]) == ("synthetic-user", "synthetic-host")
+
+
+def test_json_formatter_tolerates_an_unknown_user(monkeypatch):
+    def no_user():
+        raise OSError("no such user")
+
+    monkeypatch.setattr(sensor_log.getpass, "getuser", no_user)
+    data = json.loads(sensor_log.JsonRecordFormatter(include_identity=True).format(_record()))
+    assert data["username"] is None
+
+
+def test_cli_log_identity_adds_username_and_hostname(tmp_path, monkeypatch):
+    monkeypatch.setattr(sensor_log.getpass, "getuser", lambda: "synthetic-user")
+    monkeypatch.setattr(sensor_log.socket, "gethostname", lambda: "synthetic-host")
+    _run_cli(tmp_path, monkeypatch, "--log-file", "--log-identity")
+    record = _lines(tmp_path / "sensor_runtime_errors.jsonl")[0]
+    assert (record["username"], record["hostname"]) == ("synthetic-user", "synthetic-host")
+
+
+def test_cli_log_identity_requires_log_file(monkeypatch):
+    monkeypatch.setattr("sys.argv", ["adr-sensor", "--log-identity"])
+    with pytest.raises(SystemExit) as error:
+        main()
+    assert error.value.code == 2
