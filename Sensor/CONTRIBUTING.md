@@ -144,6 +144,30 @@ larger parser) covering:
 - Use `ruff` for formatting and linting
 - Keep parsers self-contained (each parser should handle its own errors)
 
+## Logging
+
+Runtime messages go through the sensor logger rather than `print()`:
+
+```python
+import logging
+
+logger = logging.getLogger(__name__)
+
+logger.info("[MY_AGENT] Found %d sessions", len(sessions))
+logger.warning("[MY_AGENT] Skipped unreadable file", extra={"phase": "parse"})
+```
+
+- `adr_sensor.sensor_log` owns the handlers: `DEBUG`/`INFO` print to stdout and
+  `WARNING` and above to stderr. Do not add handlers or call `logging.basicConfig()`
+  in sensor modules.
+- The component is taken from the logger name, so always use `__name__`. Pass
+  `extra={"phase": ...}` when the stage of work helps triage.
+- Use `WARNING` for recoverable problems (a skipped file or record) and `ERROR`
+  when a whole source or output step fails. Keep recording fixed diagnostic codes
+  with `record_diagnostic()`; log messages do not replace them.
+- Never log prompts, tool arguments or results, or other captured content.
+- Explicit report output, such as `AgentObserver.display_summary()`, stays as `print()`.
+
 ## Testing Guidelines
 
 - All new code must have tests
