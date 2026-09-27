@@ -1,10 +1,12 @@
 """Tests for the leveled sensor logger."""
 
 import logging
+from unittest.mock import patch
 
 import pytest
 
 from adr_sensor import sensor_log
+from adr_sensor.cli import main
 
 
 @pytest.fixture(autouse=True)
@@ -104,3 +106,24 @@ def test_append_rotating_line_rotates_by_size_and_keeps_backups(tmp_path):
 def test_append_rotating_line_raises_when_the_file_cannot_be_written(tmp_path):
     with pytest.raises(OSError):
         sensor_log.append_rotating_line(tmp_path / "missing" / "resource.log", "line")
+
+
+@pytest.mark.parametrize(
+    "flags, level",
+    [([], logging.INFO), (["--log-level", "debug"], logging.DEBUG), (["-q"], logging.WARNING)],
+)
+def test_cli_flags_set_the_console_level(flags, level, monkeypatch):
+    monkeypatch.setattr("sys.argv", ["adr-sensor", "--no-save", *flags])
+    with patch("adr_sensor.cli.AgentObserver") as observer_cls:
+        observer_cls.return_value.ingest_all.side_effect = RuntimeError("stop after argument parsing")
+        observer_cls.return_value.get_diagnostic_records.return_value = []
+        with pytest.raises(RuntimeError):
+            main()
+    assert {handler.level for handler in sensor_log._console_handlers()} == {level}
+
+
+def test_cli_rejects_quiet_with_log_level(monkeypatch):
+    monkeypatch.setattr("sys.argv", ["adr-sensor", "-q", "--log-level", "debug"])
+    with pytest.raises(SystemExit) as error:
+        main()
+    assert error.value.code == 2
