@@ -2119,6 +2119,14 @@ def _build_opencode_db(db_path, sessions, messages, parts):
     conn.close()
 
 
+def _build_non_opencode_db(db_path):
+    """Create a SQLite database that lacks opencode's session tables."""
+    conn = sqlite3.connect(str(db_path))
+    conn.execute("CREATE TABLE migrations (id INTEGER PRIMARY KEY, name TEXT)")
+    conn.commit()
+    conn.close()
+
+
 def _make_opencode_parser(base_dir, max_age_days=0):
     """Build an OpencodeParser whose backend detection points at base_dir."""
     with patch.object(OpencodeParser, "_candidate_base_dirs", return_value=[base_dir]):
@@ -2132,7 +2140,7 @@ class TestOpencodeParserBackendDetection:
         assert parser.parse_all() == []
 
     def test_sqlite_backend_detected(self, tmp_path):
-        (tmp_path / "opencode.db").touch()
+        _build_opencode_db(tmp_path / "opencode.db", [], [], [])
         parser = _make_opencode_parser(tmp_path)
         assert parser.backend == "sqlite"
 
@@ -2142,36 +2150,88 @@ class TestOpencodeParserBackendDetection:
         assert parser.backend == "json"
 
     def test_sqlite_takes_priority_over_json(self, tmp_path):
-        (tmp_path / "opencode.db").touch()
+        _build_opencode_db(tmp_path / "opencode.db", [], [], [])
         (tmp_path / "storage").mkdir()
         parser = _make_opencode_parser(tmp_path)
         assert parser.backend == "sqlite"
 
     def test_channel_suffixed_db_detected(self, tmp_path):
         """Non-stable channels write opencode-<channel>.db instead."""
-        (tmp_path / "opencode-nightly.db").touch()
+        _build_opencode_db(tmp_path / "opencode-nightly.db", [], [], [])
         parser = _make_opencode_parser(tmp_path)
         assert parser.backend == "sqlite"
         assert parser.db_path.name == "opencode-nightly.db"
 
     def test_default_db_preferred_over_channel_suffixed(self, tmp_path):
-        (tmp_path / "opencode.db").touch()
-        (tmp_path / "opencode-dev.db").touch()
+        _build_opencode_db(tmp_path / "opencode.db", [], [], [])
+        _build_opencode_db(tmp_path / "opencode-dev.db", [], [], [])
         parser = _make_opencode_parser(tmp_path)
         assert parser.db_path.name == "opencode.db"
 
     def test_opencode_db_env_override(self, tmp_path, monkeypatch):
         custom = tmp_path / "custom.db"
-        custom.touch()
+        _build_opencode_db(custom, [], [], [])
         monkeypatch.setenv("OPENCODE_DB", str(custom))
         parser = _make_opencode_parser(tmp_path)
         assert parser.db_path == custom
 
     def test_opencode_db_memory_value_ignored(self, tmp_path, monkeypatch):
         monkeypatch.setenv("OPENCODE_DB", ":memory:")
-        (tmp_path / "opencode.db").touch()
+        _build_opencode_db(tmp_path / "opencode.db", [], [], [])
         parser = _make_opencode_parser(tmp_path)
         assert parser.db_path.name == "opencode.db"
+
+    def test_channel_db_selected_when_default_lacks_tables(self, tmp_path):
+        """An empty or migration-only opencode.db must not shadow a populated channel DB."""
+        _build_non_opencode_db(tmp_path / "opencode.db")
+        _build_opencode_db(tmp_path / "opencode-nightly.db", [], [], [])
+        parser = _make_opencode_parser(tmp_path)
+        assert parser.backend == "sqlite"
+        assert parser.db_path.name == "opencode-nightly.db"
+
+    def test_db_without_session_tables_falls_back_to_json(self, tmp_path):
+        _build_non_opencode_db(tmp_path / "opencode.db")
+        (tmp_path / "storage").mkdir()
+        parser = _make_opencode_parser(tmp_path)
+        assert parser.backend == "json"
+        assert parser.db_path is None
+        parser.reset_diagnostics()
+        parser.parse_all()
+        assert "unsupported_schema" not in parser.get_diagnostics()
+
+    def test_db_without_session_tables_and_no_json_reports_unsupported_schema(self, tmp_path):
+        _build_non_opencode_db(tmp_path / "opencode.db")
+        parser = _make_opencode_parser(tmp_path)
+        assert parser.backend is None
+        parser.reset_diagnostics()
+        assert parser.parse_all() == []
+        assert parser.get_diagnostics() == {"unsupported_schema": 1}
+
+    def test_empty_db_file_is_not_selected(self, tmp_path):
+        (tmp_path / "opencode.db").touch()
+        parser = _make_opencode_parser(tmp_path)
+        assert parser.backend is None
+
+    def test_env_override_without_tables_falls_through_to_default(self, tmp_path, monkeypatch):
+        _build_non_opencode_db(tmp_path / "custom.db")
+        _build_opencode_db(tmp_path / "opencode.db", [], [], [])
+        monkeypatch.setenv("OPENCODE_DB", "custom.db")
+        parser = _make_opencode_parser(tmp_path)
+        assert parser.db_path.name == "opencode.db"
+
+    def test_unreadable_candidate_is_skipped(self, tmp_path):
+        _build_opencode_db(tmp_path / "opencode.db", [], [], [])
+        _build_opencode_db(tmp_path / "opencode-dev.db", [], [], [])
+        real_connect = sqlite3.connect
+
+        def flaky_connect(target, *args, **kwargs):
+            if "opencode.db" in str(target):
+                raise sqlite3.OperationalError("unable to open database file")
+            return real_connect(target, *args, **kwargs)
+
+        with patch("adr_sensor.parsers.opencode_parser.sqlite3.connect", side_effect=flaky_connect):
+            parser = _make_opencode_parser(tmp_path)
+        assert parser.db_path.name == "opencode-dev.db"
 
     def test_find_db_files_lists_candidates_in_priority_order(self, tmp_path, monkeypatch):
         for name in ("opencode-nightly.db", "opencode-beta.db", "opencode.db", "custom.db"):

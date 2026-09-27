@@ -76,9 +76,15 @@ BUILTIN_TOOLS = frozenset(
     }
 )
 
+# Tables a SQLite database must contain to be read as opencode session history.
+REQUIRED_SQLITE_TABLES = frozenset({"session", "message", "part"})
+
 
 class OpencodeParser(BaseParser):
     """Parser for opencode session logs (SQLite and legacy JSON backends)."""
+
+    # Set by _detect_backend when databases exist but none has the session tables.
+    _schema_mismatch = False
 
     def __init__(self, max_age_days: int = MAX_LOG_AGE_DAYS):
         self.max_age_days = max_age_days
@@ -144,12 +150,36 @@ class OpencodeParser(BaseParser):
         candidates = OpencodeParser._find_db_files(base)
         return candidates[0] if candidates else None
 
+    @staticmethod
+    def _has_session_schema(db_path: Path) -> bool:
+        """Return True if the database has opencode's session tables."""
+        conn = None
+        try:
+            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            rows = conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
+        except (sqlite3.Error, OSError):
+            return False
+        finally:
+            if conn is not None:
+                conn.close()
+        return REQUIRED_SQLITE_TABLES <= {row[0] for row in rows}
+
     def _detect_backend(self) -> Tuple[Path, Optional[str], Optional[Path]]:
-        """Return (base_dir, backend, db_path) where backend is 'sqlite', 'json' or None."""
+        """Return (base_dir, backend, db_path) where backend is 'sqlite', 'json' or None.
+
+        A database is selected only if it contains the session tables; otherwise
+        the remaining candidates and then the JSON ``storage/`` tree are tried.
+        This runs before per-run diagnostics are reset, so a database without
+        the expected tables is only remembered here and reported by parse_all.
+        """
+        self._schema_mismatch = False
         for base in self._candidate_base_dirs():
-            db_path = self._find_db_file(base)
-            if db_path is not None:
-                return base, "sqlite", db_path
+            db_files = self._find_db_files(base)
+            for db_path in db_files:
+                if self._has_session_schema(db_path):
+                    return base, "sqlite", db_path
+            if db_files:
+                self._schema_mismatch = True
             storage_dir = base / "storage"
             if storage_dir.exists():
                 return base, "json", None
@@ -166,8 +196,15 @@ class OpencodeParser(BaseParser):
 
         if self.backend == "json":
             storage_dir = self.base_dir / "storage"
+            if self._schema_mismatch:
+                print("[OPENCODE] SQLite database lacks the session tables; reading JSON storage")
             print(f"[OPENCODE] Reading JSON logs from {storage_dir}")
             return self._parse_json_storage(storage_dir)
+
+        if self._schema_mismatch:
+            print("[OPENCODE] Database found but it does not contain the expected session tables")
+            self.record_diagnostic("unsupported_schema")
+            return []
 
         print(f"[OPENCODE] No logs found at {self.base_dir}")
         self.record_diagnostic("input_missing")
