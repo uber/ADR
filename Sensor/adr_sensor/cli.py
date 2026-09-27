@@ -70,7 +70,7 @@ Examples:
     parser.add_argument(
         "--resource",
         action="store_true",
-        help="Capture process resource usage and append to resource.log (Unix only)",
+        help="Capture process resource usage and append to resource.log, rotated at 1 MiB (Unix only)",
     )
     parser.add_argument(
         "--source",

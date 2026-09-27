@@ -434,6 +434,7 @@ export is recorded locally because a broken destination cannot receive its own a
 parse/save/diagnostic failure occurs; by default these partial failures are reported
 without changing the existing continue-on-error behavior. OTLP failures remain nonzero.
 When `--resource` is enabled, `resource.log` also marks partial runs unsuccessful.
+`resource.log` rotates at 1 MiB with two backups (`resource.log.1`, `resource.log.2`).
 
 New structured diagnostics never include prompts, tool arguments/results, paths,
 session IDs, exception messages, or tracebacks. This is a separate operational
