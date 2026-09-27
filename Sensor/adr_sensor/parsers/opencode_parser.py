@@ -236,9 +236,23 @@ class OpencodeParser(BaseParser):
                     )
                     if entry and entry.has_meaningful_content():
                         entries.append(entry)
+                except sqlite3.OperationalError as e:
+                    # A missing table affects every session: stop and report it once.
+                    if "no such table" in str(e):
+                        raise
+                    self.record_diagnostic("session_build_error")
+                    print(f"[OPENCODE] Error processing session {session_id}: {e}")
                 except Exception as e:
                     self.record_diagnostic("session_build_error")
                     print(f"[OPENCODE] Error processing session {session_id}: {e}")
+        except sqlite3.OperationalError as e:
+            # The schema can change between backend detection and parsing.
+            if "no such table" in str(e):
+                self.record_diagnostic("unsupported_schema")
+                print("[OPENCODE] Expected session tables not found in database")
+            else:
+                self.record_diagnostic("database_error")
+                print(f"[OPENCODE] Error reading database: {e}")
         except Exception as e:
             self.record_diagnostic("database_error")
             print(f"[OPENCODE] Error reading database: {e}")

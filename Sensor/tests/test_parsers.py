@@ -2255,6 +2255,28 @@ class TestOpencodeParserBackendDetection:
 
 
 class TestOpencodeParserSqlite:
+    def test_missing_table_during_parse_records_unsupported_schema(self, tmp_path):
+        db_path = tmp_path / "opencode.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("CREATE TABLE session (id TEXT PRIMARY KEY, time_updated INTEGER)")
+        conn.execute("INSERT INTO session VALUES ('ses_1', ?)", (NOW_MS,))
+        conn.commit()
+        conn.close()
+        parser = _make_opencode_parser(tmp_path)
+        parser.reset_diagnostics()
+        assert parser._parse_sqlite(db_path) == []
+        diagnostics = parser.get_diagnostics()
+        assert diagnostics.get("unsupported_schema") == 1
+        assert "database_error" not in diagnostics
+
+    def test_unreadable_database_still_records_database_error(self, tmp_path):
+        db_path = tmp_path / "opencode.db"
+        db_path.write_bytes(b"not a sqlite database" * 10)
+        parser = _make_opencode_parser(tmp_path)
+        parser.reset_diagnostics()
+        assert parser._parse_sqlite(db_path) == []
+        assert parser.get_diagnostics() == {"database_error": 1}
+
     def test_parses_conversation_with_tool(self, tmp_path):
         db_path = tmp_path / "opencode.db"
         _build_opencode_db(
