@@ -109,31 +109,40 @@ class OpencodeParser(BaseParser):
         return unique
 
     @staticmethod
-    def _find_db_file(base: Path) -> Optional[Path]:
-        """Locate the opencode SQLite database under a candidate data directory.
+    def _find_db_files(base: Path) -> List[Path]:
+        """List candidate opencode SQLite databases under a data directory.
 
         The ``OPENCODE_DB`` environment variable can override the filename (or be
         an absolute path / ``:memory:``); otherwise the file is ``opencode.db``
         for stable channels or ``opencode-<channel>.db`` for anything else (e.g.
         a nightly build), so we fall back to globbing for that pattern too.
+        Candidates are returned in that priority order, without duplicates.
         """
+        candidates: List[Path] = []
+
         env_db = os.environ.get("OPENCODE_DB")
         if env_db and env_db != ":memory:":
             candidate = Path(env_db)
             if not candidate.is_absolute():
                 candidate = base / env_db
             if candidate.exists():
-                return candidate
+                candidates.append(candidate)
 
         default = base / "opencode.db"
-        if default.exists():
-            return default
+        if default.exists() and default not in candidates:
+            candidates.append(default)
 
         if base.exists():
             for candidate in sorted(base.glob("opencode-*.db")):
-                if candidate.exists():
-                    return candidate
-        return None
+                if candidate.exists() and candidate not in candidates:
+                    candidates.append(candidate)
+        return candidates
+
+    @staticmethod
+    def _find_db_file(base: Path) -> Optional[Path]:
+        """Return the highest-priority candidate database, if any."""
+        candidates = OpencodeParser._find_db_files(base)
+        return candidates[0] if candidates else None
 
     def _detect_backend(self) -> Tuple[Path, Optional[str], Optional[Path]]:
         """Return (base_dir, backend, db_path) where backend is 'sqlite', 'json' or None."""

@@ -2173,6 +2173,19 @@ class TestOpencodeParserBackendDetection:
         parser = _make_opencode_parser(tmp_path)
         assert parser.db_path.name == "opencode.db"
 
+    def test_find_db_files_lists_candidates_in_priority_order(self, tmp_path, monkeypatch):
+        for name in ("opencode-nightly.db", "opencode-beta.db", "opencode.db", "custom.db"):
+            (tmp_path / name).touch()
+        monkeypatch.setenv("OPENCODE_DB", "custom.db")
+        names = [p.name for p in OpencodeParser._find_db_files(tmp_path)]
+        assert names == ["custom.db", "opencode.db", "opencode-beta.db", "opencode-nightly.db"]
+        assert OpencodeParser._find_db_file(tmp_path).name == "custom.db"
+
+    def test_find_db_files_does_not_repeat_env_override(self, tmp_path, monkeypatch):
+        (tmp_path / "opencode.db").touch()
+        monkeypatch.setenv("OPENCODE_DB", "opencode.db")
+        assert OpencodeParser._find_db_files(tmp_path) == [tmp_path / "opencode.db"]
+
     def test_xdg_data_home_is_first_candidate(self, tmp_path, monkeypatch):
         monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
         assert OpencodeParser._candidate_base_dirs()[0] == tmp_path / "opencode"
