@@ -112,6 +112,9 @@ are read:
 
 - **SQLite** (current releases) — `opencode.db`, or `opencode-<channel>.db` on
   non-stable channels. Opened read-only so a running opencode process is never disturbed.
+  A database is used only if it contains the `session`, `message` and `part` tables;
+  otherwise the other candidate databases and then the JSON tree are tried, and a
+  database without those tables is reported as `unsupported_schema`.
 - **JSON file tree** (older releases) — a `storage/` directory of per-session,
   per-message and per-part JSON files, in both the project-scoped and legacy layouts.
 

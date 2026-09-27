@@ -17,7 +17,9 @@ Two on-disk storage backends are supported:
    conversation record for local CLI usage; the newer ``session_message`` /
    ``event`` tables are an additional event-sourced projection used for other
    purposes and were empty in every real session captured while building this
-   parser, so they are not read here.
+   parser, so they are not read here. A database is only used if it has the
+   ``session`` / ``message`` / ``part`` tables; otherwise the remaining
+   candidate databases and then the JSON tree below are tried.
 
 2. JSON file tree (older, pre-SQLite versions): a ``storage/`` directory holding
    one JSON file per session / message / part. Both the newer project-scoped
