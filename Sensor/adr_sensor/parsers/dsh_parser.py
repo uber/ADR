@@ -1,6 +1,7 @@
 """Parser for DeepSeek Harness v3 session logs."""
 
 import json
+import logging
 import os
 import re
 from datetime import datetime, timedelta, timezone
@@ -13,6 +14,8 @@ from ..schemas.agent_event_schema import AgentEvent, ChatMessage, ToolUsage
 from ..utils.string_utils import truncate_middle
 from ..utils.timestamp_utils import normalize_timestamp
 from .base_parser import BaseParser
+
+logger = logging.getLogger(__name__)
 
 MAX_LOG_AGE_DAYS = 14
 MAX_TEXT_LENGTH = 1000
@@ -35,7 +38,7 @@ class DshParser(BaseParser):
     def parse_all(self) -> List[AgentEvent]:
         if not self.base_path.is_dir():
             self.record_diagnostic("input_missing")
-            print(f"[DSH] No logs found at {self.base_path}")
+            logger.info("[DSH] No logs found at %s", self.base_path)
             return []
 
         cutoff = None
@@ -59,8 +62,8 @@ class DshParser(BaseParser):
                     entries[entry.session_id] = entry
             except (OSError, UnicodeError, ValueError, zstandard.ZstdError) as exc:
                 self.record_diagnostic(failure_code)
-                print(f"[DSH] Unable to read {path}: {exc}")
-        print(f"[DSH] Found {len(entries)} sessions")
+                logger.warning("[DSH] Unable to read %s: %s", path, exc)
+        logger.info("[DSH] Found %s sessions", len(entries))
         return list(entries.values())
 
     @staticmethod
@@ -84,7 +87,7 @@ class DshParser(BaseParser):
                 mtime = path.stat().st_mtime
             except OSError as exc:
                 self.record_diagnostic("file_stat_error")
-                print(f"[DSH] Error inspecting {path}: {exc}")
+                logger.warning("[DSH] Error inspecting %s: %s", path, exc)
                 continue
             current = selected.get(path.parent)
             candidate = (version, mtime, path)
@@ -94,7 +97,7 @@ class DshParser(BaseParser):
         for version, _, path in sorted(selected.values(), key=lambda item: item[1], reverse=True):
             if version != MAX_SUPPORTED_SESSION_VERSION:
                 self.record_diagnostic("unsupported_schema")
-                print(f"[DSH] Unsupported session generation v{version} in {path.parent}")
+                logger.warning("[DSH] Unsupported session generation v%s in %s", version, path.parent)
                 continue
             current_paths.append(path)
         return current_paths
@@ -139,7 +142,7 @@ class DshParser(BaseParser):
             if not header_seen:
                 if event.get("type") != "session" or event.get("version") != MAX_SUPPORTED_SESSION_VERSION:
                     self.record_diagnostic("unsupported_schema")
-                    print(f"[DSH] Unsupported or malformed session header in {file_path}")
+                    logger.warning("[DSH] Unsupported or malformed session header in %s", file_path)
                     return None
                 if not isinstance(event.get("id"), str) or not event["id"]:
                     self.record_diagnostic("record_shape_error")
