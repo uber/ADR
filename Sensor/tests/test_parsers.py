@@ -237,6 +237,34 @@ class TestClineParser:
         entries = parser.parse_all()
         assert entries == []
 
+    def test_init_accepts_custom_base_path(self, tmp_path):
+        """Test initializing ClineParser with a custom base_path."""
+        parser = ClineParser(base_path=tmp_path)
+        assert parser.base_path == tmp_path
+        assert parser._candidate_base_paths() == [tmp_path]
+
+    def test_cline_base_paths_covers_multiple_editors(self):
+        """Verify BASE_PATHS includes VS Code, Cursor, Insiders, VSCodium, and Windsurf."""
+        paths = [p.as_posix() for p in ClineParser.BASE_PATHS]
+        for editor in ("Code", "Cursor", "Code - Insiders", "VSCodium", "Windsurf"):
+            assert any(f"/{editor}/User/globalStorage/" in p for p in paths)
+
+    def test_parse_all_discovers_tasks_across_multiple_existing_editors(self, tmp_path, monkeypatch):
+        """Test that parse_all scans all existing candidate directories and merges tasks."""
+        vscode_dir = tmp_path / "vscode_tasks"
+        cursor_dir = tmp_path / "cursor_tasks"
+        vscode_dir.mkdir()
+        cursor_dir.mkdir()
+        self._write_task(vscode_dir, "task_from_vscode", "hello from vscode")
+        self._write_task(cursor_dir, "task_from_cursor", "hello from cursor")
+
+        monkeypatch.setattr(ClineParser, "BASE_PATHS", [vscode_dir, cursor_dir])
+        parser = ClineParser()
+        entries = parser.parse_all()
+
+        session_ids = {e.session_id for e in entries}
+        assert session_ids == {"cline_task_from_vscode", "cline_task_from_cursor"}
+
 
 class TestCodexParser:
     @staticmethod
@@ -2702,7 +2730,7 @@ class TestPlatformPathCoverage:
     """
 
     def test_cursor_covers_macos_linux_and_windows(self):
-        paths = [str(p) for p in CursorParser.DB_PATHS]
+        paths = [p.as_posix() for p in CursorParser.DB_PATHS]
         assert any("Library/Application Support" in p for p in paths)  # macOS
         assert any("/.config/" in p for p in paths)  # Linux
         # Windows root comes from %APPDATA% (redirected-profile safe), not a hardcoded guess.
@@ -2710,9 +2738,14 @@ class TestPlatformPathCoverage:
         assert all(p.endswith("Cursor/User/globalStorage/state.vscdb") for p in paths)
 
     def test_cline_covers_macos_linux_and_windows(self):
-        paths = [str(p) for p in ClineParser.BASE_PATHS]
+        paths = [p.as_posix() for p in ClineParser.BASE_PATHS]
         assert any("Library/Application Support" in p for p in paths)  # macOS
         assert any("/.config/" in p for p in paths)  # Linux
+        # VS Code (primary) and Cursor are both covered on Windows:
+        assert (
+            windows_appdata() / "Code/User/globalStorage/saoudrizwan.claude-dev/tasks"
+            in ClineParser.BASE_PATHS
+        )
         assert (
             windows_appdata() / "Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks"
             in ClineParser.BASE_PATHS
@@ -2720,7 +2753,7 @@ class TestPlatformPathCoverage:
         assert all(p.endswith("saoudrizwan.claude-dev/tasks") for p in paths)
 
     def test_warp_covers_both_macos_locations_and_windows(self):
-        paths = [str(p) for p in WarpParser.DB_PATHS]
+        paths = [p.as_posix() for p in WarpParser.DB_PATHS]
         assert any("Group Containers/2BBY89MBSN.dev.warp" in p for p in paths)  # macOS sandboxed
         assert any(p.endswith("Library/Application Support/dev.warp.Warp-Stable/warp.sqlite") for p in paths)
         assert windows_local_appdata() / "warp/Warp/data/warp.sqlite" in WarpParser.DB_PATHS
@@ -2729,12 +2762,13 @@ class TestPlatformPathCoverage:
     def test_claude_desktop_covers_macos_and_windows(self):
         from adr_sensor.parsers.claude_desktop_parser import DEFAULT_BASE_PATHS
 
-        assert any("Library/Application Support" in str(p) for p in DEFAULT_BASE_PATHS)  # macOS
+        paths = [p.as_posix() for p in DEFAULT_BASE_PATHS]
+        assert any("Library/Application Support" in p for p in paths)  # macOS
         assert windows_appdata() / "Claude/local-agent-mode-sessions" in DEFAULT_BASE_PATHS
 
     def test_opencode_covers_xdg_and_macos(self, monkeypatch):
         monkeypatch.delenv("XDG_DATA_HOME", raising=False)
-        paths = [str(p) for p in OpencodeParser._candidate_base_dirs()]
+        paths = [p.as_posix() for p in OpencodeParser._candidate_base_dirs()]
         assert any(p.endswith(".local/share/opencode") for p in paths)  # Linux + macOS default
         assert any("Library/Application Support/opencode" in p for p in paths)  # macOS fallback
 
@@ -2742,8 +2776,9 @@ class TestPlatformPathCoverage:
         ("parser_cls", "attr"),
         [(CursorParser, "DB_PATHS"), (ClineParser, "BASE_PATHS"), (WarpParser, "DB_PATHS")],
     )
-    def test_first_candidate_used_when_none_exist(self, parser_cls, attr):
+    def test_first_candidate_used_when_none_exist(self, monkeypatch, parser_cls, attr):
         """With no agent installed the parser reports the primary path, not a crash."""
+        monkeypatch.setattr(Path, "exists", lambda self: False)
         parser = parser_cls()
         resolved = getattr(parser, "db_path", None) or parser.base_path
         assert resolved == getattr(parser_cls, attr)[0]
