@@ -7,6 +7,7 @@ collected by the system config parser.
 import hashlib
 import json
 import os
+import platform
 import socket
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
@@ -283,11 +284,14 @@ class SystemConfiguration:
     hostname: Optional[str] = None
     username: Optional[str] = None
 
+    # Operating system of the capturing host (platform.system()), populated automatically
+    host_os: Optional[str] = None
+
     # UUID for this configuration
     uuid: str = field(init=False)
 
     def __post_init__(self):
-        """Generate UUID after initialization and populate hostname/username."""
+        """Generate UUID after initialization and populate hostname/username/host_os."""
         if self.username is None:
             try:
                 username = os.environ.get("USER") or os.environ.get("USERNAME")
@@ -303,6 +307,13 @@ class SystemConfiguration:
             except Exception:
                 hostname = "unknown_hostname"
             object.__setattr__(self, "hostname", hostname)
+
+        if self.host_os is None:
+            try:
+                host_os = platform.system() or None
+            except Exception:
+                host_os = None
+            object.__setattr__(self, "host_os", host_os)
 
         device_name = self.hostname or self.system_info.machine
         timestamp_str = self.timestamp.isoformat()
