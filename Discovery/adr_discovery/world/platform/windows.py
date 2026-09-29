@@ -11,6 +11,7 @@ from .base import Application, NullProviders, Package, Process, Socket
 class WindowsProviders(NullProviders):
     reason = "Windows management surface unavailable"
     HOME_ROOTS = ("/Users",)
+    DIRECT_HOMES: tuple[str, ...] = ()
 
     def processes(self, gate):
         rows = self._ps_json(gate, "Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,ExecutablePath,CommandLine | ConvertTo-Json -Compress", "processes")

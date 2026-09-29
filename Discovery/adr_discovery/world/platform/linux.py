@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import os
-import pwd
+
+try:
+    import pwd
+except ImportError:
+    pwd = None  # type: ignore
 
 from .base import Application, LanguagePackages, NullProviders, Package, Process, Socket
 
@@ -11,17 +15,12 @@ from .base import Application, LanguagePackages, NullProviders, Package, Process
 class LinuxProviders(NullProviders):
     reason = "not readable on this host"
 
-    HOME_ROOTS = ("/home", "/root")
-
-    def _homes(self, gate) -> tuple[str, ...]:
-        out: list[str] = []
-        for base in self.home_roots():
-            listing = gate.list_dir(base)
-            if listing.ok:
-                out.extend(e.path for e in listing.value if e.is_dir)
-        return tuple(out)
+    HOME_ROOTS = ("/home",)
+    DIRECT_HOMES = ("/root",)
 
     def owner_of(self, uid: int) -> str:
+        if pwd is None:
+            return str(uid)
         try:
             return pwd.getpwuid(uid).pw_name
         except KeyError:

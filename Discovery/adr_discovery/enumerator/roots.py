@@ -7,6 +7,8 @@ case stays fast; they no longer decide what exists.
 
 from __future__ import annotations
 
+import stat
+
 from ..contracts.records import Priority
 
 #: (template, priority). `~` is expanded per discovered home, not per the
@@ -50,19 +52,32 @@ def homes(gate) -> tuple[str, ...]:
     provider, not by a tuple here -- which is the same rule that removed
     the five copies of PROJECT_ROOTS.
     """
+    if hasattr(gate.providers, "homes"):
+        return gate.providers.homes(gate)
     found: list[str] = []
+    direct_candidates = set(getattr(gate.providers, "direct_homes", lambda: ())())
     for base in gate.providers.home_roots():
+        if base in direct_candidates or base in ("/root", "/var/root"):
+            st = gate.stat(base)
+            if st.ok and stat.S_ISDIR(st.value.mode):
+                found.append(base)
+            continue
         listing = gate.list_dir(base)
         if not listing.ok:
             continue
         for entry in listing.value:
             if entry.is_dir and not entry.path.rsplit("/", 1)[-1].startswith("."):
                 found.append(entry.path)
+    for direct in direct_candidates:
+        if direct not in found:
+            st = gate.stat(direct)
+            if st.ok and stat.S_ISDIR(st.value.mode):
+                found.append(direct)
     if not found:
         home = gate.env.get("HOME")
         if home:
             found.append(home)
-    return tuple(found)
+    return tuple(dict.fromkeys(found))
 
 
 def ordered_roots(gate) -> tuple[tuple[str, Priority], ...]:

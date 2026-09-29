@@ -7,7 +7,11 @@ name, so the exe requirement is met without /proc.
 from __future__ import annotations
 
 import plistlib
-import pwd
+
+try:
+    import pwd
+except ImportError:
+    pwd = None  # type: ignore
 
 from .base import Application, LanguagePackages, NullProviders, Package, Process, Socket
 
@@ -19,16 +23,11 @@ class DarwinProviders(NullProviders):
     #: unresponsive. Homes live under /Users; there is nothing to gain by
     #: asking, and a hang to lose.
     HOME_ROOTS = ("/Users",)
-
-    def _homes(self, gate) -> tuple[str, ...]:
-        out: list[str] = []
-        for base in self.home_roots():
-            listing = gate.list_dir(base)
-            if listing.ok:
-                out.extend(e.path for e in listing.value if e.is_dir)
-        return tuple(out)
+    DIRECT_HOMES = ("/var/root",)
 
     def owner_of(self, uid: int) -> str:
+        if pwd is None:
+            return str(uid)
         try:
             return pwd.getpwuid(uid).pw_name
         except KeyError:

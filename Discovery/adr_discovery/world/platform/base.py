@@ -8,6 +8,7 @@ fixture world and a live machine interchangeable.
 from __future__ import annotations
 
 import json
+import stat
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
@@ -78,6 +79,8 @@ class ExecEvent:
 
 class Providers(Protocol):
     def home_roots(self) -> tuple[str, ...]: ...
+    def direct_homes(self) -> tuple[str, ...]: ...
+    def homes(self, gate: "Gate") -> tuple[str, ...]: ...
     def owner_of(self, uid: int) -> str: ...
     def processes(self, gate: "Gate") -> "Result": ...
     def sockets(self, gate: "Gate") -> "Result": ...
@@ -103,9 +106,42 @@ class NullProviders:
     #: lister for as long as automountd feels like it, and a scan that
     #: hangs there is indistinguishable from a scan that found nothing.
     HOME_ROOTS: tuple[str, ...] = ("/Users", "/home")
+    DIRECT_HOMES: tuple[str, ...] = ("/root", "/var/root")
 
     def home_roots(self) -> tuple[str, ...]:
         return self.HOME_ROOTS
+
+    def direct_homes(self) -> tuple[str, ...]:
+        return self.DIRECT_HOMES
+
+    def homes(self, gate: "Gate") -> tuple[str, ...]:
+        out: list[str] = []
+        directs = set(self.direct_homes())
+        for base in self.home_roots():
+            if base in directs or base in ("/root", "/var/root"):
+                st = gate.stat(base)
+                if st.ok and stat.S_ISDIR(st.value.mode):
+                    out.append(base)
+                continue
+            listing = gate.list_dir(base)
+            if listing.ok:
+                out.extend(
+                    e.path
+                    for e in listing.value
+                    if e.is_dir and not e.path.rsplit("/", 1)[-1].startswith(".")
+                )
+        for direct in self.direct_homes():
+            if direct not in out:
+                st = gate.stat(direct)
+                if st.ok and stat.S_ISDIR(st.value.mode):
+                    out.append(direct)
+        if not out:
+            home = gate.env.get("HOME")
+            if home:
+                out.append(home)
+        return tuple(dict.fromkeys(out))
+
+    _homes = homes
 
     def owner_of(self, uid: int) -> str:
         return "system"

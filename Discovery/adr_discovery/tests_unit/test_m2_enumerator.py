@@ -166,3 +166,223 @@ def test_u2_07_registries_answer_before_the_sweep_spends_anything(world):
 
     assert [c.path for c in from_registry] == ["/opt/homebrew/bin/claude"]
     assert spent_on_registries == 0, "querying an index must not consume the sweep ceiling"
+
+
+def test_linux_root_user_home_is_swept_and_not_treated_as_parent():
+    """Issue #146: Linux root home (/root) must be discovered as a home directly,
+    rather than treating /root as a parent of homes, and its children must not
+    be mistaken for user homes."""
+    import stat as s
+
+    from adr_discovery.enumerator.roots import homes, ordered_roots
+    from adr_discovery.world.gate import Entry, Ok, Refused, Stat
+    from adr_discovery.world.platform.linux import LinuxProviders
+
+    class LinuxGate:
+        def __init__(self):
+            self.providers = LinuxProviders()
+            self.env = {}
+
+        def list_dir(self, p):
+            if p == "/home":
+                return Ok((Entry(path="/home/alice", is_dir=True, is_symlink=False, size=0),))
+            if p == "/root":
+                return Ok((Entry(path="/root/java", is_dir=True, is_symlink=False, size=0),))
+            return Refused("absent")
+
+        def stat(self, p):
+            if p in ("/root", "/home/alice"):
+                return Ok(
+                    Stat(
+                        path=p,
+                        real_path=p,
+                        inode="1:1",
+                        size=0,
+                        mode=s.S_IFDIR | 0o755,
+                        mtime=0.0,
+                        owner="root",
+                    )
+                )
+            return Refused("absent")
+
+    gate = LinuxGate()
+    discovered = homes(gate)
+    assert "/root" in discovered, "/root itself must be identified as a home"
+    assert "/home/alice" in discovered, "/home/alice must be identified as a home"
+    assert "/root/java" not in discovered, "children of /root must not be treated as user homes"
+
+    roots = [path for path, _ in ordered_roots(gate)]
+    assert "/root" in roots, "/root must be swept as a priority root"
+    assert "/root/Projects" in roots, "code root templates must expand from /root"
+    assert "/root/java" not in roots, "children of /root must not be treated as priority home roots"
+
+
+def test_darwin_var_root_home_is_swept():
+    """macOS root home (/var/root) must be discovered as a direct home."""
+    import stat as s
+
+    from adr_discovery.enumerator.roots import homes
+    from adr_discovery.world.gate import Entry, Ok, Refused, Stat
+    from adr_discovery.world.platform.darwin import DarwinProviders
+
+    class DarwinGate:
+        def __init__(self):
+            self.providers = DarwinProviders()
+            self.env = {}
+
+        def list_dir(self, p):
+            if p == "/Users":
+                return Ok((Entry(path="/Users/bob", is_dir=True, is_symlink=False, size=0),))
+            return Refused("absent")
+
+        def stat(self, p):
+            if p in ("/var/root", "/Users/bob"):
+                return Ok(
+                    Stat(
+                        path=p,
+                        real_path=p,
+                        inode="1:1",
+                        size=0,
+                        mode=s.S_IFDIR | 0o755,
+                        mtime=0.0,
+                        owner="root",
+                    )
+                )
+            return Refused("absent")
+
+    gate = DarwinGate()
+    discovered = homes(gate)
+    assert "/var/root" in discovered
+    assert "/Users/bob" in discovered
+
+
+def test_unreadable_root_home_is_reported_as_coverage_gap():
+    """If /root exists but is unreadable (e.g. non-root scan on Linux),
+    the attempt to sweep /root must record a denial in coverage rather
+    than silently dropping the directory."""
+    import stat as s
+
+    from adr_discovery.coverage.ledger import Ledger
+    from adr_discovery.enumerator.sweep import sweep
+    from adr_discovery.world.budget import Budget
+    from adr_discovery.world.gate import Entry, Ok, Refused, Stat
+    from adr_discovery.world.platform.linux import LinuxProviders
+
+    class UnreadableRootGate:
+        def __init__(self):
+            self.providers = LinuxProviders()
+            self.ledger = Ledger()
+            self.budget = Budget()
+            self.env = {}
+
+        def list_dir(self, p):
+            if p == "/home":
+                return Ok((Entry(path="/home/alice", is_dir=True, is_symlink=False, size=0),))
+            if p.startswith("/root"):
+                self.ledger.deny(p, "Permission denied")
+                return Refused("open_failed", "Permission denied")
+            return Refused("absent")
+
+        def stat(self, p):
+            if p in ("/root", "/home/alice"):
+                return Ok(
+                    Stat(
+                        path=p,
+                        real_path=p,
+                        inode="1:1",
+                        size=0,
+                        mode=s.S_IFDIR | 0o700,
+                        mtime=0.0,
+                        owner="root",
+                    )
+                )
+            return Refused("absent")
+
+        def walk(self, p):
+            listing = self.list_dir(p)
+            if not listing.ok:
+                return
+            for e in listing.value:
+                yield e
+
+    gate = UnreadableRootGate()
+    sweep(gate)
+    coverage = gate.ledger.freeze()
+    assert any(d.path == "/root" and "Permission denied" in d.reason for d in coverage.denied), (
+        "unreadable /root must appear in coverage.denied as a coverage gap"
+    )
+
+
+def test_absent_direct_home_is_not_denied():
+    """When a direct home does not exist, it must not be added to homes
+    and must not record a false denial."""
+    from adr_discovery.coverage.ledger import Ledger
+    from adr_discovery.enumerator.roots import homes
+    from adr_discovery.world.gate import Entry, Ok, Refused
+    from adr_discovery.world.platform.linux import LinuxProviders
+
+    class AbsentRootGate:
+        def __init__(self):
+            self.providers = LinuxProviders()
+            self.ledger = Ledger()
+            self.env = {}
+
+        def list_dir(self, p):
+            if p == "/home":
+                return Ok((Entry(path="/home/alice", is_dir=True, is_symlink=False, size=0),))
+            return Refused("absent")
+
+        def stat(self, p):
+            return Refused("absent")
+
+    gate = AbsentRootGate()
+    discovered = homes(gate)
+    assert discovered == ("/home/alice",)
+    assert len(gate.ledger.freeze().denied) == 0
+
+
+def test_legacy_home_roots_with_root_is_not_treated_as_parent():
+    """Backwards compatibility: If a custom provider supplies /root in home_roots,
+    it must be handled as a direct home and not have its children treated as homes."""
+    import stat as s
+
+    from adr_discovery.enumerator.roots import homes
+    from adr_discovery.world.gate import Entry, Ok, Refused, Stat
+    from adr_discovery.world.platform.base import NullProviders
+
+    class LegacyProvider(NullProviders):
+        HOME_ROOTS = ("/home", "/root")
+        DIRECT_HOMES = ()
+
+    class LegacyGate:
+        def __init__(self):
+            self.providers = LegacyProvider()
+            self.env = {}
+
+        def list_dir(self, p):
+            if p == "/home":
+                return Ok((Entry(path="/home/alice", is_dir=True, is_symlink=False, size=0),))
+            if p == "/root":
+                return Ok((Entry(path="/root/child_dir", is_dir=True, is_symlink=False, size=0),))
+            return Refused("absent")
+
+        def stat(self, p):
+            if p in ("/root", "/home/alice"):
+                return Ok(
+                    Stat(
+                        path=p,
+                        real_path=p,
+                        inode="1:1",
+                        size=0,
+                        mode=s.S_IFDIR | 0o755,
+                        mtime=0.0,
+                        owner="root",
+                    )
+                )
+            return Refused("absent")
+
+    gate = LegacyGate()
+    discovered = homes(gate)
+    assert "/root" in discovered
+    assert "/home/alice" in discovered
+    assert "/root/child_dir" not in discovered
