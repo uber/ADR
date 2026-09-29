@@ -2269,6 +2269,18 @@ class TestOpencodeParserSqlite:
         assert diagnostics.get("unsupported_schema") == 1
         assert "database_error" not in diagnostics
 
+    def test_session_database_error_is_logged_as_a_warning(self, tmp_path, capsys):
+        db_path = tmp_path / "opencode.db"
+        _build_opencode_db(db_path, sessions=[{"id": "ses_locked"}], messages=[], parts=[])
+        parser = _make_opencode_parser(tmp_path)
+        parser.reset_diagnostics()
+        with patch.object(parser, "_get_sqlite_messages", side_effect=sqlite3.OperationalError("database is locked")):
+            assert parser._parse_sqlite(db_path) == []
+        assert parser.get_diagnostics() == {"session_build_error": 1}
+        captured = capsys.readouterr()
+        assert "[OPENCODE] Error processing session ses_locked: database is locked" in captured.err
+        assert "Error processing session" not in captured.out
+
     def test_unreadable_database_still_records_database_error(self, tmp_path):
         db_path = tmp_path / "opencode.db"
         db_path.write_bytes(b"not a sqlite database" * 10)

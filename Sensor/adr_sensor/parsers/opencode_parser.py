@@ -246,7 +246,7 @@ class OpencodeParser(BaseParser):
                     if "no such table" in str(e):
                         raise
                     self.record_diagnostic("session_build_error")
-                    print(f"[OPENCODE] Error processing session {session_id}: {e}")
+                    logger.warning("[OPENCODE] Error processing session %s: %s", session_id, e)
                 except Exception as e:
                     self.record_diagnostic("session_build_error")
                     logger.warning("[OPENCODE] Error processing session %s: %s", session_id, e)
