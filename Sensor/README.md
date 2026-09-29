@@ -490,6 +490,7 @@ Each parsed session produces an `AgentEvent` with the following structure:
   "session_id": "claude_abc123",
   "hostname": "my-laptop",
   "username": "developer",
+  "host_os": "Darwin",
   "model": "claude-sonnet-4-20250514",
   "project_path": "/home/user/my-project",
   "chat_history": [
@@ -516,6 +517,10 @@ Each parsed session produces an `AgentEvent` with the following structure:
   ]
 }
 ```
+
+`host_os` is the capturing machine's `platform.system()` value (`Darwin`, `Linux`,
+`Windows`, ...), the same values `resource.log` uses. It is not part of the `uuid`,
+and OTLP exports also set the `os.type` resource attribute.
 
 Tool arguments and results can contain source code, credentials, or other sensitive
 content copied from the local environment. Treat sensor output as sensitive data and
