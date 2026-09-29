@@ -19,16 +19,14 @@ Runtime logs are separate from the content-free health records written by
 ``diagnostics.py``: they describe what the sensor did, not how healthy a run was.
 """
 
-import getpass
 import json
 import logging
-import socket
 import sys
 from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from . import __version__
+from . import __version__, host_identity
 
 LOGGER_NAME = "adr_sensor"
 RUNTIME_ERRORS_LOG = "sensor_runtime_errors.jsonl"
@@ -87,34 +85,21 @@ def _exception_type(record: logging.LogRecord):
     return None
 
 
-def _local_identity():
-    """Return the local ``(username, hostname)``, with ``None`` for unknown parts."""
-    try:
-        username = getpass.getuser()
-    except Exception:
-        username = None
-    try:
-        hostname = socket.gethostname() or None
-    except OSError:
-        hostname = None
-    return username, hostname
-
-
 class JsonRecordFormatter(logging.Formatter):
     """Format records as one JSON object per line for the runtime log files.
 
     Every record carries ``timestamp``, ``level``, ``component``, ``function``,
-    ``phase``, ``sensor_version`` and ``exception_type``. The rendered
+    ``phase``, ``sensor_version``, ``host_os`` and ``exception_type``. The rendered
     ``message`` and, when an exception is attached, its ``stack`` are included
     unless *include_details* is false, which keeps records free of paths and
-    error text. *include_identity* adds the local ``username`` and ``hostname``,
-    looked up once.
+    error text. *include_identity* adds the ``username`` and ``hostname`` from
+    ``host_identity``.
     """
 
     def __init__(self, *, include_details: bool = True, include_identity: bool = False) -> None:
         super().__init__()
         self.include_details = include_details
-        self.identity = _local_identity() if include_identity else None
+        self.include_identity = include_identity
 
     def format(self, record: logging.LogRecord) -> str:
         data = {
@@ -124,14 +109,16 @@ class JsonRecordFormatter(logging.Formatter):
             "function": record.funcName,
             "phase": getattr(record, "phase", None),
             "sensor_version": __version__,
+            "host_os": host_identity.host_os(),
             "exception_type": _exception_type(record),
         }
         if self.include_details:
             data["message"] = record.getMessage()
             if record.exc_info:
                 data["stack"] = self.formatException(record.exc_info)
-        if self.identity is not None:
-            data["username"], data["hostname"] = self.identity
+        if self.include_identity:
+            data["username"] = host_identity.username()
+            data["hostname"] = host_identity.hostname()
         return json.dumps(data, ensure_ascii=False, separators=(",", ":"), default=str)
 
 

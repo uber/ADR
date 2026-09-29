@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+from adr_sensor import host_identity
 from adr_sensor.schemas.agent_event_schema import AgentEvent, ChatMessage, ToolUsage
 
 
@@ -103,25 +104,19 @@ class TestAgentEvent:
         assert event.is_truncated is True
         assert event.token_usage is None
 
-    def test_host_os_defaults_to_platform_system(self, monkeypatch):
-        monkeypatch.setattr("adr_sensor.schemas.agent_event_schema.platform.system", lambda: "Linux")
+    def test_host_metadata_defaults_to_host_identity(self, monkeypatch):
+        monkeypatch.setattr(host_identity, "username", lambda: "process-user")
+        monkeypatch.setattr(host_identity, "hostname", lambda: "process-host")
+        monkeypatch.setattr(host_identity, "host_os", lambda: "Linux")
         event = AgentEvent(timestamp=datetime(2025, 1, 1, tzinfo=timezone.utc), source="claude", session_id="s")
-        assert event.host_os == "Linux"
+        assert (event.username, event.hostname, event.host_os) == ("process-user", "process-host", "Linux")
 
     def test_explicit_host_os_is_preserved(self, monkeypatch):
-        monkeypatch.setattr("adr_sensor.schemas.agent_event_schema.platform.system", lambda: "Linux")
+        monkeypatch.setattr(host_identity, "host_os", lambda: "Linux")
         event = AgentEvent(
             timestamp=datetime(2025, 1, 1, tzinfo=timezone.utc), source="claude", session_id="s", host_os="Darwin"
         )
         assert event.host_os == "Darwin"
-
-    def test_host_os_default_survives_platform_error(self, monkeypatch):
-        def fail():
-            raise OSError("synthetic")
-
-        monkeypatch.setattr("adr_sensor.schemas.agent_event_schema.platform.system", fail)
-        event = AgentEvent(timestamp=datetime(2025, 1, 1, tzinfo=timezone.utc), source="claude", session_id="s")
-        assert event.host_os is None
 
     def test_host_os_does_not_change_uuid(self):
         kwargs = {

@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 
+from adr_sensor import host_identity
 from adr_sensor.schemas.system_config_schema import (
     DockerInfo,
     HomebrewInfo,
@@ -31,8 +32,8 @@ def _configuration(**kwargs):
     )
 
 
-def test_system_configuration_host_os_defaults_to_platform_system(monkeypatch):
-    monkeypatch.setattr("adr_sensor.schemas.system_config_schema.platform.system", lambda: "Darwin")
+def test_system_configuration_host_os_defaults_to_host_identity(monkeypatch):
+    monkeypatch.setattr(host_identity, "host_os", lambda: "Darwin")
     assert _configuration().host_os == "Darwin"
 
 

@@ -463,11 +463,11 @@ off by default. If the files cannot be opened, the sensor prints one warning and
 keeps printing warnings and errors to stderr.
 
 Each record has `timestamp`, `level`, `component`, `function`, `phase`,
-`sensor_version`, `exception_type`, `message` and, for errors with a traceback,
-`stack`:
+`sensor_version`, `host_os`, `exception_type`, `message` and, for errors with a
+traceback, `stack`:
 
 ```json
-{"timestamp":"2026-01-01T12:00:00.000+00:00","level":"WARNING","component":"parsers.cline_parser","function":"parse_all","phase":null,"sensor_version":"0.1.0","exception_type":"KeyError","message":"[CLINE] Error parsing task /home/me/.cline/tasks/123: 'ts'"}
+{"timestamp":"2026-01-01T12:00:00.000+00:00","level":"WARNING","component":"parsers.cline_parser","function":"parse_all","phase":null,"sensor_version":"0.1.0","host_os":"Linux","exception_type":"KeyError","message":"[CLINE] Error parsing task /home/me/.cline/tasks/123: 'ts'"}
 ```
 
 **Privacy:** unlike the diagnostics above, `message` and `stack` can contain local
@@ -518,9 +518,13 @@ Each parsed session produces an `AgentEvent` with the following structure:
 }
 ```
 
-`host_os` is the capturing machine's `platform.system()` value (`Darwin`, `Linux`,
-`Windows`, ...), the same values `resource.log` uses. It is not part of the `uuid`,
-and OTLP exports also set the `os.type` resource attribute.
+`username` is the operating-system account the sensor process runs as (a sensor
+running as root reports `root`); it is never read from environment variables such
+as `USER`. `hostname` is the machine's host name. `host_os` is the capturing
+machine's `platform.system()` value (`Darwin`, `Linux`, `Windows`, ...), the same
+values `resource.log` uses. It is not part of the `uuid`, and OTLP exports also set
+the `os.type` resource attribute. All three are resolved once per run and shared by
+session events, system configuration, OTLP exports and runtime logs.
 
 Tool arguments and results can contain source code, credentials, or other sensitive
 content copied from the local environment. Treat sensor output as sensitive data and

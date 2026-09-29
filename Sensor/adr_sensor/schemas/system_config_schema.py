@@ -6,12 +6,11 @@ collected by the system config parser.
 
 import hashlib
 import json
-import os
-import platform
-import socket
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+
+from .. import host_identity
 
 
 @dataclass(frozen=True)
@@ -284,7 +283,7 @@ class SystemConfiguration:
     hostname: Optional[str] = None
     username: Optional[str] = None
 
-    # Operating system of the capturing host (platform.system()), populated automatically
+    # Operating system of the capturing host (platform.system() name), populated automatically
     host_os: Optional[str] = None
 
     # UUID for this configuration
@@ -293,27 +292,11 @@ class SystemConfiguration:
     def __post_init__(self):
         """Generate UUID after initialization and populate hostname/username/host_os."""
         if self.username is None:
-            try:
-                username = os.environ.get("USER") or os.environ.get("USERNAME")
-                if not username:
-                    username = os.getlogin()
-            except Exception:
-                username = "unknown_user"
-            object.__setattr__(self, "username", username)
-
+            object.__setattr__(self, "username", host_identity.username())
         if self.hostname is None:
-            try:
-                hostname = socket.gethostname()
-            except Exception:
-                hostname = "unknown_hostname"
-            object.__setattr__(self, "hostname", hostname)
-
+            object.__setattr__(self, "hostname", host_identity.hostname())
         if self.host_os is None:
-            try:
-                host_os = platform.system() or None
-            except Exception:
-                host_os = None
-            object.__setattr__(self, "host_os", host_os)
+            object.__setattr__(self, "host_os", host_identity.host_os())
 
         device_name = self.hostname or self.system_info.machine
         timestamp_str = self.timestamp.isoformat()
