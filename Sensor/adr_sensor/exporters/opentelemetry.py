@@ -1,6 +1,7 @@
 """OTLP/HTTP logs exporter for normalized ADR Sensor records."""
 
 import os
+import platform
 import socket
 import threading
 import time
@@ -42,13 +43,16 @@ class OpenTelemetryLogExporter:
             export_result_cls,
         ) = components
 
-        resource = resource_cls.create(
-            {
-                "service.name": config.service_name,
-                "service.version": service_version,
-                "host.name": socket.gethostname(),
-            }
-        )
+        resource_attributes = {
+            "service.name": config.service_name,
+            "service.version": service_version,
+            "host.name": socket.gethostname(),
+        }
+        # OpenTelemetry semantic convention: lower-case OS family, e.g. "linux", "darwin", "windows".
+        os_type = platform.system().lower()
+        if os_type:
+            resource_attributes["os.type"] = os_type
+        resource = resource_cls.create(resource_attributes)
         self._provider = logger_provider_cls(resource=resource)
 
         record_exporter = _log_record_exporter

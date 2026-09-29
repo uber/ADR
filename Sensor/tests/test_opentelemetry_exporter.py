@@ -85,6 +85,23 @@ def test_export_preserves_complete_agent_event_payload():
     exporter.shutdown()
 
 
+@pytest.mark.parametrize(("system", "expected"), [("Darwin", "darwin"), ("", None)])
+def test_resource_includes_os_type_when_known(monkeypatch, system, expected):
+    monkeypatch.setattr("adr_sensor.exporters.opentelemetry.platform.system", lambda: system)
+    memory_exporter = InMemoryLogRecordExporter()
+    exporter = OpenTelemetryLogExporter(
+        OpenTelemetryConfig(endpoint="http://localhost:4318/v1/logs"),
+        service_version="1.2.3",
+        _log_record_exporter=memory_exporter,
+        _processor_factory=SimpleLogRecordProcessor,
+    )
+
+    exporter.export([_event()], [])
+
+    assert memory_exporter.get_finished_logs()[0].resource.attributes.get("os.type") == expected
+    exporter.shutdown()
+
+
 def test_shutdown_is_idempotent():
     exporter = OpenTelemetryLogExporter(
         OpenTelemetryConfig(endpoint="http://localhost:4318/v1/logs"),
