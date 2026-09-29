@@ -358,6 +358,24 @@ class TestAgentObserver:
         assert observer.filter_entries_by_existing_files([entry], output_dir=tmp_path) == []
         assert legacy_file.exists()
 
+    def test_host_os_addition_does_not_rewrite_existing_session_snapshot(self, tmp_path):
+        """Snapshots written before host_os existed must not be re-exported after upgrading."""
+        observer = AgentObserver(output_dir=tmp_path)
+        entry = AgentEvent(
+            timestamp=datetime(2025, 6, 15, 10, 0, 0, tzinfo=timezone.utc),
+            source="codex",
+            session_id="codex_session1",
+            hostname="host",
+            username="user",
+            host_os="Linux",
+            chat_history=[ChatMessage(role="user", content="unchanged")],
+        )
+        older_data = entry.get_non_null_fields()
+        older_data.pop("host_os")
+        (tmp_path / "adr.codex_session1.20250615_100000.json").write_text(json.dumps(older_data), encoding="utf-8")
+
+        assert observer.filter_entries_by_existing_files([entry], output_dir=tmp_path) == []
+
     def test_content_filter_detects_same_second_tool_result(self, tmp_path):
         """A result appended in the filename's second must still replace the snapshot."""
         observer = AgentObserver(output_dir=tmp_path)

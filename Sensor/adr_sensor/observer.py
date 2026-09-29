@@ -539,8 +539,8 @@ class AgentObserver:
 
     @staticmethod
     def _session_export_content(event_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Ignore fields that change only because a snapshot is rewritten."""
-        return {key: value for key, value in event_data.items() if key not in {"timestamp", "uuid"}}
+        """Ignore fields that change only because a snapshot is rewritten, or host metadata added later."""
+        return {key: value for key, value in event_data.items() if key not in {"timestamp", "uuid", "host_os"}}
 
     def _find_session_file(
         self,

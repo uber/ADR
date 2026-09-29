@@ -103,6 +103,36 @@ class TestAgentEvent:
         assert event.is_truncated is True
         assert event.token_usage is None
 
+    def test_host_os_defaults_to_platform_system(self, monkeypatch):
+        monkeypatch.setattr("adr_sensor.schemas.agent_event_schema.platform.system", lambda: "Linux")
+        event = AgentEvent(timestamp=datetime(2025, 1, 1, tzinfo=timezone.utc), source="claude", session_id="s")
+        assert event.host_os == "Linux"
+
+    def test_explicit_host_os_is_preserved(self, monkeypatch):
+        monkeypatch.setattr("adr_sensor.schemas.agent_event_schema.platform.system", lambda: "Linux")
+        event = AgentEvent(
+            timestamp=datetime(2025, 1, 1, tzinfo=timezone.utc), source="claude", session_id="s", host_os="Darwin"
+        )
+        assert event.host_os == "Darwin"
+
+    def test_host_os_default_survives_platform_error(self, monkeypatch):
+        def fail():
+            raise OSError("synthetic")
+
+        monkeypatch.setattr("adr_sensor.schemas.agent_event_schema.platform.system", fail)
+        event = AgentEvent(timestamp=datetime(2025, 1, 1, tzinfo=timezone.utc), source="claude", session_id="s")
+        assert event.host_os is None
+
+    def test_host_os_does_not_change_uuid(self):
+        kwargs = {
+            "timestamp": datetime(2025, 1, 1, tzinfo=timezone.utc),
+            "source": "claude",
+            "session_id": "test_session",
+            "hostname": "test-host",
+            "username": "test-user",
+        }
+        assert AgentEvent(**kwargs, host_os="Linux").uuid == AgentEvent(**kwargs, host_os="Windows").uuid
+
     def test_uuid_unique_for_different_sessions(self):
         event1 = AgentEvent(
             timestamp=datetime(2025, 1, 1, tzinfo=timezone.utc),
