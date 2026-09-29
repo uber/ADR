@@ -29,7 +29,7 @@ from .exporters import OpenTelemetryConfigError, load_opentelemetry_config
 from .exporters.delivery_checkpoint import DeliveryCheckpoint, DeliveryCheckpointError
 from .exporters.opentelemetry import OpenTelemetryExportError, OpenTelemetryLogExporter
 from .observer import AgentObserver
-from .sensor_log import append_rotating_line, set_console_level
+from .sensor_log import append_rotating_line, disable_runtime_log, enable_runtime_log, set_console_level
 
 logger = logging.getLogger(__name__)
 
@@ -125,9 +125,33 @@ Examples:
     verbosity.add_argument(
         "-q", "--quiet", action="store_true", help="Print only warnings and errors (same as --log-level warning)"
     )
+    parser.add_argument(
+        "--log-file",
+        action="store_true",
+        help="Also write runtime logs as rotating JSON lines (sensor_runtime_*.jsonl) in the output directory",
+    )
+    parser.add_argument(
+        "--log-file-content-free",
+        action="store_true",
+        help="Omit messages and tracebacks from --log-file records (no paths or error text)",
+    )
+    parser.add_argument(
+        "--log-identity",
+        action="store_true",
+        help="Add the local username and hostname to --log-file records",
+    )
 
     args = parser.parse_args()
+    for option in ("log_file_content_free", "log_identity"):
+        if getattr(args, option) and not args.log_file:
+            parser.error(f"--{option.replace('_', '-')} requires --log-file")
     set_console_level("warning" if args.quiet else args.log_level)
+    if args.log_file:
+        enable_runtime_log(
+            args.output_dir or Path.cwd() / "output",
+            include_details=not args.log_file_content_free,
+            include_identity=args.log_identity,
+        )
 
     otel_config = None
     if args.otel_config is not None:
@@ -322,6 +346,7 @@ Examples:
                 append_rotating_line(log_path, json.dumps(record, separators=(",", ":"), ensure_ascii=False))
             except Exception:
                 pass
+        disable_runtime_log()
 
 
 if __name__ == "__main__":

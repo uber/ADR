@@ -453,6 +453,29 @@ session IDs, exception messages, or tracebacks. This is a separate operational
 schema, **not redaction of captured telemetry**. Legacy console previews/errors and
 older entries already present in `error.log` are not sanitized by this change.
 
+### Runtime log files
+
+`--log-file` also writes the run's log messages as JSON lines next to the
+diagnostics: `sensor_runtime_errors.jsonl` holds warnings and errors, and
+`sensor_runtime_debug.jsonl` holds debug and info messages whatever the console
+`--log-level` is. Each file rotates at 1 MiB with two backups. Runtime logging is
+off by default. If the files cannot be opened, the sensor prints one warning and
+keeps printing warnings and errors to stderr.
+
+Each record has `timestamp`, `level`, `component`, `function`, `phase`,
+`sensor_version`, `exception_type`, `message` and, for errors with a traceback,
+`stack`:
+
+```json
+{"timestamp":"2026-01-01T12:00:00.000+00:00","level":"WARNING","component":"parsers.cline_parser","function":"parse_all","phase":null,"sensor_version":"0.1.0","exception_type":"KeyError","message":"[CLINE] Error parsing task /home/me/.cline/tasks/123: 'ts'"}
+```
+
+**Privacy:** unlike the diagnostics above, `message` and `stack` can contain local
+file paths and error text. Log call sites do not log prompts or tool content, but
+treat these files like other local logs. `--log-file-content-free` drops `message`
+and `stack` and keeps the remaining fields. `--log-identity` adds `username` and
+`hostname` to each record; it is opt-in because it identifies the machine and user.
+
 ## Output Schema
 
 ### AgentEvent

@@ -169,7 +169,8 @@ logger.warning("[MY_AGENT] Skipped unreadable file", extra={"phase": "parse"})
 - Use `WARNING` for recoverable problems (a skipped file or record) and `ERROR`
   when a whole source or output step fails. Keep recording fixed diagnostic codes
   with `record_diagnostic()`; log messages do not replace them.
-- Never log prompts, tool arguments or results, or other captured content.
+- Never log prompts, tool arguments or results, or other captured content. With
+  `--log-file`, messages are persisted to `sensor_runtime_*.jsonl`.
 - Explicit report output, such as `AgentObserver.display_summary()`, stays as `print()`.
 
 ## Testing Guidelines
