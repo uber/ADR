@@ -103,6 +103,26 @@ Use `--all-history` to include older sessions. This source covers GitHub Copilot
 CLI session state only; it does not read the separate storage used by the VS Code
 Copilot Chat extension.
 
+### Cline (Claude Dev)
+
+The `cline` source reads task conversation histories from the Cline extension
+(`saoudrizwan.claude-dev`) across supported VS Code-family editors, including
+Visual Studio Code (primary), Cursor, VS Code Insiders, VSCodium, and Windsurf:
+
+| Host | Default task directories |
+| ---- | ------------------------ |
+| macOS | `~/Library/Application Support/<Editor>/User/globalStorage/saoudrizwan.claude-dev/tasks/` |
+| Linux | `~/.config/<Editor>/User/globalStorage/saoudrizwan.claude-dev/tasks/` |
+| Windows | `%APPDATA%\<Editor>\User\globalStorage\saoudrizwan.claude-dev\tasks\` |
+
+The parser scans all existing candidate directories, normalizes user prompts and
+assistant tool usages (including `<use_mcp_tool>` invocations) into the ADR
+schema, and deduplicates sessions across editors. Lookback defaults to 14 days by
+task file modification time; pass `max_age_days` to adjust.
+An inaccessible candidate is reported in diagnostics and the sensor log without
+preventing collection from other editors. Python callers can restrict collection
+to one task directory with `ClineParser(base_path=...)`.
+
 ### opencode
 
 [opencode](https://github.com/sst/opencode) uses the XDG layout on every platform,

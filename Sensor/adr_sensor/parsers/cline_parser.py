@@ -16,84 +16,156 @@ from ..schemas.agent_event_schema import AgentEvent, ChatMessage, ToolUsage
 from ..utils.platform_paths import windows_appdata
 from .base_parser import BaseParser
 
-# Cline stores task history inside the Cursor extension's global storage,
-# relative to the per-platform app-data root.
 logger = logging.getLogger(__name__)
 
-_CLINE_TASKS_SUFFIX = "Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks"
+# Task history subpath for the Cline extension across VS Code-based editors,
+# relative to the per-platform app-data root.
+_CLINE_TASKS_SUBPATH = "User/globalStorage/saoudrizwan.claude-dev/tasks"
+
+# Legacy alias for backward compatibility.
+_CLINE_TASKS_SUFFIX = f"Cursor/{_CLINE_TASKS_SUBPATH}"
+
+# Editors known to host the Cline extension, ordered by prominence.
+_SUPPORTED_EDITORS = (
+    "Code",  # Visual Studio Code (primary)
+    "Cursor",  # Cursor
+    "Code - Insiders",  # Visual Studio Code Insiders
+    "VSCodium",  # VSCodium
+    "Windsurf",  # Windsurf
+)
 MAX_LOG_AGE_DAYS = 14
+
+
+def _build_candidate_base_paths() -> List[Path]:
+    """Generate candidate task directories across supported editors and platforms."""
+    candidates: List[Path] = []
+    for editor in _SUPPORTED_EDITORS:
+        suffix = f"{editor}/{_CLINE_TASKS_SUBPATH}"
+        candidates.extend(
+            [
+                Path.home() / "Library/Application Support" / suffix,  # macOS
+                Path.home() / ".config" / suffix,  # Linux
+                windows_appdata() / suffix,  # Windows (%APPDATA%)
+            ]
+        )
+    return candidates
 
 
 class ClineParser(BaseParser):
     """Parser for Cline (Claude Dev) logs."""
 
-    #: Candidate task directories, checked in order.
-    BASE_PATHS = [
-        Path.home() / "Library/Application Support" / _CLINE_TASKS_SUFFIX,  # macOS
-        Path.home() / ".config" / _CLINE_TASKS_SUFFIX,  # Linux
-        windows_appdata() / _CLINE_TASKS_SUFFIX,  # Windows (%APPDATA%)
-    ]
+    #: Candidate task directories, checked in order across supported editors and platforms.
+    BASE_PATHS = _build_candidate_base_paths()
 
-    def __init__(self, max_age_days: int = MAX_LOG_AGE_DAYS):
-        self.base_path = next((p for p in self.BASE_PATHS if p.exists()), self.BASE_PATHS[0])
+    def __init__(
+        self,
+        max_age_days: int = MAX_LOG_AGE_DAYS,
+        base_path: Optional[Path] = None,
+    ):
+        self._custom_base_path = Path(base_path) if base_path is not None else None
+        if self._custom_base_path is not None:
+            self._base_path = self._custom_base_path
+        else:
+            self._base_path = self.BASE_PATHS[0]
+            for candidate in self.BASE_PATHS:
+                try:
+                    if candidate.exists():
+                        self._base_path = candidate
+                        break
+                except OSError:
+                    # Report inaccessible roots in parse_all(), after the
+                    # observer resets the per-run diagnostic counters.
+                    continue
         self.max_age_days = max_age_days
+
+    @property
+    def base_path(self) -> Path:
+        return self._base_path
+
+    @base_path.setter
+    def base_path(self, value: Path) -> None:
+        """Preserve callers that select one root by assigning base_path."""
+        self._base_path = Path(value)
+        self._custom_base_path = self._base_path
+
+    def _candidate_base_paths(self) -> List[Path]:
+        """Return task directories to scan for Cline logs."""
+        custom_base_path = getattr(self, "_custom_base_path", None)
+        if custom_base_path is not None:
+            return [custom_base_path]
+        # Probe each root inside parse_all's recovery boundary so a failed
+        # existence check cannot prevent collection from the other editors.
+        return list(self.BASE_PATHS)
 
     def parse_all(self) -> List[AgentEvent]:
         """Parse all available Cline logs."""
-        entries = []
+        entries: List[AgentEvent] = []
+        candidate_paths = self._candidate_base_paths()
+        scanned_any = False
+        scan_failed = False
+        seen_sessions = set()
 
-        if not self.base_path.exists():
-            self.record_diagnostic("input_missing")
-            logger.info("[CLINE] No logs found at %s", self.base_path)
-            return entries
+        for base_path in candidate_paths:
+            try:
+                if not base_path.exists():
+                    continue
+                scanned_any = True
+                logger.info("[CLINE] Scanning for logs in %s", base_path)
+                task_dirs = [d for d in base_path.iterdir() if d.is_dir()]
+            except OSError as exc:
+                scan_failed = True
+                self.record_diagnostic("file_read_error")
+                logger.error("[CLINE] Error scanning task directory %s: %s", base_path, exc)
+                continue
+            logger.info("[CLINE] Found %s task directories", len(task_dirs))
 
-        logger.info("[CLINE] Scanning for logs in %s", self.base_path)
+            if self.max_age_days > 0:
+                cutoff_timestamp = (datetime.now(timezone.utc) - timedelta(days=self.max_age_days)).timestamp()
+                recent_task_dirs = []
+                skipped_count = 0
 
-        task_dirs = [d for d in self.base_path.iterdir() if d.is_dir()]
-        logger.info("[CLINE] Found %s task directories", len(task_dirs))
+                for task_dir in task_dirs:
+                    api_file = task_dir / "api_conversation_history.json"
+                    try:
+                        modified_at = api_file.stat().st_mtime
+                    except OSError as exc:
+                        # A missing conversation file uses the task timestamp; an
+                        # inaccessible task below is a separate inspection failure.
+                        if not isinstance(exc, FileNotFoundError):
+                            self.record_diagnostic("file_stat_error")
+                        try:
+                            modified_at = task_dir.stat().st_mtime
+                        except OSError as e:
+                            self.record_diagnostic("file_stat_error")
+                            logger.warning("[CLINE] Error checking task %s: %s", task_dir, e)
+                            recent_task_dirs.append(task_dir)
+                            continue
 
-        if self.max_age_days > 0:
-            cutoff_timestamp = (datetime.now(timezone.utc) - timedelta(days=self.max_age_days)).timestamp()
-            recent_task_dirs = []
-            skipped_count = 0
+                    if modified_at >= cutoff_timestamp:
+                        recent_task_dirs.append(task_dir)
+                    else:
+                        skipped_count += 1
+
+                task_dirs = recent_task_dirs
+                if skipped_count > 0:
+                    self.record_diagnostic("file_age_skipped", skipped_count)
+                    logger.info("[CLINE] Skipped %s tasks older than %s days", skipped_count, self.max_age_days)
+
+            logger.info("[CLINE] Processing %s task directories", len(task_dirs))
 
             for task_dir in task_dirs:
-                api_file = task_dir / "api_conversation_history.json"
                 try:
-                    modified_at = api_file.stat().st_mtime
-                except OSError as exc:
-                    # A missing conversation file uses the task timestamp; an
-                    # inaccessible task below is a separate inspection failure.
-                    if not isinstance(exc, FileNotFoundError):
-                        self.record_diagnostic("file_stat_error")
-                    try:
-                        modified_at = task_dir.stat().st_mtime
-                    except OSError as e:
-                        self.record_diagnostic("file_stat_error")
-                        logger.warning("[CLINE] Error checking task %s: %s", task_dir, e)
-                        recent_task_dirs.append(task_dir)
-                        continue
+                    entry = self.parse_cline_log(task_dir)
+                    if entry and entry.session_id not in seen_sessions:
+                        seen_sessions.add(entry.session_id)
+                        entries.append(entry)
+                except Exception as e:
+                    self.record_diagnostic("session_build_error")
+                    logger.warning("[CLINE] Error parsing task %s: %s", task_dir, e)
 
-                if modified_at >= cutoff_timestamp:
-                    recent_task_dirs.append(task_dir)
-                else:
-                    skipped_count += 1
-
-            task_dirs = recent_task_dirs
-            if skipped_count > 0:
-                self.record_diagnostic("file_age_skipped", skipped_count)
-                logger.info("[CLINE] Skipped %s tasks older than %s days", skipped_count, self.max_age_days)
-
-        logger.info("[CLINE] Processing %s task directories", len(task_dirs))
-
-        for task_dir in task_dirs:
-            try:
-                entry = self.parse_cline_log(task_dir)
-                if entry:
-                    entries.append(entry)
-            except Exception as e:
-                self.record_diagnostic("session_build_error")
-                logger.warning("[CLINE] Error parsing task %s: %s", task_dir, e)
+        if not scanned_any and not scan_failed:
+            self.record_diagnostic("input_missing")
+            logger.info("[CLINE] No logs found at %s", self.base_path)
 
         return entries
 

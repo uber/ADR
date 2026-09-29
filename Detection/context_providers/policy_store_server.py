@@ -27,7 +27,7 @@ def load_policy_data() -> Dict[str, Any]:
     try:
         if policy_file.exists():
             with open(policy_file, 'r') as f:
-                data = yaml.safe_load(f)
+                data = yaml.safe_load(f) or {"policies":[]}
                 logger.info(f"Loaded policy data from {policy_file}")
                 return data
         else:
