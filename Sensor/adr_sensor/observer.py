@@ -8,6 +8,7 @@ the ingestion, display, and export of agent telemetry data.
 import errno
 import hashlib
 import json
+import logging
 import os
 import platform
 import re
@@ -37,6 +38,8 @@ from .schemas.system_config_schema import SystemConfiguration
 from .utils.timestamp_utils import format_timestamp_for_filename, normalize_timestamp, parse_timestamp_from_filename
 
 _COLLISION_SUFFIX_PATTERN = re.compile(r"_([0-9a-f]{64})(?:_(\d+))?$")
+
+logger = logging.getLogger(__name__)
 
 
 class AgentObserver:
@@ -184,9 +187,7 @@ class AgentObserver:
         self._diagnostics_flushed = 0
         self._diagnostic_write_failed = False
 
-        print("\n" + "=" * 80)
-        print("ADR Sensor Starting...")
-        print("=" * 80 + "\n")
+        logger.info("\n%s\nADR Sensor Starting...\n%s\n", "=" * 80, "=" * 80)
 
         host_os = platform.system()
 
@@ -198,7 +199,7 @@ class AgentObserver:
             if supported_platforms and host_os not in supported_platforms:
                 continue
 
-            print(f"Ingesting {label} logs...")
+            logger.info("Ingesting %s logs...", label, extra={"phase": "parse"})
             parser_instance = getattr(self, f"{source}_parser")
             if isinstance(parser_instance, BaseParser):
                 parser_instance.reset_diagnostics()
@@ -212,9 +213,9 @@ class AgentObserver:
                 entries = parsed
                 filtered = [e for e in entries if e.has_meaningful_content()]
                 all_entries.extend(filtered)
-                print(f"Found {len(filtered)} entries\n")
+                logger.info("Found %d entries\n", len(filtered), extra={"phase": "parse"})
             except Exception as e:
-                print(f"Error ingesting {label} logs: {e}")
+                logger.error("Error ingesting %s logs: %s", label, e, extra={"phase": "parse"})
                 parser_failed = True
             finally:
                 reasons = parser_instance.get_diagnostics() if isinstance(parser_instance, BaseParser) else {}
@@ -326,7 +327,7 @@ class AgentObserver:
                     for entry in entries:
                         f.write(json.dumps(entry.get_non_null_fields(), ensure_ascii=False) + "\n")
 
-            print(f"\nAgent event logs saved to: {output_file}")
+            logger.info("\nAgent event logs saved to: %s", output_file, extra={"phase": "save"})
             saved_files.append(output_file)
 
         if system_config_data:
@@ -345,7 +346,7 @@ class AgentObserver:
                     for config in system_config_data:
                         f.write(json.dumps(config.to_dict(), ensure_ascii=False) + "\n")
 
-            print(f"System configuration saved to: {config_file}")
+            logger.info("System configuration saved to: %s", config_file, extra={"phase": "save"})
             saved_files.append(config_file)
 
         return saved_files
@@ -403,7 +404,7 @@ class AgentObserver:
                     if fresh_target is not None and fresh_target["data"].get("session_id") == entry.session_id:
                         existing_info = self._newer_session_file(existing_info, fresh_target)
                     if self._session_revision_regresses(entry, existing_info):
-                        print(f"Skipped stale session: {filename}")
+                        logger.info("Skipped stale session: %s", filename, extra={"phase": "save"})
                         continue
 
                 entry_data = entry.get_non_null_fields()
@@ -429,9 +430,9 @@ class AgentObserver:
                 saved_files.append(file_path)
                 source = entry.source if entry.source in DIAGNOSTIC_SOURCES else "sensor"
                 save_successes[source] = save_successes.get(source, 0) + 1
-                print(f"Saved session: {filename}")
+                logger.info("Saved session: %s", filename, extra={"phase": "save"})
             except Exception as e:
-                print(f"Error saving session {filename}: {e}")
+                logger.error("Error saving session %s: %s", filename, e, extra={"phase": "save"})
                 source = entry.source if entry.source in DIAGNOSTIC_SOURCES else "sensor"
                 save_failures[source] = save_failures.get(source, 0) + 1
             finally:
@@ -439,7 +440,12 @@ class AgentObserver:
                     try:
                         temp_path.unlink()
                     except OSError as cleanup_error:
-                        print(f"Error removing temporary session file {temp_path.name}: {cleanup_error}")
+                        logger.warning(
+                            "Error removing temporary session file %s: %s",
+                            temp_path.name,
+                            cleanup_error,
+                            extra={"phase": "save"},
+                        )
                 if lock_fd is not None and lock_path is not None:
                     self._release_session_lock(lock_fd)
 
@@ -455,7 +461,7 @@ class AgentObserver:
                 )
             )
         self.flush_diagnostics()
-        print(f"\nSaved {len(saved_files)} sessions to: {output_dir}")
+        logger.info("\nSaved %d sessions to: %s", len(saved_files), output_dir, extra={"phase": "save"})
         return saved_files
 
     def filter_entries_by_existing_files(
@@ -519,7 +525,7 @@ class AgentObserver:
                     current_content.pop("session_context")
             return current_content != existing_content
         except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError) as exc:
-            print(f"Error comparing existing session {existing_path.name}: {exc}")
+            logger.warning("Error comparing existing session %s: %s", existing_path.name, exc, extra={"phase": "save"})
             self._emit_error(
                 {
                     "source": entry.source,
@@ -868,7 +874,7 @@ class AgentObserver:
                 candidate.unlink()
                 removed_files = True
             except OSError as exc:
-                print(f"Error removing stale session {candidate.name}: {exc}")
+                logger.warning("Error removing stale session %s: %s", candidate.name, exc, extra={"phase": "save"})
                 self._emit_error(
                     {
                         "stage": "remove_stale_session",

@@ -151,7 +151,7 @@ def test_diagnostics_survive_when_every_record_is_rejected(tmp_path, parser_clas
     assert parser.get_diagnostics()["record_shape_error"] >= 1
 
 
-@pytest.mark.parametrize("parser_class", [CursorParser, OpencodeParser, WarpParser])
+@pytest.mark.parametrize("parser_class", [CursorParser, WarpParser])
 def test_incompatible_database_reports_failure(tmp_path, parser_class):
     parser = isolated_parser(parser_class, tmp_path)
     parser.db_path = tmp_path / "synthetic.db"
@@ -160,6 +160,16 @@ def test_incompatible_database_reports_failure(tmp_path, parser_class):
         pass
     assert parser.parse_all() == []
     assert parser.get_diagnostics()["database_error"] >= 1
+
+
+def test_opencode_database_without_tables_reports_schema_drift(tmp_path):
+    parser = isolated_parser(OpencodeParser, tmp_path)
+    parser.db_path = tmp_path / "synthetic.db"
+    parser.backend = "sqlite"
+    with sqlite3.connect(parser.db_path):
+        pass
+    assert parser.parse_all() == []
+    assert parser.get_diagnostics() == {"unsupported_schema": 1}
 
 
 def test_dsh_new_generation_reports_schema_drift_without_reading_payload(tmp_path):

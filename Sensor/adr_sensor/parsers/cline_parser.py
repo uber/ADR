@@ -6,6 +6,7 @@ Supports macOS, Linux and Windows paths.
 """
 
 import json
+import logging
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -14,6 +15,8 @@ from typing import Dict, List, Optional
 from ..schemas.agent_event_schema import AgentEvent, ChatMessage, ToolUsage
 from ..utils.platform_paths import windows_appdata
 from .base_parser import BaseParser
+
+logger = logging.getLogger(__name__)
 
 # Task history subpath for the Cline extension across VS Code-based editors,
 # relative to the per-platform app-data root.
@@ -61,38 +64,60 @@ class ClineParser(BaseParser):
     ):
         self._custom_base_path = Path(base_path) if base_path is not None else None
         if self._custom_base_path is not None:
-            self.base_path = self._custom_base_path
+            self._base_path = self._custom_base_path
         else:
-            self.base_path = next((p for p in self.BASE_PATHS if p.exists()), self.BASE_PATHS[0])
+            self._base_path = self.BASE_PATHS[0]
+            for candidate in self.BASE_PATHS:
+                try:
+                    if candidate.exists():
+                        self._base_path = candidate
+                        break
+                except OSError:
+                    # Report inaccessible roots in parse_all(), after the
+                    # observer resets the per-run diagnostic counters.
+                    continue
         self.max_age_days = max_age_days
+
+    @property
+    def base_path(self) -> Path:
+        return self._base_path
+
+    @base_path.setter
+    def base_path(self, value: Path) -> None:
+        """Preserve callers that select one root by assigning base_path."""
+        self._base_path = Path(value)
+        self._custom_base_path = self._base_path
 
     def _candidate_base_paths(self) -> List[Path]:
         """Return task directories to scan for Cline logs."""
         custom_base_path = getattr(self, "_custom_base_path", None)
         if custom_base_path is not None:
             return [custom_base_path]
-        if self.base_path not in self.BASE_PATHS:
-            # An external caller or test directly mutated self.base_path
-            return [self.base_path]
-        existing = [p for p in self.BASE_PATHS if p.exists()]
-        return existing if existing else [self.base_path]
+        # Probe each root inside parse_all's recovery boundary so a failed
+        # existence check cannot prevent collection from the other editors.
+        return list(self.BASE_PATHS)
 
     def parse_all(self) -> List[AgentEvent]:
         """Parse all available Cline logs."""
         entries: List[AgentEvent] = []
         candidate_paths = self._candidate_base_paths()
         scanned_any = False
+        scan_failed = False
         seen_sessions = set()
 
         for base_path in candidate_paths:
-            if not base_path.exists():
+            try:
+                if not base_path.exists():
+                    continue
+                scanned_any = True
+                logger.info("[CLINE] Scanning for logs in %s", base_path)
+                task_dirs = [d for d in base_path.iterdir() if d.is_dir()]
+            except OSError as exc:
+                scan_failed = True
+                self.record_diagnostic("file_read_error")
+                logger.error("[CLINE] Error scanning task directory %s: %s", base_path, exc)
                 continue
-
-            scanned_any = True
-            print(f"[CLINE] Scanning for logs in {base_path}")
-
-            task_dirs = [d for d in base_path.iterdir() if d.is_dir()]
-            print(f"[CLINE] Found {len(task_dirs)} task directories")
+            logger.info("[CLINE] Found %s task directories", len(task_dirs))
 
             if self.max_age_days > 0:
                 cutoff_timestamp = (datetime.now(timezone.utc) - timedelta(days=self.max_age_days)).timestamp()
@@ -112,7 +137,7 @@ class ClineParser(BaseParser):
                             modified_at = task_dir.stat().st_mtime
                         except OSError as e:
                             self.record_diagnostic("file_stat_error")
-                            print(f"[CLINE] Error checking task {task_dir}: {e}")
+                            logger.warning("[CLINE] Error checking task %s: %s", task_dir, e)
                             recent_task_dirs.append(task_dir)
                             continue
 
@@ -124,9 +149,9 @@ class ClineParser(BaseParser):
                 task_dirs = recent_task_dirs
                 if skipped_count > 0:
                     self.record_diagnostic("file_age_skipped", skipped_count)
-                    print(f"[CLINE] Skipped {skipped_count} tasks older than {self.max_age_days} days")
+                    logger.info("[CLINE] Skipped %s tasks older than %s days", skipped_count, self.max_age_days)
 
-            print(f"[CLINE] Processing {len(task_dirs)} task directories")
+            logger.info("[CLINE] Processing %s task directories", len(task_dirs))
 
             for task_dir in task_dirs:
                 try:
@@ -136,11 +161,11 @@ class ClineParser(BaseParser):
                         entries.append(entry)
                 except Exception as e:
                     self.record_diagnostic("session_build_error")
-                    print(f"[CLINE] Error parsing task {task_dir}: {e}")
+                    logger.warning("[CLINE] Error parsing task %s: %s", task_dir, e)
 
-        if not scanned_any:
+        if not scanned_any and not scan_failed:
             self.record_diagnostic("input_missing")
-            print(f"[CLINE] No logs found at {self.base_path}")
+            logger.info("[CLINE] No logs found at %s", self.base_path)
 
         return entries
 
@@ -196,7 +221,7 @@ class ClineParser(BaseParser):
                 self.record_diagnostic("file_read_error")
             else:
                 self.record_diagnostic("session_build_error")
-            print(f"[CLINE] Error parsing task {task_dir}: {e}")
+            logger.warning("[CLINE] Error parsing task %s: %s", task_dir, e)
             return None
 
     def extract_text_from_content(self, content: List[Dict]) -> str:

@@ -119,6 +119,9 @@ The parser scans all existing candidate directories, normalizes user prompts and
 assistant tool usages (including `<use_mcp_tool>` invocations) into the ADR
 schema, and deduplicates sessions across editors. Lookback defaults to 14 days by
 task file modification time; pass `max_age_days` to adjust.
+An inaccessible candidate is reported in diagnostics and the sensor log without
+preventing collection from other editors. Python callers can restrict collection
+to one task directory with `ClineParser(base_path=...)`.
 
 ### opencode
 
@@ -129,6 +132,9 @@ are read:
 
 - **SQLite** (current releases) — `opencode.db`, or `opencode-<channel>.db` on
   non-stable channels. Opened read-only so a running opencode process is never disturbed.
+  A database is used only if it contains the `session`, `message` and `part` tables;
+  otherwise the other candidate databases and then the JSON tree are tried, and a
+  database without those tables is reported as `unsupported_schema`.
 - **JSON file tree** (older releases) — a `storage/` directory of per-session,
   per-message and per-part JSON files, in both the project-scoped and legacy layouts.
 
@@ -303,10 +309,19 @@ adr-sensor --otel-config ./opentelemetry-config.json
 
 # Export to OTLP without also writing JSON files
 adr-sensor --no-save --otel-config ./opentelemetry-config.json
+
+# Print only warnings and errors (or pick a level: debug, info, warning, error)
+adr-sensor --quiet
+adr-sensor --log-level debug
 ```
 
 Sources whose agent only runs on some operating systems are skipped automatically
 on other platforms — `--source all` on Linux will not attempt `claude_desktop`, for example.
+
+Progress messages go to stdout and warnings and errors to stderr. `--log-level`
+sets the minimum level shown (default `info`) and `-q/--quiet` equals
+`--log-level warning`. The ingestion summary table is always printed. Library
+callers can use `adr_sensor.sensor_log.set_console_level()` for the same effect.
 
 ### Python API
 
@@ -457,6 +472,29 @@ New structured diagnostics never include prompts, tool arguments/results, paths,
 session IDs, exception messages, or tracebacks. This is a separate operational
 schema, **not redaction of captured telemetry**. Legacy console previews/errors and
 older entries already present in `error.log` are not sanitized by this change.
+
+### Runtime log files
+
+`--log-file` also writes the run's log messages as JSON lines next to the
+diagnostics: `sensor_runtime_errors.jsonl` holds warnings and errors, and
+`sensor_runtime_debug.jsonl` holds debug and info messages whatever the console
+`--log-level` is. Each file rotates at 1 MiB with two backups. Runtime logging is
+off by default. If the files cannot be opened, the sensor prints one warning and
+keeps printing warnings and errors to stderr.
+
+Each record has `timestamp`, `level`, `component`, `function`, `phase`,
+`sensor_version`, `exception_type`, `message` and, for errors with a traceback,
+`stack`:
+
+```json
+{"timestamp":"2026-01-01T12:00:00.000+00:00","level":"WARNING","component":"parsers.cline_parser","function":"parse_all","phase":null,"sensor_version":"0.1.0","exception_type":"KeyError","message":"[CLINE] Error parsing task /home/me/.cline/tasks/123: 'ts'"}
+```
+
+**Privacy:** unlike the diagnostics above, `message` and `stack` can contain local
+file paths and error text. Log call sites do not log prompts or tool content, but
+treat these files like other local logs. `--log-file-content-free` drops `message`
+and `stack` and keeps the remaining fields. `--log-identity` adds `username` and
+`hostname` to each record; it is opt-in because it identifies the machine and user.
 
 ## Output Schema
 

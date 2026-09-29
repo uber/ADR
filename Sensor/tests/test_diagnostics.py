@@ -224,8 +224,22 @@ def test_cli_can_fail_after_preserving_partial_capture(tmp_path, monkeypatch, ca
     with patch("adr_sensor.cli.AgentObserver", return_value=observer), pytest.raises(SystemExit) as failure:
         main()
     assert failure.value.code == 1
-    assert "completed with errors" in capsys.readouterr().out
+    assert "completed with errors" in capsys.readouterr().err
     assert (tmp_path / "diagnostics.jsonl").exists()
+
+
+def test_quiet_cli_keeps_the_summary_and_warnings_but_hides_progress(tmp_path, monkeypatch, capsys):
+    observer = _observer(tmp_path, _Parser([_event()], reason="record_shape_error"))
+    monkeypatch.setattr("sys.argv", ["adr-sensor", "--no-save", "--quiet"])
+    try:
+        with patch("adr_sensor.cli.AgentObserver", return_value=observer):
+            main()
+    finally:
+        sensor_log.set_console_level("info")
+    captured = capsys.readouterr()
+    assert "INGESTION SUMMARY" in captured.out
+    assert "Ingesting Claude Code logs" not in captured.out
+    assert "completed with errors" in captured.err
 
 
 def test_export_failure_is_recorded_locally(tmp_path, monkeypatch):

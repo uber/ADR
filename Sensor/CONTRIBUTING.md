@@ -44,11 +44,15 @@ This is the most common contribution. To add support for a new AI agent:
 Create `adr_sensor/parsers/my_agent_parser.py`:
 
 ```python
+import logging
 from pathlib import Path
 from typing import List
 
 from ..parsers.base_parser import BaseParser
 from ..schemas.agent_event_schema import AgentEvent, ChatMessage, ToolUsage
+
+logger = logging.getLogger(__name__)
+
 
 class MyAgentParser(BaseParser):
     """Parser for MyAgent logs."""
@@ -63,7 +67,7 @@ class MyAgentParser(BaseParser):
 
         if not self.base_path.exists():
             self.record_diagnostic("input_missing")
-            print(f"[MY_AGENT] No logs found at {self.base_path}")
+            logger.info("[MY_AGENT] No logs found at %s", self.base_path)
             return entries
 
         # Your parsing logic here
@@ -165,7 +169,8 @@ logger.warning("[MY_AGENT] Skipped unreadable file", extra={"phase": "parse"})
 - Use `WARNING` for recoverable problems (a skipped file or record) and `ERROR`
   when a whole source or output step fails. Keep recording fixed diagnostic codes
   with `record_diagnostic()`; log messages do not replace them.
-- Never log prompts, tool arguments or results, or other captured content.
+- Never log prompts, tool arguments or results, or other captured content. With
+  `--log-file`, messages are persisted to `sensor_runtime_*.jsonl`.
 - Explicit report output, such as `AgentObserver.display_summary()`, stays as `print()`.
 
 ## Testing Guidelines
