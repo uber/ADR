@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from opentelemetry.sdk._logs.export import InMemoryLogRecordExporter, SimpleLogRecordProcessor
 
-from adr_sensor import diagnostics
+from adr_sensor import diagnostics, sensor_log
 from adr_sensor.cli import main
 from adr_sensor.diagnostics import health_record, sanitize_health_record, write_health_records
 from adr_sensor.exporters.config import OpenTelemetryConfig
@@ -224,8 +224,22 @@ def test_cli_can_fail_after_preserving_partial_capture(tmp_path, monkeypatch, ca
     with patch("adr_sensor.cli.AgentObserver", return_value=observer), pytest.raises(SystemExit) as failure:
         main()
     assert failure.value.code == 1
-    assert "completed with errors" in capsys.readouterr().out
+    assert "completed with errors" in capsys.readouterr().err
     assert (tmp_path / "diagnostics.jsonl").exists()
+
+
+def test_quiet_cli_keeps_the_summary_and_warnings_but_hides_progress(tmp_path, monkeypatch, capsys):
+    observer = _observer(tmp_path, _Parser([_event()], reason="record_shape_error"))
+    monkeypatch.setattr("sys.argv", ["adr-sensor", "--no-save", "--quiet"])
+    try:
+        with patch("adr_sensor.cli.AgentObserver", return_value=observer):
+            main()
+    finally:
+        sensor_log.set_console_level("info")
+    captured = capsys.readouterr()
+    assert "INGESTION SUMMARY" in captured.out
+    assert "Ingesting Claude Code logs" not in captured.out
+    assert "completed with errors" in captured.err
 
 
 def test_export_failure_is_recorded_locally(tmp_path, monkeypatch):
@@ -257,6 +271,23 @@ def test_resource_log_marks_observed_partial_failure_unsuccessful(tmp_path, monk
     ):
         main()
     assert json.loads((tmp_path / "resource.log").read_text())["success"] is False
+
+
+def test_resource_log_rotates_instead_of_growing_without_bound(tmp_path, monkeypatch):
+    usage = SimpleNamespace(ru_utime=0, ru_stime=0, ru_maxrss=0)
+    resources = MagicMock()
+    resources.getrusage.return_value = usage
+    monkeypatch.setattr("sys.argv", ["adr-sensor", "--no-save", "--resource", "--output-dir", str(tmp_path)])
+    monkeypatch.setattr(sensor_log.append_rotating_line, "__kwdefaults__", {"max_bytes": 1, "backup_count": 2})
+    (tmp_path / "resource.log").write_text('{"previous":true}\n', encoding="utf-8")
+    with (
+        patch("adr_sensor.cli.AgentObserver", return_value=_observer(tmp_path, _Parser([_event()]))),
+        patch("adr_sensor.cli.resource_mod", resources),
+        patch("adr_sensor.cli.platform.system", return_value="Linux"),
+    ):
+        main()
+    assert json.loads((tmp_path / "resource.log.1").read_text())["previous"] is True
+    assert "success" in json.loads((tmp_path / "resource.log").read_text())
 
 
 def test_startup_failure_has_content_free_local_record(tmp_path, monkeypatch):

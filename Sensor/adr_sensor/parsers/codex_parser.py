@@ -6,12 +6,12 @@ Performance-optimized: Skips rollout files older than 2 weeks by default.
 """
 
 import json
+import logging
 import math
 import os
 import re
 import sqlite3
 import stat
-import traceback
 from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -21,6 +21,8 @@ from ..schemas.agent_event_schema import AgentEvent, ChatMessage, ToolUsage
 from ..utils.string_utils import truncate_middle
 from ..utils.timestamp_utils import normalize_timestamp
 from .base_parser import BaseParser
+
+logger = logging.getLogger(__name__)
 
 MAX_ARGUMENT_JSON_LENGTH = 100_000
 MAX_NORMALIZATION_DEPTH = 8
@@ -73,10 +75,10 @@ class CodexParser(BaseParser):
         rollout_candidates = self._discover_rollout_files()
         if not rollout_candidates:
             self.record_diagnostic("input_missing")
-            print(f"[CODEX] No logs found under {self.codex_home}")
+            logger.info("[CODEX] No logs found under %s", self.codex_home)
             return entries
 
-        print(f"[CODEX] Found {len(rollout_candidates)} JSONL files")
+        logger.info("[CODEX] Found %s JSONL files", len(rollout_candidates))
 
         rollout_files = list(rollout_candidates)
         if self.max_age_days > 0:
@@ -92,9 +94,9 @@ class CodexParser(BaseParser):
 
             if skipped_count > 0:
                 self.record_diagnostic("file_age_skipped", skipped_count)
-                print(f"[CODEX] Skipped {skipped_count} files older than {self.max_age_days} days")
+                logger.info("[CODEX] Skipped %s files older than %s days", skipped_count, self.max_age_days)
 
-        print(f"[CODEX] Processing {len(rollout_files)} files")
+        logger.info("[CODEX] Processing %s files", len(rollout_files))
 
         for jsonl_file in rollout_files:
             try:
@@ -103,7 +105,7 @@ class CodexParser(BaseParser):
                     entries.append(entry)
             except Exception as e:
                 self.record_diagnostic("session_build_error")
-                print(f"[CODEX] Error parsing {jsonl_file}: {e}")
+                logger.warning("[CODEX] Error parsing %s: %s", jsonl_file, e)
 
         return entries
 
@@ -117,14 +119,14 @@ class CodexParser(BaseParser):
         except OSError as e:
             self.record_diagnostic("file_read_error")
             # Keep any files yielded before an inaccessible directory interrupted discovery.
-            print(f"[CODEX] Error discovering logs under {self.base_path}: {e}")
+            logger.error("[CODEX] Error discovering logs under %s: %s", self.base_path, e)
 
         try:
             for catalog_path in self.codex_home.glob("state_*.sqlite"):
                 self._add_catalog_rollouts(candidates, catalog_path)
         except OSError as e:
             self.record_diagnostic("file_read_error")
-            print(f"[CODEX] Error discovering state catalogs under {self.codex_home}: {e}")
+            logger.warning("[CODEX] Error discovering state catalogs under %s: %s", self.codex_home, e)
 
         return candidates
 
@@ -196,7 +198,7 @@ class CodexParser(BaseParser):
                 self._add_rollout_candidate(candidates, rollout_path, catalog_timestamp)
         except (OSError, sqlite3.Error, ValueError) as e:
             self.record_diagnostic("database_error")
-            print(f"[CODEX] Error reading state catalog {catalog_path}: {e}")
+            logger.warning("[CODEX] Error reading state catalog %s: %s", catalog_path, e)
         finally:
             if connection is not None:
                 try:
@@ -344,8 +346,7 @@ class CodexParser(BaseParser):
             self.record_diagnostic(
                 "file_read_error" if isinstance(e, (OSError, UnicodeError)) else "session_build_error"
             )
-            print(f"[CODEX] Error reading {file_path}: {e}")
-            traceback.print_exc()
+            logger.warning("[CODEX] Error reading %s: %s", file_path, e, exc_info=True)
             return None
 
     def _bound_value(self, value: Any, depth: int = 0) -> Any:

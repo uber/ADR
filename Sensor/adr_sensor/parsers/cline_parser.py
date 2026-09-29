@@ -6,6 +6,7 @@ Supports macOS, Linux and Windows paths.
 """
 
 import json
+import logging
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -17,6 +18,8 @@ from .base_parser import BaseParser
 
 # Cline stores task history inside the Cursor extension's global storage,
 # relative to the per-platform app-data root.
+logger = logging.getLogger(__name__)
+
 _CLINE_TASKS_SUFFIX = "Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks"
 MAX_LOG_AGE_DAYS = 14
 
@@ -41,13 +44,13 @@ class ClineParser(BaseParser):
 
         if not self.base_path.exists():
             self.record_diagnostic("input_missing")
-            print(f"[CLINE] No logs found at {self.base_path}")
+            logger.info("[CLINE] No logs found at %s", self.base_path)
             return entries
 
-        print(f"[CLINE] Scanning for logs in {self.base_path}")
+        logger.info("[CLINE] Scanning for logs in %s", self.base_path)
 
         task_dirs = [d for d in self.base_path.iterdir() if d.is_dir()]
-        print(f"[CLINE] Found {len(task_dirs)} task directories")
+        logger.info("[CLINE] Found %s task directories", len(task_dirs))
 
         if self.max_age_days > 0:
             cutoff_timestamp = (datetime.now(timezone.utc) - timedelta(days=self.max_age_days)).timestamp()
@@ -67,7 +70,7 @@ class ClineParser(BaseParser):
                         modified_at = task_dir.stat().st_mtime
                     except OSError as e:
                         self.record_diagnostic("file_stat_error")
-                        print(f"[CLINE] Error checking task {task_dir}: {e}")
+                        logger.warning("[CLINE] Error checking task %s: %s", task_dir, e)
                         recent_task_dirs.append(task_dir)
                         continue
 
@@ -79,9 +82,9 @@ class ClineParser(BaseParser):
             task_dirs = recent_task_dirs
             if skipped_count > 0:
                 self.record_diagnostic("file_age_skipped", skipped_count)
-                print(f"[CLINE] Skipped {skipped_count} tasks older than {self.max_age_days} days")
+                logger.info("[CLINE] Skipped %s tasks older than %s days", skipped_count, self.max_age_days)
 
-        print(f"[CLINE] Processing {len(task_dirs)} task directories")
+        logger.info("[CLINE] Processing %s task directories", len(task_dirs))
 
         for task_dir in task_dirs:
             try:
@@ -90,7 +93,7 @@ class ClineParser(BaseParser):
                     entries.append(entry)
             except Exception as e:
                 self.record_diagnostic("session_build_error")
-                print(f"[CLINE] Error parsing task {task_dir}: {e}")
+                logger.warning("[CLINE] Error parsing task %s: %s", task_dir, e)
 
         return entries
 
@@ -146,7 +149,7 @@ class ClineParser(BaseParser):
                 self.record_diagnostic("file_read_error")
             else:
                 self.record_diagnostic("session_build_error")
-            print(f"[CLINE] Error parsing task {task_dir}: {e}")
+            logger.warning("[CLINE] Error parsing task %s: %s", task_dir, e)
             return None
 
     def extract_text_from_content(self, content: List[Dict]) -> str:

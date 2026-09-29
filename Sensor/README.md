@@ -289,10 +289,19 @@ adr-sensor --otel-config ./opentelemetry-config.json
 
 # Export to OTLP without also writing JSON files
 adr-sensor --no-save --otel-config ./opentelemetry-config.json
+
+# Print only warnings and errors (or pick a level: debug, info, warning, error)
+adr-sensor --quiet
+adr-sensor --log-level debug
 ```
 
 Sources whose agent only runs on some operating systems are skipped automatically
 on other platforms — `--source all` on Linux will not attempt `claude_desktop`, for example.
+
+Progress messages go to stdout and warnings and errors to stderr. `--log-level`
+sets the minimum level shown (default `info`) and `-q/--quiet` equals
+`--log-level warning`. The ingestion summary table is always printed. Library
+callers can use `adr_sensor.sensor_log.set_console_level()` for the same effect.
 
 ### Python API
 
@@ -437,6 +446,7 @@ export is recorded locally because a broken destination cannot receive its own a
 parse/save/diagnostic failure occurs; by default these partial failures are reported
 without changing the existing continue-on-error behavior. OTLP failures remain nonzero.
 When `--resource` is enabled, `resource.log` also marks partial runs unsuccessful.
+`resource.log` rotates at 1 MiB with two backups (`resource.log.1`, `resource.log.2`).
 
 New structured diagnostics never include prompts, tool arguments/results, paths,
 session IDs, exception messages, or tracebacks. This is a separate operational

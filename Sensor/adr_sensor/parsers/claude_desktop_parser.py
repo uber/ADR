@@ -18,6 +18,7 @@ truncates large tool results, and filters by session age.
 """
 
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -26,6 +27,8 @@ from ..schemas.agent_event_schema import AgentEvent, ChatMessage, ToolUsage
 from ..utils.platform_paths import windows_appdata
 from ..utils.string_utils import truncate_middle
 from .base_parser import BaseParser
+
+logger = logging.getLogger(__name__)
 
 MAX_LOG_AGE_DAYS = 14
 
@@ -65,11 +68,11 @@ class ClaudeDesktopParser(BaseParser):
 
         if not self.base_path.exists():
             self.record_diagnostic("input_missing")
-            print(f"[CLAUDE_DESKTOP] No sessions found at {self.base_path}")
+            logger.info("[CLAUDE_DESKTOP] No sessions found at %s", self.base_path)
             return entries
 
         session_dirs = self._discover_sessions()
-        print(f"[CLAUDE_DESKTOP] Found {len(session_dirs)} session directories")
+        logger.info("[CLAUDE_DESKTOP] Found %s session directories", len(session_dirs))
 
         cutoff_time = datetime.now(timezone.utc) - timedelta(days=self.max_age_days)
         skipped_count = 0
@@ -105,11 +108,11 @@ class ClaudeDesktopParser(BaseParser):
 
             except Exception as e:
                 self.record_diagnostic("session_build_error")
-                print(f"[CLAUDE_DESKTOP] Error parsing session {session_dir}: {e}")
+                logger.warning("[CLAUDE_DESKTOP] Error parsing session %s: %s", session_dir, e)
 
         if skipped_count > 0:
-            print(f"[CLAUDE_DESKTOP] Skipped {skipped_count} sessions older than {self.max_age_days} days")
-        print(f"[CLAUDE_DESKTOP] Processed {processed_count} sessions")
+            logger.info("[CLAUDE_DESKTOP] Skipped %s sessions older than %s days", skipped_count, self.max_age_days)
+        logger.info("[CLAUDE_DESKTOP] Processed %s sessions", processed_count)
 
         return entries
 
@@ -148,7 +151,7 @@ class ClaudeDesktopParser(BaseParser):
 
         except (PermissionError, OSError) as e:
             self.record_diagnostic("file_read_error")
-            print(f"[CLAUDE_DESKTOP] Error scanning base path {self.base_path}: {e}")
+            logger.error("[CLAUDE_DESKTOP] Error scanning base path %s: %s", self.base_path, e)
 
         return sessions
 
@@ -164,7 +167,7 @@ class ClaudeDesktopParser(BaseParser):
                 found.append((item, parent / f"{item.name}.json"))
         except (PermissionError, OSError) as e:
             self.record_diagnostic("file_read_error")
-            print(f"[CLAUDE_DESKTOP] Error scanning {parent}: {e}")
+            logger.warning("[CLAUDE_DESKTOP] Error scanning %s: %s", parent, e)
         return found
 
     def _read_session_metadata(self, metadata_path: Path) -> Optional[Dict[str, Any]]:
@@ -241,7 +244,7 @@ class ClaudeDesktopParser(BaseParser):
                 return datetime.fromtimestamp(value / 1000, tz=timezone.utc)
             except (ValueError, OSError, OverflowError, TypeError) as e:
                 self.record_diagnostic("invalid_timestamp")
-                print(f"[CLAUDE_DESKTOP] Error parsing timestamp from {key}={value}: {e}")
+                logger.warning("[CLAUDE_DESKTOP] Error parsing timestamp from %s=%s: %s", key, value, e)
 
         try:
             return datetime.fromtimestamp(audit_path.stat().st_mtime, tz=timezone.utc)
@@ -342,7 +345,7 @@ class ClaudeDesktopParser(BaseParser):
 
         except (OSError, PermissionError) as e:
             self.record_diagnostic("file_read_error")
-            print(f"[CLAUDE_DESKTOP] Error reading {audit_path}: {e}")
+            logger.warning("[CLAUDE_DESKTOP] Error reading %s: %s", audit_path, e)
             return None
 
         if not messages:

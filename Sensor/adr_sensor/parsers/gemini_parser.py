@@ -6,6 +6,7 @@ and checkpoints because removing model context does not undo executed actions.
 """
 
 import json
+import logging
 import os
 import platform
 from datetime import datetime, timedelta, timezone
@@ -15,6 +16,8 @@ from typing import Any, Dict, List, Optional
 from ..schemas.agent_event_schema import AgentEvent, ChatMessage, ToolUsage
 from ..utils.timestamp_utils import normalize_timestamp
 from .base_parser import BaseParser
+
+logger = logging.getLogger(__name__)
 
 
 class GeminiParser(BaseParser):
@@ -60,7 +63,7 @@ class GeminiParser(BaseParser):
                             entries[entry.session_id] = entry
                     except (OSError, ValueError) as exc:
                         self.record_diagnostic(failure_code)
-                        print(f"[GEMINI] Unable to read {path}: {exc}")
+                        logger.warning("[GEMINI] Unable to read %s: %s", path, exc)
         return list(entries.values())
 
     @staticmethod
@@ -158,7 +161,7 @@ class GeminiParser(BaseParser):
             self.record_diagnostic(
                 "record_decode_error" if isinstance(exc, json.JSONDecodeError) else failure_code
             )
-            print(f"[GEMINI] Unable to parse {path}: {exc}")
+            logger.warning("[GEMINI] Unable to parse %s: %s", path, exc)
             return None
 
         session_id = metadata.get("sessionId")
@@ -228,7 +231,7 @@ class GeminiParser(BaseParser):
         if metadata.get("kind") == "subagent" and path.parent.name != "chats":
             context["parent_session_id"] = path.parent.name
         if malformed:
-            print(f"[GEMINI] Skipped {malformed} malformed records in {path}")
+            logger.warning("[GEMINI] Skipped %s malformed records in %s", malformed, path)
         return AgentEvent(
             timestamp=timestamp,
             source="gemini",

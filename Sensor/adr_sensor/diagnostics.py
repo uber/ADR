@@ -2,7 +2,6 @@
 
 import json
 import logging
-import sys
 from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -10,6 +9,8 @@ from typing import Dict, Iterable, Optional
 
 from . import __version__
 from .parsers.base_parser import BaseParser
+
+logger = logging.getLogger(__name__)
 
 DIAGNOSTIC_SOURCES = frozenset(
     {"sensor", "claude", "claude_desktop", "cursor", "cline", "codex", "copilot", "dsh", "gemini", "opencode", "warp"}
@@ -114,7 +115,7 @@ def write_health_records(output_dir: Path, records: Iterable[dict]) -> bool:
                 handlers[1].handle(item)
         return True
     except Exception:
-        print("[ADR] Unable to write sensor diagnostics; captured session data is unaffected.", file=sys.stderr)
+        logger.warning("[ADR] Unable to write sensor diagnostics; captured session data is unaffected.")
         return False
     finally:
         for handler in handlers:
