@@ -116,12 +116,11 @@ class NullProviders:
 
     def homes(self, gate: "Gate") -> tuple[str, ...]:
         out: list[str] = []
-        directs = set(self.direct_homes())
+        directs = list(self.direct_homes())
         for base in self.home_roots():
             if base in directs or base in ("/root", "/var/root"):
-                st = gate.stat(base)
-                if st.ok and stat.S_ISDIR(st.value.mode):
-                    out.append(base)
+                if base not in directs:
+                    directs.append(base)
                 continue
             listing = gate.list_dir(base)
             if listing.ok:
@@ -130,15 +129,18 @@ class NullProviders:
                     for e in listing.value
                     if e.is_dir and not e.path.rsplit("/", 1)[-1].startswith(".")
                 )
-        for direct in self.direct_homes():
+        # A root home must not suppress the caller's nonstandard HOME fallback.
+        if not out:
+            home = gate.env.get("HOME")
+            if home:
+                st = gate.stat(home)
+                if st.ok and stat.S_ISDIR(st.value.mode):
+                    out.append(home)
+        for direct in directs:
             if direct not in out:
                 st = gate.stat(direct)
                 if st.ok and stat.S_ISDIR(st.value.mode):
                     out.append(direct)
-        if not out:
-            home = gate.env.get("HOME")
-            if home:
-                out.append(home)
         return tuple(dict.fromkeys(out))
 
     _homes = homes
