@@ -1,6 +1,7 @@
 """Tests for OTLP conversion of ADR Sensor records."""
 
 import time
+from dataclasses import replace
 from datetime import datetime, timezone
 from unittest.mock import patch
 
@@ -82,6 +83,35 @@ def test_export_preserves_complete_agent_event_payload():
     assert record.log_record.timestamp == _datetime_to_unix_nanos(event.timestamp)
     assert record.resource.attributes["service.name"] == "adr-sensor"
     assert record.resource.attributes["service.version"] == "1.2.3"
+
+    exporter.shutdown()
+
+
+@pytest.mark.parametrize("model", ["gpt-test", None])
+def test_export_adds_gen_ai_attributes_when_enabled(model):
+    memory_exporter = InMemoryLogRecordExporter()
+    exporter = OpenTelemetryLogExporter(
+        OpenTelemetryConfig(endpoint="http://localhost:4318/v1/logs", gen_ai_attributes=True),
+        service_version="1.2.3",
+        _log_record_exporter=memory_exporter,
+        _processor_factory=SimpleLogRecordProcessor,
+    )
+    event = replace(_event(), model=model)
+
+    exporter.export([event], [])
+
+    record = memory_exporter.get_finished_logs()[0]
+    assert record.log_record.body == event.get_non_null_fields()
+    assert record.log_record.attributes == {
+        "adr.event.type": "agent_session",
+        "adr.event.uuid": event.uuid,
+        "adr.schema.version": "1",
+        "adr.source": "codex",
+        "adr.session.id": "codex_session-1",
+        **({"adr.model": model} if model else {}),
+        "gen_ai.conversation.id": "codex_session-1",
+        "gen_ai.agent.name": "codex",
+    }
 
     exporter.shutdown()
 

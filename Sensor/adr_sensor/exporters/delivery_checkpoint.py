@@ -34,8 +34,12 @@ class DeliveryCheckpoint:
 
     def __init__(self, output_dir: Path, config: OpenTelemetryConfig):
         _validate_credential_provider()
+        config_fields = asdict(config)
+        if not config.gen_ai_attributes:
+            # Keep checkpoints from before this option existed valid when it is off.
+            del config_fields["gen_ai_attributes"]
         destination = {
-            "config": asdict(config),
+            "config": config_fields,
             "schema_version": SCHEMA_VERSION,
             "checkpoint_version": 1,
         }

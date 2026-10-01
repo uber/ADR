@@ -15,6 +15,7 @@ _CONFIG_KEYS = {
     "timeout_seconds",
     "flush_timeout_seconds",
     "certificate_file",
+    "gen_ai_attributes",
 }
 
 
@@ -32,6 +33,7 @@ class OpenTelemetryConfig:
     timeout_seconds: float = 10.0
     flush_timeout_seconds: float = 30.0
     certificate_file: Optional[str] = None
+    gen_ai_attributes: bool = False
 
 
 def load_opentelemetry_config(path: Path) -> OpenTelemetryConfig:
@@ -84,6 +86,10 @@ def load_opentelemetry_config(path: Path) -> OpenTelemetryConfig:
         if not Path(certificate_file).is_file():
             raise OpenTelemetryConfigError(f"OpenTelemetry certificate file does not exist: {certificate_file}")
 
+    gen_ai_attributes = document.get("gen_ai_attributes", False)
+    if not isinstance(gen_ai_attributes, bool):
+        raise OpenTelemetryConfigError("OpenTelemetry gen_ai_attributes must be a boolean")
+
     return OpenTelemetryConfig(
         endpoint=endpoint,
         service_name=service_name,
@@ -91,6 +97,7 @@ def load_opentelemetry_config(path: Path) -> OpenTelemetryConfig:
         timeout_seconds=timeout_seconds,
         flush_timeout_seconds=flush_timeout_seconds,
         certificate_file=certificate_file,
+        gen_ai_attributes=gen_ai_attributes,
     )
 
 

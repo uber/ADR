@@ -25,6 +25,7 @@ def test_load_opentelemetry_config_defaults(tmp_path):
     assert config.timeout_seconds == 10.0
     assert config.flush_timeout_seconds == 30.0
     assert config.certificate_file is None
+    assert config.gen_ai_attributes is False
 
 
 def test_load_opentelemetry_config_all_fields(tmp_path):
@@ -40,6 +41,7 @@ def test_load_opentelemetry_config_all_fields(tmp_path):
                 "timeout_seconds": 5,
                 "flush_timeout_seconds": 12.5,
                 "certificate_file": certificate.name,
+                "gen_ai_attributes": True,
             },
         )
     )
@@ -49,6 +51,7 @@ def test_load_opentelemetry_config_all_fields(tmp_path):
     assert config.timeout_seconds == 5.0
     assert config.flush_timeout_seconds == 12.5
     assert config.certificate_file == str(certificate.resolve())
+    assert config.gen_ai_attributes is True
 
 
 @pytest.mark.parametrize(
@@ -60,6 +63,8 @@ def test_load_opentelemetry_config_all_fields(tmp_path):
         ({"endpoint": "http://localhost:4318/v1/logs", "headers": []}, "headers must be an object"),
         ({"endpoint": "http://localhost:4318/v1/logs", "timeout_seconds": 0}, "positive number"),
         ({"endpoint": "http://localhost:4318/v1/logs", "timeout_seconds": float("nan")}, "positive number"),
+        ({"endpoint": "http://localhost:4318/v1/logs", "gen_ai_attributes": "true"}, "must be a boolean"),
+        ({"endpoint": "http://localhost:4318/v1/logs", "gen_ai_attributes": 1}, "must be a boolean"),
         ({"endpoint": "http://localhost:4318/v1/logs", "unexpected": True}, "unknown"),
     ],
 )

@@ -80,6 +80,7 @@ class OpenTelemetryLogExporter:
         self._info_severity = severity_number_cls.INFO
         self._warning_severity = severity_number_cls.WARN
         self._flush_timeout_millis = int(config.flush_timeout_seconds * 1000)
+        self._gen_ai_attributes = config.gen_ai_attributes
         self._closed = False
         self._submitted_count = 0
         self._flushed_count = 0
@@ -103,6 +104,7 @@ class OpenTelemetryLogExporter:
                     "adr.source": entry.source,
                     "adr.session.id": entry.session_id,
                     **({"adr.model": entry.model} if entry.model else {}),
+                    **(_gen_ai_attributes(entry) if self._gen_ai_attributes else {}),
                 },
             )
 
@@ -202,6 +204,14 @@ class OpenTelemetryLogExporter:
             self._submitted_count += 1
             if self._submitted_count - self._flushed_count >= _MAX_BATCH_SIZE:
                 self._flush()
+
+
+def _gen_ai_attributes(entry: AgentEvent) -> dict:
+    """Map session identity onto OpenTelemetry GenAI semantic-convention attributes."""
+    return {
+        "gen_ai.conversation.id": entry.session_id,
+        "gen_ai.agent.name": entry.source,
+    }
 
 
 def _datetime_to_unix_nanos(value: datetime) -> int:

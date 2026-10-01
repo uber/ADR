@@ -420,6 +420,13 @@ no redaction or field projection, so prompts, responses, tool arguments, tool
 results, usernames, hostnames, and local paths can be transmitted. Any
 normalization already performed by a source parser still applies.
 
+Set `"gen_ai_attributes": true` to also add OpenTelemetry GenAI semantic-convention
+attributes to `adr.agent.session` records: `gen_ai.conversation.id` (the ADR
+session ID, same value as `adr.session.id`) and `gen_ai.agent.name` (the source,
+same value as `adr.source`). The body and `adr.*` attributes are unchanged. The
+GenAI conventions are still in development status, so the option is off by default.
+Enabling it is a destination change and resends sessions once.
+
 System-configuration records are sent as `adr.system.configuration` logs on each
 run. Sensor health logs are also sent on every run, even when all session snapshots
 are already acknowledged. With `--save-sessions`, successful session delivery is tracked independently

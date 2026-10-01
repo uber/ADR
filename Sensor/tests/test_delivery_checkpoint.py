@@ -92,6 +92,26 @@ def test_destination_or_authentication_change_resends_sessions(tmp_path, config,
     assert changed.pending_entries([event]) == [event]
 
 
+def test_default_gen_ai_attributes_keep_existing_checkpoint(tmp_path, config, monkeypatch):
+    for prefix in ("OTEL_EXPORTER_OTLP_", "OTEL_EXPORTER_OTLP_LOGS_"):
+        for setting in ("CLIENT_CERTIFICATE", "CLIENT_KEY"):
+            monkeypatch.delenv(f"{prefix}{setting}", raising=False)
+
+    # Checkpoint name written for this configuration before gen_ai_attributes existed.
+    expected = ".adr-otel-delivery.5fae3b25f180fb0d10b1da8a0e95e774e8f1cb93f7db68fc9440d99c39858fa6.json"
+    assert DeliveryCheckpoint(tmp_path, config).path.name == expected
+
+
+def test_enabling_gen_ai_attributes_resends_sessions(tmp_path, config, event):
+    checkpoint = DeliveryCheckpoint(tmp_path, config)
+    checkpoint.pending_entries([event])
+    checkpoint.commit()
+    enabled = DeliveryCheckpoint(tmp_path, replace(config, gen_ai_attributes=True))
+
+    assert enabled.path != checkpoint.path
+    assert enabled.pending_entries([event]) == [event]
+
+
 def test_environment_authentication_change_resends_sessions(tmp_path, event, monkeypatch):
     config = OpenTelemetryConfig(endpoint="https://collector.example.invalid/v1/logs")
     monkeypatch.setenv("OTEL_EXPORTER_OTLP_LOGS_HEADERS", "Authorization=first-synthetic-token")
