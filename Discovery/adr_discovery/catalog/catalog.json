@@ -18,6 +18,21 @@
       "risk_factors": ["executes_shell"]
     },
     {
+      "id": "antigravity-cli", "name": "Antigravity CLI", "vendor": "Google", "kind": "cli_agent",
+      "fingerprints": {"binaries": ["agy", "antigravity"], "packages": ["npm:@google/antigravity-cli", "pipx:google-antigravity", "uv:google-antigravity"],
+                       "state_dirs": ["~/.gemini/antigravity-ide", "~/.antigravity"]},
+      "proofs": {"provenance": ["npm:@google/antigravity-cli"],
+                 "version_probe": ["--version"], "version_shape": "^\\d+\\.\\d+\\.\\d+|^agy \\d+\\.\\d+"},
+      "risk_factors": ["executes_shell"]
+    },
+    {
+      "id": "antigravity", "name": "Google Antigravity", "vendor": "Google", "kind": "app",
+      "fingerprints": {"bundle_ids": ["com.google.antigravity"], "desktop_ids": ["antigravity"],
+                       "state_dirs": ["~/.gemini/antigravity-ide"]},
+      "proofs": {},
+      "risk_factors": []
+    },
+    {
       "id": "codex-cli", "name": "Codex CLI", "vendor": "OpenAI", "kind": "cli_agent",
       "fingerprints": {"binaries": ["codex"], "packages": ["npm:@openai/codex"],
                        "state_dirs": ["~/.codex"]},

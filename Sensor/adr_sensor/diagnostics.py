@@ -12,9 +12,20 @@ from .parsers.base_parser import BaseParser
 
 logger = logging.getLogger(__name__)
 
-DIAGNOSTIC_SOURCES = frozenset(
-    {"sensor", "claude", "claude_desktop", "cursor", "cline", "codex", "copilot", "dsh", "gemini", "opencode", "warp"}
-)
+DIAGNOSTIC_SOURCES = frozenset({
+    "sensor",
+    "claude",
+    "claude_desktop",
+    "cursor",
+    "cline",
+    "codex",
+    "copilot",
+    "dsh",
+    "gemini",
+    "opencode",
+    "warp",
+    "antigravity",
+})
 DIAGNOSTIC_STAGES = frozenset({"parse", "save", "save_session", "export", "startup"})
 OPERATIONAL_REASONS = frozenset(
     {"parser_error", "write_error", "export_error", "startup_error", "checkpoint_read_error", "checkpoint_write_error"}

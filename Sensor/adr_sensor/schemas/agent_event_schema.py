@@ -1,7 +1,7 @@
 """
 Agent Event Schema for AI agent telemetry ingestion.
 Normalizes logs from Claude Code, Cursor, Cline, Codex, Copilot CLI, DeepSeek
-Harness, Warp, opencode, Gemini CLI, and Claude Desktop into a common format for security analysis.
+Harness, Warp, opencode, Gemini CLI, Google Antigravity, and Claude Desktop into a common format for security analysis.
 """
 
 import hashlib
@@ -46,7 +46,7 @@ class AgentEvent:
 
     # Core fields
     timestamp: datetime
-    source: str  # claude, cursor, cline, warp, codex, copilot, dsh, claude_desktop, opencode, gemini
+    source: str  # claude, cursor, cline, warp, codex, copilot, dsh, claude_desktop, opencode, gemini, antigravity
     session_id: str
 
     # Chat history

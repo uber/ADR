@@ -22,6 +22,7 @@ ADR Sensor is a Python library that collects telemetry from AI coding agents to 
 | **Warp Terminal**          | `warp`           | SQLite (`warp.sqlite`)              | macOS, Windows         |
 | **opencode**               | `opencode`       | SQLite (`opencode.db`) or JSON tree | macOS, Linux           |
 | **Gemini CLI**             | `gemini`         | JSONL journals + legacy JSON chats | macOS, Linux, Windows  |
+| **Google Antigravity**     | `antigravity`    | JSONL (`brain/<id>/.system_generated/logs/transcript.jsonl`) | macOS, Linux, Windows  |
 
 ### Claude Code
 
@@ -218,13 +219,34 @@ and [supported platforms](https://geminicli.com/docs/get-started/installation/).
 Tests use synthetic records matching these contracts and run on all three hosts;
 they do not require a Gemini account.
 
+### Google Antigravity
+
+The `antigravity` source reads conversation transcript journals from Google Antigravity (`agy`) CLI and agent harness brain storage.
+
+| Host | Default brain directories |
+| ---- | ------------------------- |
+| macOS / Linux | `~/.gemini/antigravity-ide/brain/`, `~/.antigravity/brain/` |
+| Windows | `%APPDATA%\Google\Antigravity\brain\`, `%USERPROFILE%\.gemini\antigravity-ide\brain\` |
+
+`ANTIGRAVITY_HOME` and `AGY_HOME` environment variables override the storage root when set. Each conversation is housed in a unique directory containing `.system_generated/logs/transcript.jsonl` (and `transcript_full.jsonl`).
+
+- **Step Types**: The parser ingests `USER_INPUT` (user prompts) and `PLANNER_RESPONSE` (assistant output, thinking traces, and tool calls).
+- **Tool Normalization**: Invoked tools are extracted and mapped to `ToolUsage`. Native tools are recorded directly, while MCP server calls (such as `mcp_<server>_<tool>` or `<server>:<tool>`) are parsed to populate `server_name` and `tool_name` with `tool_type: "mcp_tool"`.
+- **Safety Limits & Lookback**: Parameters and return payloads are truncated at 1,000 characters. Default lookback is 14 days by file modification time; pass `max_age_days` or `--all-history` to adjust. Corrupted or malformed lines are skipped gracefully without aborting the session.
+
+```bash
+uv run adr-sensor --source antigravity --no-save
+uv run adr-sensor --source antigravity --save-sessions --all-history
+```
+
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        AI Agent Logs                            │
 │         Claude, Cursor, Cline, Codex, Copilot CLI, Warp         │
-│       Claude Desktop, opencode, Gemini CLI, DeepSeek Harness      │
+│       Claude Desktop, opencode, Gemini CLI, DeepSeek Harness    │
+│                       Google Antigravity                        │
 └───────────────────────────────┬─────────────────────────────────┘
                                 ▼
 ┌─────────────────────────────────────────────────────────────────┐

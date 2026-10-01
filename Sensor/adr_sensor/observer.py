@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from tabulate import tabulate
 
 from .diagnostics import DIAGNOSTIC_SOURCES, MAX_COUNT, health_record, write_health_records
+from .parsers.antigravity_parser import AntigravityParser
 from .parsers.base_parser import BaseParser
 from .parsers.claude_desktop_parser import ClaudeDesktopParser
 from .parsers.claude_parser import ClaudeParser
@@ -68,6 +69,7 @@ class AgentObserver:
         ("dsh", "DeepSeek Harness"),
         ("opencode", "opencode"),
         ("gemini", "Gemini CLI"),
+        ("antigravity", "Google Antigravity"),
     )
 
     #: Sources that only produce logs on some operating systems. A source absent
@@ -76,7 +78,7 @@ class AgentObserver:
         "claude_desktop": ("Darwin", "Windows"),
     }
 
-    CONTENT_AWARE_INCREMENTAL_SOURCES = frozenset({"claude", "codex", "copilot", "dsh", "gemini"})
+    CONTENT_AWARE_INCREMENTAL_SOURCES = frozenset({"claude", "codex", "copilot", "dsh", "gemini", "antigravity"})
 
     def __init__(self, output_dir: Optional[Path] = None, max_age_days: Optional[int] = None):
         """Initialize the AgentObserver.
@@ -98,9 +100,12 @@ class AgentObserver:
         self.opencode_parser = (
             OpencodeParser(max_age_days=max_age_days) if max_age_days is not None else OpencodeParser()
         )
+        self.gemini_parser = GeminiParser(max_age_days=max_age_days) if max_age_days is not None else GeminiParser()
+        self.antigravity_parser = (
+            AntigravityParser(max_age_days=max_age_days) if max_age_days is not None else AntigravityParser()
+        )
 
         self.output_dir = output_dir if output_dir else Path("output")
-        self.gemini_parser = GeminiParser(max_age_days=max_age_days) if max_age_days is not None else GeminiParser()
         self.output_dir.mkdir(exist_ok=True)
         self._diagnostic_records: List[dict] = []
         self._diagnostics_flushed = 0
