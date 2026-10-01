@@ -223,16 +223,28 @@ they do not require a Gemini account.
 
 The `antigravity` source reads conversation transcript journals from Google Antigravity (`agy`) CLI and agent harness brain storage.
 
-| Host | Default brain directories |
-| ---- | ------------------------- |
-| macOS / Linux | `~/.gemini/antigravity-ide/brain/`, `~/.antigravity/brain/` |
-| Windows | `%APPDATA%\Google\Antigravity\brain\`, `%USERPROFILE%\.gemini\antigravity-ide\brain\` |
+| Product | Default brain directory |
+| ------- | ----------------------- |
+| Antigravity CLI | `~/.gemini/antigravity-cli/brain/` |
+| Antigravity 2.0 | `~/.gemini/antigravity2/brain/` |
+| Antigravity IDE | `~/.gemini/antigravity-ide/brain/` |
 
-`ANTIGRAVITY_HOME` and `AGY_HOME` environment variables override the storage root when set. Each conversation is housed in a unique directory containing `.system_generated/logs/transcript.jsonl` (and `transcript_full.jsonl`).
+These paths follow the user's home directory on macOS, Linux, and Windows
+(`%USERPROFILE%\.gemini\...` on Windows); see Google's
+[transcript locations](https://antigravity.google/docs/hooks).
+ADR also checks the legacy `~/.antigravity/brain/`, `%APPDATA%\Google\Antigravity\brain\`,
+`~/Library/Application Support/Google/Antigravity/brain/`, and
+`~/.config/google/antigravity/brain/` candidates.
 
-- **Step Types**: The parser ingests `USER_INPUT` (user prompts) and `PLANNER_RESPONSE` (assistant output, thinking traces, and tool calls).
+ADR honors `ANTIGRAVITY_HOME` and `AGY_HOME` as storage overrides: point either at
+the brain directory or its parent. Each conversation has its own directory with
+`.system_generated/logs/transcript.jsonl` and, when available, `transcript_full.jsonl`.
+
+- **Transcript selection**: ADR compares usable snapshots and selects the newest recorded revision. For the same revision it prefers untruncated data and the full transcript, regardless of file-copy order. An empty, malformed, or unreadable file does not prevent capture from a usable sibling. Root-level transcript files are also supported.
+- **Step Types**: The parser ingests `USER_INPUT` (user prompts), `PLANNER_RESPONSE` (assistant output, `thinking` text, and tool calls), and model-authored `GENERIC` output. Thinking text is retained with a `[Thinking]` label. Session times use the records' `created_at` or `timestamp` values, falling back to file modification time.
 - **Tool Normalization**: Invoked tools are extracted and mapped to `ToolUsage`. Native tools are recorded directly, while MCP server calls (such as `mcp_<server>_<tool>` or `<server>:<tool>`) are parsed to populate `server_name` and `tool_name` with `tool_type: "mcp_tool"`.
-- **Safety Limits & Lookback**: Parameters and return payloads are truncated at 1,000 characters. Default lookback is 14 days by file modification time; pass `max_age_days` or `--all-history` to adjust. Corrupted or malformed lines are skipped gracefully without aborting the session.
+- **Data preservation**: ADR does not clip tool arguments or stringify nested values. If the selected source transcript reports `truncated_fields`, the event is marked `is_truncated`; ADR cannot recover content that is absent from that source.
+- **Lookback & recovery**: Default lookback is 14 days by file modification time; pass `max_age_days` or `--all-history` to adjust. Malformed lines and invalid timestamps are diagnosed without dropping valid conversation records.
 
 ```bash
 uv run adr-sensor --source antigravity --no-save
