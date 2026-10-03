@@ -4,7 +4,7 @@ import os
 import threading
 import time
 from datetime import datetime, timezone
-from typing import Any, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .. import host_identity
 from ..diagnostics import sanitize_health_record
@@ -208,10 +208,67 @@ class OpenTelemetryLogExporter:
 
 def _gen_ai_attributes(entry: AgentEvent) -> dict:
     """Map session identity onto OpenTelemetry GenAI semantic-convention attributes."""
-    return {
-        "gen_ai.conversation.id": entry.session_id,
-        "gen_ai.agent.name": entry.source,
-    }
+    attributes = {"gen_ai.agent.name": entry.source}
+    conversation_id = _conversation_id(entry)
+    if conversation_id:
+        attributes["gen_ai.conversation.id"] = conversation_id
+    return attributes
+
+
+def _conversation_id(entry: AgentEvent) -> Optional[str]:
+    """Return the harness's own session ID, or None when it cannot be recovered.
+
+    Never falls back to ``entry.session_id``: ``adr.session.id`` already carries it.
+    """
+    native_id = _CONVERSATION_ID_BY_SOURCE.get(entry.source)
+    return native_id(entry) if native_id else None
+
+
+def _without_prefix(value: Any, prefix: str) -> Optional[str]:
+    if isinstance(value, str) and value.startswith(prefix) and len(value) > len(prefix):
+        return value[len(prefix) :]
+    return None
+
+
+def _prefixed(prefix: str) -> Callable[[AgentEvent], Optional[str]]:
+    """Undo a parser's ``f"{prefix}{native_id}"`` session ID."""
+    return lambda entry: _without_prefix(entry.session_id, prefix)
+
+
+def _claude_conversation_id(entry: AgentEvent) -> Optional[str]:
+    context = entry.session_context or {}
+    if context.get("agent_id"):
+        # Subagent transcripts carry their parent's sessionId, which Claude Code also reports.
+        return _without_prefix(context.get("parent_session_id"), "claude_")
+    return _without_prefix(entry.session_id, "claude_")
+
+
+def _claude_desktop_conversation_id(entry: AgentEvent) -> Optional[str]:
+    # The metadata sessionId prefix is stripped by the parser; cliSessionId is kept verbatim.
+    cli_session_id = (entry.session_context or {}).get("cli_session_id")
+    return cli_session_id if isinstance(cli_session_id, str) and cli_session_id else None
+
+
+def _opencode_conversation_id(entry: AgentEvent) -> Optional[str]:
+    # The parser strips opencode's own "ses_" prefix, which every opencode session ID has.
+    native_id = _without_prefix(entry.session_id, "opencode_")
+    return f"ses_{native_id}" if native_id else None
+
+
+# gen_ai.conversation.id for each AgentEvent.source; see "OpenTelemetry Logs Export" in Sensor/README.md.
+_CONVERSATION_ID_BY_SOURCE: Dict[str, Callable[[AgentEvent], Optional[str]]] = {
+    "antigravity": _prefixed("antigravity_"),
+    "claude": _claude_conversation_id,
+    "claude_desktop": _claude_desktop_conversation_id,
+    "cline": _prefixed("cline_"),
+    "codex": _prefixed("codex_"),
+    "copilot": _prefixed("copilot_"),
+    "cursor": _prefixed("cursor_"),
+    "dsh": _prefixed("dsh_"),
+    "gemini": _prefixed("gemini_"),
+    "opencode": _opencode_conversation_id,
+    "warp": _prefixed("warp_"),
+}
 
 
 def _datetime_to_unix_nanos(value: datetime) -> int:

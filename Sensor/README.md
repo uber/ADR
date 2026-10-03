@@ -421,11 +421,34 @@ results, usernames, hostnames, and local paths can be transmitted. Any
 normalization already performed by a source parser still applies.
 
 Set `"gen_ai_attributes": true` to also add OpenTelemetry GenAI semantic-convention
-attributes to `adr.agent.session` records: `gen_ai.conversation.id` (the ADR
-session ID, same value as `adr.session.id`) and `gen_ai.agent.name` (the source,
-same value as `adr.source`). The body and `adr.*` attributes are unchanged. The
-GenAI conventions are still in development status, so the option is off by default.
-Enabling it is a destination change and resends sessions once.
+attributes to `adr.agent.session` records. The option is off by default because the
+GenAI conventions are still in development status. The body and all `adr.*`
+attributes, including `adr.session.id`, are unchanged. Enabling it is a destination
+change and resends sessions once.
+
+`gen_ai.agent.name` is the source (same value as `adr.source`).
+`gen_ai.conversation.id` is the harness's own session ID, so ADR sessions can be
+joined with the telemetry that harness reports itself. Each parser builds
+`adr.session.id` by prefixing that ID, and the exporter maps it back as follows:
+
+| source | ADR `session_id` | Native ID the parser reads | `gen_ai.conversation.id` |
+|---|---|---|---|
+| `antigravity` | `antigravity_<id>` | Conversation directory name | `<id>` |
+| `claude` | `claude_<id>`, subagents `claude_<id>_agent_<agent>` | JSONL `sessionId` | `<id>`; subagents get their parent's `sessionId`, as in Claude Code's own telemetry |
+| `claude_desktop` | `claude_desktop_[dispatch_]<uuid>` | Metadata `cliSessionId` (kept as `session_context.cli_session_id`) | `cliSessionId`; omitted when absent |
+| `cline` | `cline_<id>` | Task directory name (Cline's task ID) | `<id>` |
+| `codex` | `codex_<id>` | `session_meta` `payload.id` | `<id>` |
+| `copilot` | `copilot_<id>` | `session.start`/`session.resume` `sessionId`, else the session-state directory name | `<id>` |
+| `cursor` | `cursor_<id>` | Composer ID from `composerData:`/`bubbleId:` keys | `<id>` |
+| `dsh` | `dsh_<id>` | Session header `id` | `<id>` |
+| `gemini` | `gemini_<id>` | `sessionId`; subagents keep their own | `<id>` |
+| `opencode` | `opencode_<id>` | Session `id`, whose `ses_` prefix the parser strips | `ses_<id>` |
+| `warp` | `warp_<id>` | `agent_conversations.conversation_id` | `<id>` |
+
+`gen_ai.conversation.id` is omitted when it is unavailable: for an unlisted source,
+a `session_id` without the expected prefix, a Claude subagent without a parent
+session, or a Claude Desktop session without `cliSessionId`. It is never derived
+from `adr.session.id`. New parsers need a row in this table.
 
 System-configuration records are sent as `adr.system.configuration` logs on each
 run. Sensor health logs are also sent on every run, even when all session snapshots

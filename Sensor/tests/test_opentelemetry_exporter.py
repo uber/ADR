@@ -109,7 +109,7 @@ def test_export_adds_gen_ai_attributes_when_enabled(model):
         "adr.source": "codex",
         "adr.session.id": "codex_session-1",
         **({"adr.model": model} if model else {}),
-        "gen_ai.conversation.id": "codex_session-1",
+        "gen_ai.conversation.id": "session-1",
         "gen_ai.agent.name": "codex",
     }
 
