@@ -1861,14 +1861,18 @@ async function reviewsPage() {
     { symbol: "settings" });
   const review = button("Review now", async () => {
     try {
-      if (!settings.consented) { await reviewSettingsDialog(data); return; }
+      // A just-saved dialog can close before the background page refresh
+      // finishes. Read current consent/limits instead of a stale closure.
+      const current = await api("/reviews");
+      if (current.active) { notice("A security review is already running."); await render(); return; }
+      if (!current.settings.consented) { await reviewSettingsDialog(current); return; }
       const sessions = (await api("/sessions?limit=100&grouped=true")).items || [];
       const selected = new URLSearchParams(location.search).get("session") || "";
       if (selected && !sessions.some(item => item.id === selected)) {
         sessions.unshift(await api(`/sessions/${encodeURIComponent(selected)}`));
       }
       if (!sessions.length) { notice("Capture a session before starting a review", true); return; }
-      reviewStartDialog(data, sessions, selected);
+      reviewStartDialog(current, sessions, selected);
     } catch (error) { notice(error.message, true); }
   }, { variant: "primary", symbol: "play", disabled: Boolean(data.active) });
   const quota = data.quota;

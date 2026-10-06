@@ -1,12 +1,14 @@
+import errno
 import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
 from adr_desktop.config import atomic_json
-from adr_desktop.policy import evaluate, hook_output, validate_rule
+from adr_desktop.policy import evaluate, hook_output, resolve_path, validate_rule
 
 
 def policy(path, action="block", kind="directory", **options):
@@ -69,6 +71,30 @@ def test_relative_paths_and_symlink_aliases_cannot_bypass(tmp_path):
     alias.symlink_to(secret, target_is_directory=True)
     assert evaluate(event("alias/data", cwd=tmp_path), "claude", policy(secret)).decision == "deny"
     assert evaluate(event("other/../private/data", cwd=tmp_path), "claude", policy(secret)).decision == "deny"
+
+
+@pytest.mark.parametrize("spelling", [
+    "loop", "loop/future.txt", "loop/../public.txt", "not-created/../loop",
+])
+def test_symlink_loops_are_not_resolved_as_usable_policy_paths(tmp_path, spelling):
+    loop = tmp_path / "loop"
+    loop.symlink_to(loop)
+    with pytest.raises((OSError, RuntimeError)):
+        resolve_path(str(tmp_path / spelling), str(tmp_path))
+
+
+def test_unreadable_rule_metadata_does_not_block_unrelated_files(tmp_path, monkeypatch):
+    protected = tmp_path / "private"
+    original_stat = Path.stat
+
+    def restricted_stat(path, *args, **kwargs):
+        if path == protected:
+            raise PermissionError(errno.EACCES, "Synthetic metadata denial")
+        return original_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", restricted_stat)
+    assert evaluate(event(tmp_path / "public"), "claude", policy(protected)).decision == "pass"
+    assert evaluate(event(protected), "claude", policy(protected)).decision == "deny"
 
 
 def test_hard_link_to_protected_file_is_blocked(tmp_path):

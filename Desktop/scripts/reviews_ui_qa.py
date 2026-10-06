@@ -92,12 +92,34 @@ def main():
                         "checkbox", name="I approve sending selected session evidence", exact=False
                     )
                     consent.check()
+                    held = []
+
+                    def delay_first_refresh(route):
+                        # Leave the old page's buttons alive after the save.
+                        # Review now must fetch current consent instead of
+                        # reopening a stale settings form on a slow connection.
+                        if not held:
+                            held.append(route)
+                        else:
+                            route.continue_()
+
+                    page.route("**/api/reviews", delay_first_refresh)
                     modal.get_by_role("button", name="Save review settings", exact=True).click()
                     expect(modal).to_have_count(0)
                     assert runtime.reviews.preferences()["consented"]
                     assert not runtime.reviews.preferences()["background"]
-                    page.get_by_role("button", name="Review now", exact=True).click()
                     launch = page.get_by_role("dialog", name="Review a captured session", exact=True)
+                    try:
+                        page.wait_for_function(
+                            "() => document.querySelector('#page').getAttribute('aria-busy') === 'true'"
+                        )
+                        page.get_by_role("button", name="Review now", exact=True).click()
+                        expect(launch).to_be_visible()
+                        expect(launch).to_contain_text("1,000 review tokens")
+                    finally:
+                        for route in held:
+                            route.continue_()
+                        page.unroute("**/api/reviews", delay_first_refresh)
                     launch.get_by_role("button", name="Start review", exact=True).click()
                     expect(launch).to_have_count(0)
                     expect(page.get_by_text("Synthetic finding", exact=True)).to_be_visible(timeout=15000)

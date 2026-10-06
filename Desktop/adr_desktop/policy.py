@@ -1,5 +1,6 @@
 """Pre-tool file policy. Hooks are cooperative controls, not a kernel sandbox."""
 
+import errno
 import io
 import os
 import platform
@@ -90,7 +91,18 @@ def resolve_path(value: str, cwd: str) -> Path:
     path = Path(value).expanduser()
     if not path.is_absolute():
         path = Path(cwd) / path
-    return path.resolve(strict=False)
+    resolved = path.resolve(strict=False)
+    # Python 3.13 no longer raises for symlink loops in non-strict resolve().
+    # Check both spellings so missing/.. or loop/.. cannot conceal a loop.
+    # Preserve non-strict handling of missing/inaccessible metadata: the rule
+    # still protects that spelling, and must not disable unrelated operations.
+    for candidate in (path, resolved):
+        try:
+            candidate.stat()
+        except OSError as exc:
+            if exc.errno == errno.ELOOP:
+                raise
+    return resolved
 
 
 def _comparison(path: Path) -> str:

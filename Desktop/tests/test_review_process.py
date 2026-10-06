@@ -73,10 +73,15 @@ def test_codex_does_not_send_evidence_when_mcp_is_still_present():
     assert raised.value.code == "isolation_unavailable"
 
 
-@pytest.mark.parametrize("scenario,code", [("hang", "timeout"), ("oversize", "output_limit")])
-def test_process_time_and_output_limits(tmp_path, scenario, code):
+@pytest.mark.parametrize(
+    "scenario,code,seconds",
+    [("hang", "timeout", 0.5), ("oversize", "output_limit", 10)],
+)
+def test_process_time_and_output_limits(tmp_path, scenario, code, seconds):
+    # The byte-bound test must not race the independent time-bound test or a
+    # slower CI interpreter startup. The hang case retains its short deadline.
     with JsonProcess(
-        [sys.executable, str(FIXTURE), "claude", scenario], tmp_path, threading.Event(), seconds=0.5
+        [sys.executable, str(FIXTURE), "claude", scenario], tmp_path, threading.Event(), seconds=seconds
     ) as process:
         with pytest.raises(ReviewError) as raised:
             process.read()

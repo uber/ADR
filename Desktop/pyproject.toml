@@ -34,6 +34,7 @@ adr_desktop = ["web/*", "native/*.c", "bin/*", "adapters/*.js", "plugins/*.json"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+filterwarnings = ["error::pytest.PytestUnhandledThreadExceptionWarning"]
 
 [tool.ruff]
 line-length = 110

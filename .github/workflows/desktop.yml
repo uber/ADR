@@ -29,6 +29,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/desktop-setup
+        with:
+          save-cache: "true"
       - name: Python lint
         working-directory: Desktop
         run: uv run --locked ruff check adr_desktop tests scripts
@@ -73,6 +75,7 @@ jobs:
       - uses: ./.github/actions/desktop-setup
         with:
           python-version: ${{ matrix.python }}
+          save-cache: ${{ matrix.os != 'ubuntu-24.04' || matrix.python != '3.11' }}
       - name: Unit, API, guardian and synthetic CLI tests
         run: uv run --locked pytest -q --junitxml=test-results/desktop.xml
       - name: Save test report
@@ -98,6 +101,7 @@ jobs:
       - uses: ./.github/actions/desktop-setup
         with:
           project: ${{ matrix.component }}
+          save-cache: "true"
       - name: Run the component's complete test suite
         working-directory: ${{ matrix.component }}
         run: uv run --locked pytest -q --junitxml=test-results/component.xml
@@ -178,6 +182,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/desktop-setup
+        with:
+          save-cache: ${{ matrix.arch == 'x86_64' }}
       - name: Build the commit-labelled developer app
         env:
           ADR_BUILD_NUMBER: ${{ github.run_number }}

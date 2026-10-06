@@ -1,6 +1,7 @@
 """Bounded, cancellable local CLI jobs. Never extract provider credentials."""
 
 import hashlib
+import io
 import json
 import os
 import queue
@@ -194,24 +195,28 @@ class JsonProcess:
         total = 0
         document = bytearray()
         try:
-            while not self.closed.is_set():
-                line = self.process.stdout.readline(MAX_LINE + 1)
-                if not line:
-                    break
-                total += len(line)
-                if len(line) > MAX_LINE or total > MAX_OUTPUT:
-                    self._put(ReviewError("output_limit"))
-                    return
-                if self.document:
-                    document.extend(line)
-                    continue
-                try:
-                    value = json.loads(line)
-                except (ValueError, RecursionError):
-                    # No raw CLI diagnostics or prompts are returned to the UI.
-                    continue
-                if isinstance(value, dict):
-                    self._put(value)
+            # Buffer only this reader: raw readline can make one syscall per
+            # byte. The closer retains raw pipes, avoiding a reader-buffer lock
+            # while cancellation is tearing down a child holding stdout open.
+            with io.BufferedReader(self.process.stdout) as output:
+                while not self.closed.is_set():
+                    line = output.readline(MAX_LINE + 1)
+                    if not line:
+                        break
+                    total += len(line)
+                    if len(line) > MAX_LINE or total > MAX_OUTPUT:
+                        self._put(ReviewError("output_limit"))
+                        return
+                    if self.document:
+                        document.extend(line)
+                        continue
+                    try:
+                        value = json.loads(line)
+                    except (ValueError, RecursionError):
+                        # No raw CLI diagnostics or prompts are returned to the UI.
+                        continue
+                    if isinstance(value, dict):
+                        self._put(value)
             if self.document:
                 try:
                     value = json.loads(document)
@@ -219,6 +224,11 @@ class JsonProcess:
                         self._put(value)
                 except (ValueError, RecursionError):
                     pass
+        except (OSError, ValueError):
+            # Cancellation can close a pipe while its reader is still waking.
+            # Unexpected read failures use a closed, value-free diagnostic.
+            if not self.closed.is_set():
+                self._put(ReviewError("cli_failed"))
         finally:
             self._put(None)
 
@@ -244,6 +254,8 @@ class JsonProcess:
                     view = view[written:]
                 if close:
                     self.process.stdin.close()
+                else:
+                    self.process.stdin.flush()
             except (OSError, ValueError):
                 failure.append(True)
             finally:
