@@ -2,8 +2,15 @@
 
 Desktop work targets `desktop-dev` until community launch. The
 `Desktop CI` workflow runs on every push to that branch, every pull request
-targeting it, and manual runs. There is no path filter that could leave a
+targeting it, and reruns of those executions. There is no path filter that could leave a
 required check waiting indefinitely after a documentation-only change.
+
+While the workflow exists only on `desktop-dev`, start it with a push or use
+**Re-run jobs** on an existing execution (`gh run rerun <run-id> --repo uber/ADR`).
+GitHub requires a workflow on the default branch for a new
+[`workflow_dispatch` run](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow).
+The trigger is declared for future use, but this setup does not add anything
+to `main` or change the default branch to enable it.
 
 ## What runs
 
@@ -64,7 +71,7 @@ real captured conversations or a logged-in browser in a CI fixture.
 
 ## Trying a preview
 
-For a successful `desktop-dev` push or manual branch run, open the workflow's
+For a successful `desktop-dev` push run, including a rerun, open the workflow's
 **Artifacts** section and choose:
 
 - `adr-desktop-dev-macos-arm64-<commit>` for Apple Silicon.
