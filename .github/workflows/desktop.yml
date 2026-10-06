@@ -1,48 +1,242 @@
-name: Desktop preview
+name: Desktop CI
 
 on:
   pull_request:
-    paths:
-      - "Desktop/**"
-      - "Sensor/**"
-      - "Discovery/**"
-      - ".github/workflows/desktop.yml"
+    branches: [desktop-dev]
   push:
     branches: [desktop-dev]
-    paths:
-      - "Desktop/**"
-      - "Sensor/**"
-      - "Discovery/**"
-      - ".github/workflows/desktop.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: desktop-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUTF8: "1"
+  UV_NO_PROGRESS: "1"
+  UV_PYTHON_PREFERENCE: only-managed
+
 jobs:
+  quality:
+    name: Lint and workflow validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/desktop-setup
+      - name: Python lint
+        working-directory: Desktop
+        run: uv run --locked ruff check adr_desktop tests scripts
+      - name: JavaScript syntax
+        working-directory: Desktop
+        run: |
+          uv run --locked python - <<'PY'
+          import subprocess
+          from pathlib import Path
+          import playwright
+
+          node = Path(playwright.__file__).parent / "driver" / "node"
+          for source in ("adr_desktop/web/app.js", "adr_desktop/adapters/opencode.js"):
+              subprocess.run([str(node), "--check", source], check=True)
+          PY
+      - name: Workflow lint
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -color .github/workflows/desktop.yml
+      - name: Dependency installation must not rewrite lockfiles
+        run: git diff --exit-code
+
   core:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
+    name: Desktop tests (${{ matrix.os }}, Python ${{ matrix.python }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            python: "3.11"
+          - os: ubuntu-24.04
+            python: "3.13"
+          - os: macos-15
+            python: "3.11"
     defaults:
       run:
         working-directory: Desktop
     steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
-      - run: uv sync --frozen --extra dev --python 3.11
-      - run: uv run ruff check adr_desktop tests scripts
-      - run: uv run pytest -q
-      - if: runner.os == 'Linux'
-        run: uv run python -m playwright install --with-deps chromium
-      - if: runner.os == 'Linux'
-        run: uv run python scripts/ui_qa.py
-      - if: runner.os == 'macOS'
-        run: uv run python scripts/build_macos.py
-      - if: runner.os == 'macOS'
-        run: dist/ADR.app/Contents/MacOS/ADR --self-test
-      - if: runner.os == 'macOS'
-        run: dist/ADR.app/Contents/MacOS/ADR --vault-self-test
-      - if: runner.os == 'macOS'
-        run: uv run python scripts/package_smoke.py
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/desktop-setup
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Unit, API, guardian and synthetic CLI tests
+        run: uv run --locked pytest -q --junitxml=test-results/desktop.xml
+      - name: Save test report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: desktop-tests-${{ matrix.os }}-py${{ matrix.python }}
+          path: Desktop/test-results/*.xml
+          retention-days: 7
+
+  components:
+    name: Shared component tests (${{ matrix.component }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [Sensor, Discovery]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/desktop-setup
+        with:
+          project: ${{ matrix.component }}
+      - name: Run the component's complete test suite
+        working-directory: ${{ matrix.component }}
+        run: uv run --locked pytest -q --junitxml=test-results/component.xml
+      - name: Save component report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: desktop-component-${{ matrix.component }}
+          path: ${{ matrix.component }}/test-results/*.xml
+          retention-days: 7
+
+  browser:
+    name: Browser workflows (${{ matrix.group }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: insights
+            suites: ui_qa navigation_qa sessions_ui_qa
+          - group: protection
+            suites: credential_activity_ui_qa threats_ui_qa reviews_ui_qa
+    defaults:
+      run:
+        working-directory: Desktop
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/desktop-setup
+      - name: Install Chromium
+        run: uv run --locked python -m playwright install --with-deps chromium
+      - name: Exercise synthetic workflows and retain failures
+        env:
+          ADR_QA_SUITES: ${{ matrix.suites }}
+        shell: bash
+        run: |
+          read -r -a adr_suites <<< "$ADR_QA_SUITES"
+          adr_failed=0
+          for adr_suite in "${adr_suites[@]}"; do
+            adr_output="test-results/ui/${adr_suite}"
+            mkdir -p "$adr_output"
+            if uv run --locked python "scripts/${adr_suite}.py" --output "$adr_output" 2>&1 | tee "${adr_output}/run.log"; then
+              printf -- '- %s: passed\n' "$adr_suite" >> "$GITHUB_STEP_SUMMARY"
+            else
+              printf -- '- %s: failed; see the browser evidence artifact\n' "$adr_suite" >> "$GITHUB_STEP_SUMMARY"
+              adr_failed=1
+            fi
+          done
+          exit "$adr_failed"
+      - name: Save synthetic screenshots, traces and logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: desktop-browser-${{ matrix.group }}
+          path: Desktop/test-results/ui/
+          retention-days: 7
+
+  macos:
+    name: macOS preview (${{ matrix.arch }})
+    needs: [quality, core, components, browser]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            arch: arm64
+          - os: macos-15-intel
+            arch: x86_64
+    defaults:
+      run:
+        working-directory: Desktop
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/desktop-setup
+      - name: Build the commit-labelled developer app
+        env:
+          ADR_BUILD_NUMBER: ${{ github.run_number }}
+          ADR_SOURCE_REVISION: ${{ github.sha }}
+          ADR_ARCH: ${{ matrix.arch }}
+        run: |
+          test "$(uname -m)" = "$ADR_ARCH"
+          uv run --locked python scripts/build_macos.py \
+            --build-number "$ADR_BUILD_NUMBER" --source-revision "$ADR_SOURCE_REVISION"
+      - name: Archive with executable permissions and verify the restored app
+        env:
+          ADR_ARCH: ${{ matrix.arch }}
+          ADR_SOURCE_REVISION: ${{ github.sha }}
+        run: |
+          mkdir -p dist/preview
+          adr_archive="ADR-Desktop-dev-macos-${ADR_ARCH}-${ADR_SOURCE_REVISION}.zip"
+          ditto -c -k --sequesterRsrc --keepParent dist/ADR.app "dist/preview/${adr_archive}"
+          (cd dist/preview && shasum -a 256 "$adr_archive" > SHA256SUMS)
+          ditto -x -k "dist/preview/${adr_archive}" dist/restored
+          codesign --verify --deep --strict dist/restored/ADR.app
+          dist/restored/ADR.app/Contents/MacOS/ADR --self-test
+          uv run --locked python scripts/package_smoke.py --app dist/restored/ADR.app
+      - name: Upload development preview (never a release)
+        if: github.ref == 'refs/heads/desktop-dev' && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: adr-desktop-dev-macos-${{ matrix.arch }}-${{ github.sha }}
+          path: |
+            Desktop/dist/preview/*.zip
+            Desktop/dist/preview/SHA256SUMS
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+      - name: Preview scope
+        env:
+          ADR_ARCH: ${{ matrix.arch }}
+        run: |
+          printf -- '### macOS %s developer preview\n\n' "$ADR_ARCH" >> "$GITHUB_STEP_SUMMARY"
+          printf -- 'Ad-hoc signed, not notarized. Native and packaged smoke checks passed after archive extraction. No GitHub Release, package publication, or automatic installation.\n' >> "$GITHUB_STEP_SUMMARY"
+
+  gate:
+    name: Desktop CI
+    if: ${{ always() }}
+    needs: [quality, core, components, browser, macos]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Every required job must succeed
+        env:
+          ADR_JOB_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+
+          results = json.loads(os.environ["ADR_JOB_RESULTS"])
+          failures = [name for name, job in results.items() if job["result"] != "success"]
+          for name, job in results.items():
+              print(f"{name}: {job['result']}")
+          if failures:
+              raise SystemExit("Desktop CI did not pass: " + ", ".join(failures))
+          PY

@@ -13,15 +13,15 @@ import socket
 import tempfile
 import threading
 import time
+from contextlib import ExitStack
 from pathlib import Path
-from unittest.mock import patch
 
 import uvicorn
 from playwright.sync_api import expect, sync_playwright
+from qa_support import browser_evidence, isolated_agent_profile
 
 from adr_desktop.api import create_app
 from adr_desktop.config import prepare_state_dir, utcnow
-from adr_desktop.hooks import configuration_path
 from adr_desktop.protection import evaluate_operation
 from adr_desktop.runtime import Runtime
 
@@ -354,7 +354,7 @@ def main():
     from ui_qa import SyntheticNative, SyntheticPluginDriver, seed
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--screenshots", type=Path)
+    parser.add_argument("--output", "--screenshots", dest="screenshots", type=Path)
     args = parser.parse_args()
     screenshots = args.screenshots or Path(tempfile.mkdtemp(prefix="adr-threat-ui-shots-"))
     screenshots.mkdir(parents=True, exist_ok=True)
@@ -363,14 +363,7 @@ def main():
         home = directory / "home"
         home.mkdir()
 
-        def configured(harness, override=None):
-            return configuration_path(harness, override or home)
-
-        with (
-            patch.object(Path, "home", return_value=home),
-            patch("adr_desktop.hooks.configuration_path", configured),
-            patch("adr_desktop.runtime.configuration_path", configured),
-        ):
+        with isolated_agent_profile(home):
             runtime = Runtime(
                 prepare_state_dir(directory / "state"), SyntheticNative(), start_collectors=False,
             )
@@ -395,9 +388,10 @@ def main():
                     time.sleep(0.02)
                 errors = []
                 external = []
-                with sync_playwright() as playwright:
+                with sync_playwright() as playwright, ExitStack() as evidence:
                     browser = playwright.chromium.launch()
                     context = browser.new_context(viewport={"width": 1440, "height": 1040})
+                    evidence.enter_context(browser_evidence(context, screenshots))
                     page = context.new_page()
                     page.on("pageerror", lambda error: errors.append(str(error)))
                     page.on("request", lambda request: external.append(request.url)
@@ -407,8 +401,6 @@ def main():
                     check_threats(page, runtime, screenshots)
                     assert not external, "The threat workflow must not request external resources"
                     assert not errors, "\n".join(errors)
-                    context.close()
-                    browser.close()
                 print(json.dumps({
                     "threat_ui_qa": "passed", "screenshots": str(screenshots),
                     "data": "synthetic only", "coverage": "real owner API + explicit display fixtures",

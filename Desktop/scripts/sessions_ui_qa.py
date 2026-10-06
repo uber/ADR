@@ -6,16 +6,17 @@ import socket
 import tempfile
 import threading
 import time
+from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
 import uvicorn
 from playwright.sync_api import expect, sync_playwright
+from qa_support import browser_evidence, isolated_agent_profile
 
 from adr_desktop.api import create_app
 from adr_desktop.config import prepare_state_dir
-from adr_desktop.hooks import configuration_path
 from adr_desktop.runtime import Runtime
 
 
@@ -294,13 +295,8 @@ def main():
         home = Path(folder) / "home"
         home.mkdir()
 
-        def fixture_path(harness, override=None):
-            return configuration_path(harness, override or home)
-
         with (
-            patch.object(Path, "home", return_value=home),
-            patch("adr_desktop.hooks.configuration_path", fixture_path),
-            patch("adr_desktop.runtime.configuration_path", fixture_path),
+            isolated_agent_profile(home),
             patch("adr_desktop.runtime.publish_target"),
             patch("adr_desktop.runtime.upgrade_guard"),
         ):
@@ -323,11 +319,12 @@ def main():
                 time.sleep(0.02)
             errors = []
             try:
-                with sync_playwright() as playwright:
+                with sync_playwright() as playwright, ExitStack() as evidence:
                     browser = playwright.chromium.launch()
                     context = browser.new_context(
                         viewport={"width": 1440, "height": 1000}, timezone_id="Europe/Amsterdam",
                     )
+                    evidence.enter_context(browser_evidence(context, output))
                     page = context.new_page()
                     page.on("pageerror", lambda error: errors.append(str(error)))
                     base = f"http://127.0.0.1:{runtime.port}"
@@ -338,8 +335,6 @@ def main():
                     check_browse_and_state(page, ids, base)
                     check_error_and_races(page)
                     check_responsive(page, output)
-                    context.close()
-                    browser.close()
                 if errors:
                     raise AssertionError("\n".join(errors))
                 print(json.dumps({

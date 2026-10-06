@@ -1,23 +1,24 @@
 """Exercise the real local API/UI in a disposable, synthetic browser profile."""
 
+import argparse
 import copy
 import json
 import socket
 import tempfile
 import threading
 import time
+from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import patch
 
 import uvicorn
 from environment_ui_qa import check_environment_vault
 from inventory_ui_qa import check_inventory
 from playwright.sync_api import expect, sync_playwright
+from qa_support import browser_evidence, isolated_agent_profile
 
 from adr_desktop.api import create_app
 from adr_desktop.config import prepare_state_dir, token
-from adr_desktop.hooks import configuration_path
 from adr_desktop.runtime import Runtime
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -656,20 +657,16 @@ def check_dropdowns_and_protection_activity(page, runtime, screenshots):
 
 
 def main():
-    screenshots = ROOT / "screenshots"
-    screenshots.mkdir(exist_ok=True)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path)
+    args = parser.parse_args()
+    screenshots = args.output or ROOT / "screenshots"
+    screenshots.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="adr-ui-qa-") as folder:
         home = Path(folder) / "home"
         home.mkdir()
 
-        def fixture_configuration_path(harness, override=None):
-            return configuration_path(harness, override or home)
-
-        with (
-            patch.object(Path, "home", return_value=home),
-            patch("adr_desktop.hooks.configuration_path", fixture_configuration_path),
-            patch("adr_desktop.runtime.configuration_path", fixture_configuration_path),
-        ):
+        with isolated_agent_profile(home):
             runtime = Runtime(
                 prepare_state_dir(Path(folder) / "state"), SyntheticNative(), start_collectors=False
             )
@@ -695,11 +692,12 @@ def main():
                 time.sleep(0.02)
             errors = []
             try:
-                with sync_playwright() as playwright:
+                with sync_playwright() as playwright, ExitStack() as evidence:
                     browser = playwright.chromium.launch()
                     context = browser.new_context(
                         viewport={"width": 1440, "height": 1040}, color_scheme="light"
                     )
+                    evidence.enter_context(browser_evidence(context, screenshots))
                     page = context.new_page()
                     page.on("pageerror", lambda error: errors.append(str(error)))
                     page.goto(f"http://127.0.0.1:{runtime.port}/#ticket={runtime.new_ticket()}")
@@ -764,8 +762,6 @@ def main():
                     page.emulate_media(color_scheme="dark")
                     page.set_viewport_size({"width": 1440, "height": 1040})
                     page.screenshot(path=str(screenshots / "synthetic-overview-dark.png"), full_page=True)
-                    context.close()
-                    browser.close()
                 if errors:
                     raise AssertionError("\n".join(errors))
                 print(

@@ -1,0 +1,35 @@
+name: Desktop Python environment
+description: Install pinned uv and the selected component's locked development dependencies.
+
+inputs:
+  python-version:
+    description: Python version to install and use for uv commands.
+    default: "3.11"
+  project:
+    description: Repository-relative component directory.
+    default: Desktop
+
+runs:
+  using: composite
+  steps:
+    - name: Install uv
+      uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      with:
+        version: "0.12.23"
+        python-version: ${{ inputs.python-version }}
+        enable-cache: true
+        cache-suffix: desktop-${{ inputs.project }}-${{ inputs.python-version }}
+        cache-dependency-glob: |
+          Desktop/pyproject.toml
+          Desktop/uv.lock
+          Sensor/pyproject.toml
+          Sensor/uv.lock
+          Discovery/pyproject.toml
+          Discovery/uv.lock
+    - name: Install locked dependencies
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        ADR_PROJECT: ${{ inputs.project }}
+        ADR_PYTHON: ${{ inputs.python-version }}
+      run: uv sync --locked --extra dev --python "$ADR_PYTHON" --project "$ADR_PROJECT"

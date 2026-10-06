@@ -24,8 +24,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "adr-discovery", directory = "../Discovery" },
-    { name = "adr-sensor", directory = "../Sensor" },
+    { name = "adr-discovery", editable = "../Discovery" },
+    { name = "adr-sensor", editable = "../Sensor" },
     { name = "fastapi", specifier = ">=0.115,<1" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.28" },
     { name = "playwright", marker = "extra == 'dev'", specifier = ">=1.55,<2" },
@@ -39,7 +39,7 @@ provides-extras = ["dev"]
 [[package]]
 name = "adr-discovery"
 version = "0.2.0"
-source = { directory = "../Discovery" }
+source = { editable = "../Discovery" }
 
 [package.metadata]
 requires-dist = [
@@ -51,7 +51,7 @@ provides-extras = ["dev"]
 [[package]]
 name = "adr-sensor"
 version = "1.0.0"
-source = { directory = "../Sensor" }
+source = { editable = "../Sensor" }
 dependencies = [
     { name = "tabulate" },
     { name = "zstandard" },

@@ -1,21 +1,22 @@
 """Check route, keyboard and dialog behavior with synthetic local data only."""
 
+import argparse
 import json
 import socket
 import tempfile
 import threading
 import time
+from contextlib import ExitStack
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import patch
 
 import uvicorn
 from playwright.sync_api import expect, sync_playwright
+from qa_support import browser_evidence, isolated_agent_profile
 from ui_qa import SyntheticNative, SyntheticPluginDriver, seed
 
 from adr_desktop.api import create_app
 from adr_desktop.config import prepare_state_dir
-from adr_desktop.hooks import configuration_path
 from adr_desktop.runtime import Runtime
 
 
@@ -202,7 +203,7 @@ def check_keyboard_and_layout(page):
         assert page.locator('a[data-route="/sessions"]').get_attribute("title") == "Sessions"
 
 
-def check_narrow_dialog(page):
+def check_narrow_dialog(page, screenshots):
     page.set_viewport_size({"width": 390, "height": 900})
     page.emulate_media(color_scheme="dark")
     page.locator('a[data-route="/credentials"]').click()
@@ -252,8 +253,6 @@ def check_narrow_dialog(page):
         paths.focus()
         expect(paths).to_be_in_viewport(ratio=1)
         expect(save).to_be_in_viewport(ratio=1)
-        screenshots = Path(__file__).resolve().parents[1] / "screenshots"
-        screenshots.mkdir(exist_ok=True)
         page.screenshot(path=str(screenshots / "synthetic-dialog-body-scroll-dark.png"), full_page=True)
         modal.get_by_role("button", name="Close dialog", exact=True).click()
     finally:
@@ -261,18 +260,16 @@ def check_narrow_dialog(page):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path)
+    args = parser.parse_args()
+    screenshots = args.output or Path(__file__).resolve().parents[1] / "screenshots"
+    screenshots.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="adr-navigation-qa-") as folder:
         home = Path(folder) / "home"
         home.mkdir()
 
-        def fixture_path(harness, override=None):
-            return configuration_path(harness, override or home)
-
-        with (
-            patch.object(Path, "home", return_value=home),
-            patch("adr_desktop.hooks.configuration_path", fixture_path),
-            patch("adr_desktop.runtime.configuration_path", fixture_path),
-        ):
+        with isolated_agent_profile(home):
             runtime = Runtime(
                 prepare_state_dir(Path(folder) / "state"), SyntheticNative(), start_collectors=False
             )
@@ -295,9 +292,10 @@ def main():
                 time.sleep(0.02)
             errors = []
             try:
-                with sync_playwright() as playwright:
+                with sync_playwright() as playwright, ExitStack() as evidence:
                     browser = playwright.chromium.launch()
                     context = browser.new_context(viewport={"width": 1440, "height": 1040})
+                    evidence.enter_context(browser_evidence(context, screenshots))
                     page = context.new_page()
                     page.on("pageerror", lambda error: errors.append(str(error)))
                     page.goto(f"http://127.0.0.1:{runtime.port}/#ticket={runtime.new_ticket()}")
@@ -305,9 +303,7 @@ def main():
                     check_routes(page, parent_id, child_id)
                     check_dialog(page)
                     check_keyboard_and_layout(page)
-                    check_narrow_dialog(page)
-                    context.close()
-                    browser.close()
+                    check_narrow_dialog(page, screenshots)
                 if errors:
                     raise AssertionError("\n".join(errors))
                 print(json.dumps({"navigation_qa": "passed", "data": "synthetic only"}))

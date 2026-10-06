@@ -81,6 +81,7 @@ uv run python scripts/navigation_qa.py
 uv run python scripts/sessions_ui_qa.py
 uv run python scripts/credential_activity_ui_qa.py
 uv run python scripts/threats_ui_qa.py
+uv run python scripts/reviews_ui_qa.py
 uv run python scripts/build_macos.py
 dist/ADR.app/Contents/MacOS/ADR --self-test
 dist/ADR.app/Contents/MacOS/ADR --vault-self-test
@@ -90,3 +91,8 @@ uv run python scripts/package_smoke.py
 Automated checks complement hands-on MCP exploration. Native permission grants,
 real-profile migration and clean-machine release behavior are separate
 acceptance checks; a mocked Settings opener is not proof of an OS grant.
+
+Each browser suite accepts `--output <directory>`. CI retains synthetic
+screenshots and traces there, including screenshots taken before failure
+teardown. See [Desktop CI](CI.md) for the branch checks and downloadable
+developer previews.

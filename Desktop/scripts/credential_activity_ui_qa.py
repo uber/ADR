@@ -6,17 +6,17 @@ import socket
 import tempfile
 import threading
 import time
+from contextlib import ExitStack
 from pathlib import Path
-from unittest.mock import patch
 
 import uvicorn
 from playwright.sync_api import expect, sync_playwright
+from qa_support import browser_evidence, isolated_agent_profile
 from ui_qa import SyntheticNative, seed
 
 from adr_desktop.api import create_app
 from adr_desktop.config import prepare_state_dir, utcnow
 from adr_desktop.credential_activity import record_session
-from adr_desktop.hooks import configuration_path
 from adr_desktop.runtime import Runtime
 
 NATIVE_SESSION = "11111111-2222-4333-8444-555555555555"
@@ -112,14 +112,7 @@ def main():
         home = Path(folder) / "home"
         home.mkdir()
 
-        def configuration(harness, override=None):
-            return configuration_path(harness, override or home)
-
-        with (
-            patch.object(Path, "home", return_value=home),
-            patch("adr_desktop.hooks.configuration_path", configuration),
-            patch("adr_desktop.runtime.configuration_path", configuration),
-        ):
+        with isolated_agent_profile(home):
             runtime = Runtime(
                 prepare_state_dir(Path(folder) / "state"), SyntheticNative(), start_collectors=False,
             )
@@ -141,15 +134,14 @@ def main():
                 time.sleep(0.02)
             errors = []
             try:
-                with sync_playwright() as playwright:
+                with sync_playwright() as playwright, ExitStack() as evidence:
                     browser = playwright.chromium.launch()
                     context = browser.new_context(viewport={"width": 1440, "height": 1100})
+                    evidence.enter_context(browser_evidence(context, screenshots))
                     page = context.new_page()
                     page.on("pageerror", lambda error: errors.append(str(error)))
                     page.goto(f"{base}/credentials#ticket={runtime.new_ticket()}")
                     check_navigation(page, base, identifier, screenshots)
-                    context.close()
-                    browser.close()
                 assert not errors, errors
                 print(json.dumps({"credential_activity_ui": "passed", "screenshots": str(screenshots)}))
             finally:

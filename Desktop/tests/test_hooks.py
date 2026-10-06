@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -66,3 +67,25 @@ def test_symlinked_config_is_not_overwritten(runtime, tmp_path):
     with pytest.raises(ValueError):
         hooks.install("claude", runtime.state_dir, home)
     assert outside.read_text() == "{}"
+
+
+@pytest.mark.parametrize("harness,variable", [("codex", "CODEX_HOME"), ("opencode", "XDG_CONFIG_HOME")])
+@pytest.mark.parametrize("explicit_home", [False, True])
+def test_hook_install_and_lookup_agree_with_config_root_overrides(
+    runtime, tmp_path, monkeypatch, harness, variable, explicit_home,
+):
+    ambient = tmp_path / "custom-agent-root"
+    monkeypatch.setenv(variable, str(ambient))
+    home = Path.home() if explicit_home else None
+    target = hooks.configuration_path(harness, home)
+    result = hooks.install(harness, runtime.state_dir, home)
+    assert Path(result["path"]) == target
+    assert target.is_file()
+    assert hooks.installed(harness, home, state_dir=runtime.state_dir)
+    if explicit_home:
+        assert target.is_relative_to(Path.home())
+        assert not ambient.exists(), "An explicit home must not write into an inherited agent root"
+    else:
+        assert target.is_relative_to(ambient)
+    hooks.uninstall(harness, runtime.state_dir, home)
+    assert not hooks.installed(harness, home, state_dir=runtime.state_dir)

@@ -1,22 +1,22 @@
 """Real owner API/UI and CLI-protocol subprocesses; synthetic evidence, no model calls."""
 
+import argparse
 import json
-import os
 import socket
 import sys
 import tempfile
 import threading
 import time
+from contextlib import ExitStack
 from pathlib import Path
-from unittest.mock import patch
 
 import uvicorn
 from playwright.sync_api import expect, sync_playwright
+from qa_support import browser_evidence, isolated_agent_profile
 from ui_qa import SyntheticNative, SyntheticPluginDriver, seed
 
 from adr_desktop.api import create_app
 from adr_desktop.config import prepare_state_dir
-from adr_desktop.hooks import configuration_path
 from adr_desktop.review_process import LocalReviewDriver
 from adr_desktop.runtime import Runtime
 
@@ -24,21 +24,17 @@ FIXTURE = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "review_c
 
 
 def main():
-    shots = Path(tempfile.mkdtemp(prefix="adr-review-ui-shots-"))
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path)
+    args = parser.parse_args()
+    shots = args.output or Path(tempfile.mkdtemp(prefix="adr-review-ui-shots-"))
+    shots.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="adr-review-ui-") as temporary:
         base = Path(temporary)
         home = base / "home"
         home.mkdir()
 
-        def config(harness, override=None):
-            return configuration_path(harness, override or home)
-
-        with (
-            patch.object(Path, "home", return_value=home),
-            patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(home / ".claude")}),
-            patch("adr_desktop.hooks.configuration_path", config),
-            patch("adr_desktop.runtime.configuration_path", config),
-        ):
+        with isolated_agent_profile(home):
             runtime = Runtime(prepare_state_dir(base / "state"), SyntheticNative(), start_collectors=False)
             runtime.integration_driver = SyntheticPluginDriver()
             runtime.reviews.driver = LocalReviewDriver(
@@ -69,9 +65,11 @@ def main():
                     if server.started:
                         break
                     time.sleep(0.02)
-                with sync_playwright() as playwright:
+                with sync_playwright() as playwright, ExitStack() as evidence:
                     browser = playwright.chromium.launch()
-                    page = browser.new_page(viewport={"width": 1440, "height": 1040})
+                    context = browser.new_context(viewport={"width": 1440, "height": 1040})
+                    evidence.enter_context(browser_evidence(context, shots))
+                    page = context.new_page()
                     errors, outside = [], []
                     page.on("pageerror", lambda error: errors.append(str(error)))
                     page.on(
@@ -146,7 +144,6 @@ def main():
                         page.screenshot(path=str(shots / f"reviews-{width}-{scheme}.png"), full_page=True)
                     assert not errors, errors
                     assert not outside, outside
-                    browser.close()
                 print(
                     json.dumps(
                         {

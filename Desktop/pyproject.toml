@@ -22,8 +22,8 @@ dev = ["pytest>=8", "httpx>=0.28", "ruff>=0.11", "pyinstaller>=6.16,<7", "playwr
 adr-desktop = "adr_desktop.cli:main"
 
 [tool.uv.sources]
-adr-sensor = { path = "../Sensor" }
-adr-discovery = { path = "../Discovery" }
+adr-sensor = { path = "../Sensor", editable = true }
+adr-discovery = { path = "../Discovery", editable = true }
 
 [tool.setuptools.packages.find]
 include = ["adr_desktop*"]

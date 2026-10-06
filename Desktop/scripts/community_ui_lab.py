@@ -9,14 +9,13 @@ import json
 import socket
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
 
 import uvicorn
+from qa_support import isolated_agent_profile
 from ui_qa import SyntheticNative, SyntheticPluginDriver, seed
 
 from adr_desktop.api import create_app
 from adr_desktop.config import atomic_json, prepare_state_dir
-from adr_desktop.hooks import configuration_path
 from adr_desktop.runtime import Runtime
 
 
@@ -52,14 +51,7 @@ def main():
         home = directory / "home"
         home.mkdir(mode=0o700)
 
-        def configuration(harness, override=None):
-            return configuration_path(harness, override or home)
-
-        with (
-            patch.object(Path, "home", return_value=home),
-            patch("adr_desktop.hooks.configuration_path", configuration),
-            patch("adr_desktop.runtime.configuration_path", configuration),
-        ):
+        with isolated_agent_profile(home):
             runtime = Runtime(
                 prepare_state_dir(directory / "state"), SyntheticNative(), start_collectors=False,
             )

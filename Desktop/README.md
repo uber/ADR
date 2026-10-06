@@ -18,6 +18,10 @@ Create Desktop feature branches from `desktop-dev` and target it when proposing
 changes, including the Sensor and Discovery updates needed by the app. Do not
 merge the preview into `main` or publish a desktop release before launch review.
 The branch's CI runs development checks; it does not publish an application.
+It tests Linux/macOS, exercises synthetic browser workflows, and builds
+commit-labelled Apple Silicon/Intel preview archives. See
+[development CI and preview builds](docs/CI.md) for checks, diagnostics, and
+the distinction between a development artifact and a public release.
 
 ## Included in this preview
 
@@ -252,7 +256,7 @@ and [uv](https://docs.astral.sh/uv/).
 From `Desktop/`:
 
 ```sh
-uv sync --frozen --extra dev
+uv sync --locked --extra dev
 uv run python scripts/build_macos.py
 open dist/ADR.app
 ```

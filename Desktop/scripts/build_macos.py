@@ -5,14 +5,67 @@ import argparse
 import os
 import platform
 import plistlib
+import re
 import shutil
 import subprocess
 import sys
 import sysconfig
 import tempfile
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def build_identity(build_number, source_revision):
+    """Public, reproducible identity; never copy local paths or account details."""
+    if build_number < 1:
+        raise ValueError("The build number must be a positive integer")
+    if source_revision and not re.fullmatch(r"[0-9a-f]{40}", source_revision):
+        raise ValueError("The source revision must be a full lowercase Git commit SHA")
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
+    metadata = {
+        "CFBundleVersion": str(build_number),
+        "CFBundleShortVersionString": project["version"],
+        "ADRBuildChannel": "development",
+    }
+    if source_revision:
+        metadata["ADRSourceRevision"] = source_revision
+    return metadata
+
+
+def required_python_modules():
+    required = {
+        "adr_desktop.api", "adr_desktop.review_supervisor", "adr_desktop.security_reviews",
+        "adr_discovery.pipeline", "adr_discovery.coverage.report",
+        "adr_sensor.observer", "tabulate", "zstandard",
+    }
+    # Sensor parsers are dynamically selected at runtime. A successful UI
+    # launch alone does not prove that every supported collector was frozen.
+    required.update(
+        f"adr_sensor.parsers.{source.stem}"
+        for source in (ROOT.parent / "Sensor" / "adr_sensor" / "parsers").glob("*_parser.py")
+    )
+    return required
+
+
+def validate_python_modules(listing):
+    modules = {line.strip() for line in listing.splitlines()}
+    missing = required_python_modules() - modules
+    if missing:
+        raise ValueError("The packaged core is missing Python modules: " + ", ".join(sorted(missing)))
+
+
+def verify_python_bundle(core):
+    result = subprocess.run(
+        [
+            sys.executable, "-m", "PyInstaller.utils.cliutils.archive_viewer",
+            "--list", "--recursive", "--brief", str(core),
+        ],
+        capture_output=True, text=True, check=True, timeout=30,
+    )
+    validate_python_modules(result.stdout)
+    print("Verified the bundled Desktop, Discovery, Sensor parsers and runtime dependencies.")
 
 
 def run(*arguments):
@@ -22,11 +75,17 @@ def run(*arguments):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--skip-python-build", action="store_true")
+    parser.add_argument("--build-number", type=int, default=1, help="Positive developer build number")
+    parser.add_argument("--source-revision", help="Full Git SHA for a clean CI checkout")
     parser.add_argument(
         "--output", type=Path,
         help="Build to a staging .app path without replacing the running application",
     )
     arguments = parser.parse_args()
+    try:
+        identity = build_identity(arguments.build_number, arguments.source_revision)
+    except ValueError as exc:
+        parser.error(str(exc))
     if sys.platform != "darwin":
         raise SystemExit("The menu-bar application must be built on macOS")
     build = ROOT / "build"
@@ -66,6 +125,14 @@ def main():
             build / "pyinstaller",
             "--specpath",
             build,
+            # Static analysis cannot always follow setuptools' editable import
+            # finders. Resolve every first-party package from this checkout.
+            "--paths",
+            ROOT,
+            "--paths",
+            ROOT.parent / "Sensor",
+            "--paths",
+            ROOT.parent / "Discovery",
             "--collect-data",
             "adr_desktop",
             "--collect-data",
@@ -79,6 +146,7 @@ def main():
     core = build / "python-dist" / "ADRCore"
     if not (core / "ADRCore").is_file():
         raise SystemExit("Build the Python core before using --skip-python-build")
+    verify_python_bundle(core / "ADRCore")
     with tempfile.TemporaryDirectory(prefix="app-stage-", dir=build) as temporary:
         app = Path(temporary) / "ADR.app"
         contents = app / "Contents"
@@ -128,8 +196,7 @@ def main():
             "CFBundleDisplayName": "ADR",
             "CFBundleExecutable": "ADR",
             "CFBundleIdentifier": "org.adr.Desktop",
-            "CFBundleVersion": "1",
-            "CFBundleShortVersionString": "0.1.0",
+            **identity,
             "CFBundlePackageType": "APPL",
             "LSUIElement": True,
             "LSMinimumSystemVersion": str(

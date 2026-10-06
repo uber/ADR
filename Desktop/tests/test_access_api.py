@@ -1,3 +1,6 @@
+from types import SimpleNamespace
+
+import pytest
 from conftest import grant_token
 
 
@@ -28,7 +31,12 @@ def test_access_view_groups_old_scan_failures_without_rescanning_or_granting_acc
     assert inventory["access"]["coverage"]["access"]["path_count"] == 2
 
 
-def test_opening_settings_is_owner_only_and_never_reports_a_grant(client, owner, runtime):
+@pytest.mark.parametrize("platform_name", ["darwin", "linux", "win32"])
+def test_opening_settings_is_owner_only_and_never_reports_a_grant(
+    client, owner, runtime, monkeypatch, platform_name,
+):
+    # Model the API's platform, not the Python process or the host's permissions.
+    monkeypatch.setattr("adr_desktop.api.sys", SimpleNamespace(platform=platform_name))
     grant = runtime.create_grant("Agent", kind="agent", confirm_agent=True)
     agent = {"Authorization": "Bearer " + grant_token(runtime, grant)}
     body = {"target": "full_disk_access"}
@@ -44,6 +52,10 @@ def test_opening_settings_is_owner_only_and_never_reports_a_grant(client, owner,
     )
     assert not runtime.native.calls
     response = client.post("/api/access/settings", headers=owner, json=body)
+    if platform_name != "darwin":
+        assert response.status_code == 503
+        assert not runtime.native.calls
+        return
     assert response.status_code == 200
     assert response.json()["grants_access"] is False
     assert response.json()["full_disk_access"] == "not_determined"

@@ -6,7 +6,6 @@ from fastapi.testclient import TestClient
 
 from adr_desktop.api import create_app
 from adr_desktop.config import prepare_state_dir
-from adr_desktop.hooks import configuration_path
 from adr_desktop.runtime import Runtime
 
 
@@ -104,12 +103,11 @@ def runtime(tmp_path, monkeypatch):
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
-
-    def fixture_configuration_path(harness, override=None):
-        return configuration_path(harness, override or home)
-
-    monkeypatch.setattr("adr_desktop.hooks.configuration_path", fixture_configuration_path)
-    monkeypatch.setattr("adr_desktop.runtime.configuration_path", fixture_configuration_path)
+    # Exercise the real resolver without inheriting the runner/developer's
+    # configuration roots. Patching only imported function names leaves other
+    # callers pointing at a different (potentially real) agent profile.
+    for name in ("CODEX_HOME", "CLAUDE_CONFIG_DIR", "XDG_CONFIG_HOME", "XDG_DATA_HOME"):
+        monkeypatch.delenv(name, raising=False)
     state = prepare_state_dir(tmp_path / "state")
     result = Runtime(state, FakeNative(), start_collectors=False)
     result.port = 48321
