@@ -71,11 +71,17 @@ real captured conversations or a logged-in browser in a CI fixture.
 
 ## Trying a preview
 
-For a successful `desktop-dev` push run, including a rerun, open the workflow's
-**Artifacts** section and choose:
+[Open successful Desktop dev builds](https://github.com/uber/ADR/actions/workflows/desktop.yml?query=branch%3Adesktop-dev+event%3Apush+is%3Asuccess).
+Choose a recent successful `desktop-dev` push run, including a rerun, then open
+its **Artifacts** section and choose:
 
 - `adr-desktop-dev-macos-arm64-<commit>` for Apple Silicon.
 - `adr-desktop-dev-macos-x86_64-<commit>` for Intel.
+
+The binaries live in **GitHub Actions artifact storage**, not in Git history
+or GitHub Releases. [Downloading requires GitHub sign-in and repository read access](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/download-workflow-artifacts).
+The README download entry is on `desktop-dev` only; artifacts remain accessible
+through the repository's Actions page and are not branch-private.
 
 Use a run whose aggregate **Desktop CI** check is green. Each artifact contains
 an inner application ZIP and `SHA256SUMS`; verify the checksum from that

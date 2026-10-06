@@ -24,6 +24,13 @@ session evidence through that agent's configured model provider.
 Desktop work on this branch; it is not a released application or a replacement
 for `main`.
 
+**[Download Desktop dev builds](https://github.com/uber/ADR/actions/workflows/desktop.yml?query=branch%3Adesktop-dev+event%3Apush+is%3Asuccess)**:
+open a successful run, then choose the Apple Silicon (`arm64`) or Intel
+(`x86_64`) build under **Artifacts**. The binaries are hosted in GitHub Actions,
+not GitHub Releases or Git history. Downloads require GitHub sign-in and are
+retained for 14 days. These are ad-hoc-signed, non-notarized developer builds;
+see the [download and verification instructions](Desktop/docs/CI.md#trying-a-preview).
+
 Desktop does not replace ADR's enterprise components or an operating-system
 sandbox. Read the [preview scope, setup, and verification guide](Desktop/README.md)
 and [security boundaries](Desktop/docs/SECURITY.md) before enabling protection.
