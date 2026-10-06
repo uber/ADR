@@ -82,11 +82,16 @@ class SyntheticNative:
 
 
 class SyntheticPluginDriver:
+    def __init__(self, *, first_install_delay=0):
+        self.first_install_delay = first_install_delay
+
     def executable(self, harness):
         return f"/synthetic/{harness}"
 
     def install(self, *_args, **_kwargs):
-        return None
+        delay, self.first_install_delay = self.first_install_delay, 0
+        if delay:
+            time.sleep(delay)
 
     def remove(self, *_args, **_kwargs):
         return None
@@ -356,7 +361,26 @@ def check_starter_protection(page, runtime, screenshots):
     page.get_by_role("button", name="Connect installed agents", exact=True).click()
     modal = page.locator("dialog[open]")
     expect(modal.locator('input[name="project"], input[name="credentials"]')).to_have_count(0)
-    modal.get_by_role("button", name="Connect installed agents", exact=True).click()
+    # Setup includes local bundle writes and guardian compilation; completing
+    # a click does not mean this asynchronous operation has finished. Keep the
+    # short UI assertion after an explicit, bounded wait for the actual result.
+    with page.expect_response(
+        lambda response: (
+            response.url.endswith("/api/integrations/connect-all")
+            and response.request.method == "POST"
+        ),
+        timeout=60000,
+    ) as connected:
+        modal.get_by_role("button", name="Connect installed agents", exact=True).click()
+        expect(modal.get_by_role("button", name="Working…", exact=True)).to_be_disabled()
+        expect(page.get_by_role("button", name="Add starter protections", exact=True)).to_be_disabled()
+    assert connected.value.status == 200
+    assert {item["harness"]: item["status"] for item in connected.value.json()["items"]} == {
+        "claude": "configured", "codex": "configured",
+        "opencode": "configured", "copilot": "configured",
+    }
+    expect(modal).to_have_count(0)
+    assert runtime.starter_protection()["connected"] is True
     expect(page.get_by_role("button", name="Add starter protections", exact=True)).to_be_enabled()
     page.locator(".starter-preview > summary").click()
     page.get_by_text("Ask first kept", exact=True).wait_for()
@@ -670,7 +694,9 @@ def main():
             runtime = Runtime(
                 prepare_state_dir(Path(folder) / "state"), SyntheticNative(), start_collectors=False
             )
-            runtime.integration_driver = SyntheticPluginDriver()
+            # Exercise setup that outlasts Playwright's default five-second
+            # assertion window, without invoking real agents or providers.
+            runtime.integration_driver = SyntheticPluginDriver(first_install_delay=6)
             seed(runtime)
             listener = socket.socket()
             listener.bind(("127.0.0.1", 0))
