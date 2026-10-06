@@ -89,6 +89,28 @@ def test_process_time_and_output_limits(tmp_path, scenario, code, seconds):
     assert process.process.poll() is not None
 
 
+@pytest.mark.parametrize("outcome", [None, {"result": "synthetic late response"}])
+@pytest.mark.parametrize("reason", ["timeout", "cancelled"])
+def test_waiting_for_an_event_cannot_hide_a_new_deadline_or_cancellation(
+    tmp_path, monkeypatch, outcome, reason,
+):
+    cancel = threading.Event()
+    with JsonProcess([sys.executable, str(FIXTURE), "claude", "hang"], tmp_path, cancel) as process:
+        def late_event(**_kwargs):
+            # Deterministically model the state changing during queue.get().
+            if reason == "timeout":
+                process.deadline = time.monotonic() - 1
+            else:
+                cancel.set()
+            return outcome
+
+        monkeypatch.setattr(process.events, "get", late_event)
+        with pytest.raises(ReviewError) as raised:
+            process.read()
+        assert raised.value.code == reason
+    assert process.process.poll() is not None
+
+
 def test_cancel_interrupts_waiting_process_and_blocked_input(tmp_path):
     cancel = threading.Event()
     with JsonProcess([sys.executable, str(FIXTURE), "claude", "hang"], tmp_path, cancel) as process:

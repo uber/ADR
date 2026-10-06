@@ -286,6 +286,13 @@ class JsonProcess:
                 value = self.events.get(timeout=0.1)
             except queue.Empty:
                 continue
+            # The deadline or cancellation may win while get() is blocked.
+            # In particular, a supervisor timeout can enqueue EOF in that
+            # window; it is not a sign-in failure or a successful late result.
+            if self.cancel.is_set():
+                raise ReviewError("cancelled")
+            if time.monotonic() >= self.deadline:
+                raise ReviewError("timeout")
             if isinstance(value, Exception):
                 raise value
             if value is None:
