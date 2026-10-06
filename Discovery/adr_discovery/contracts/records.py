@@ -133,6 +133,8 @@ class Verdict:
     signals: tuple[str, ...] = ()
     score: float = 0.0
     conflict: str | None = None
+    suspected_catalog_id: str | None = None
+    suspected_name: str | None = None
 
     @property
     def is_concluded(self) -> bool:
@@ -225,3 +227,6 @@ class ReviewItem:
     score: float
     signals: tuple[str, ...]
     evidence: tuple[Evidence, ...] = ()
+    suspected_catalog_id: str | None = None
+    suspected_name: str | None = None
+    candidate_kind: str | None = None

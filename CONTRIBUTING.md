@@ -48,10 +48,12 @@ The project maintainers will then take care of the issue as soon as possible and
 
 ## Component-Specific Guides
 
-This repository has two components, each with its own README and (for Sensor) a component-specific contributing guide:
+Each component has its own README and, for Sensor, a component-specific contributing guide:
 
 - [Sensor/](Sensor/) — telemetry collection. See [Sensor/CONTRIBUTING.md](Sensor/CONTRIBUTING.md) for parser-specific guidance, code style, and testing conventions.
+- [Discovery/](Discovery/) — local AI application, agent, and extension inventory.
 - [Detection/](Detection/) — ADR Detector and ADR-Bench. For adding MCP servers, benchmark tasks, or malicious test servers, see the [Detection README](Detection/README.md#part-3-enriching-the-benchmark); other contributions follow the guidance in this file.
+- [Desktop/](Desktop/) — individual-user app and integrations. Until community launch, create Desktop feature branches from **`desktop-dev`** and target **`desktop-dev`**, not `main`, for Desktop pull requests and their supporting Sensor/Discovery changes. See the [Desktop development checks](Desktop/README.md#development-checks).
 
 ## I Want To Contribute
 

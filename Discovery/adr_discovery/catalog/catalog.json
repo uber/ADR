@@ -1,5 +1,5 @@
 {
-  "version": "2026.08.22",
+  "version": "2026.10.02",
   "entries": [
     {
       "id": "claude-code", "name": "Claude Code", "vendor": "Anthropic", "kind": "cli_agent",
@@ -39,6 +39,12 @@
       "proofs": {"provenance": ["npm:@openai/codex"],
                  "version_probe": ["--version"], "version_shape": "^codex-cli \\d+\\.\\d+\\.\\d+|^\\d+\\.\\d+\\.\\d+"},
       "risk_factors": ["executes_shell"]
+    },
+    {
+      "id": "codex-desktop", "name": "Codex / ChatGPT", "vendor": "OpenAI", "kind": "app",
+      "fingerprints": {"bundle_ids": ["com.openai.codex"]},
+      "proofs": {},
+      "risk_factors": []
     },
     {
       "id": "aider", "name": "Aider", "vendor": "Aider AI", "kind": "cli_agent",
@@ -136,7 +142,7 @@
     },
     {
       "id": "github-copilot-cli", "name": "GitHub Copilot CLI", "vendor": "GitHub", "kind": "cli_agent",
-      "fingerprints": {"binaries": ["github-copilot-cli"], "packages": ["npm:@github/copilot"]}, "proofs": {}
+      "fingerprints": {"binaries": ["copilot", "github-copilot-cli"], "packages": ["npm:@github/copilot"]}, "proofs": {}
     },
     {
       "id": "windsurf", "name": "Windsurf", "vendor": "Codeium", "kind": "app",

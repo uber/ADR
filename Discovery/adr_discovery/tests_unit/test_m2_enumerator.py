@@ -298,7 +298,7 @@ def test_unreadable_root_home_is_reported_as_coverage_gap():
                 )
             return Refused("absent")
 
-        def walk(self, p):
+        def walk(self, p, *, descend=None):
             listing = self.list_dir(p)
             if not listing.ok:
                 return

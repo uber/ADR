@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "adr-desktop"
+version = "0.1.0"
+description = "Local-first agent insights, file protection, and credential brokering"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+dependencies = [
+    "adr-sensor==1.0.0",
+    "adr-discovery==0.2.0",
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.30,<1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "httpx>=0.28", "ruff>=0.11", "pyinstaller>=6.16,<7", "playwright>=1.55,<2"]
+
+[project.scripts]
+adr-desktop = "adr_desktop.cli:main"
+
+[tool.uv.sources]
+adr-sensor = { path = "../Sensor" }
+adr-discovery = { path = "../Discovery" }
+
+[tool.setuptools.packages.find]
+include = ["adr_desktop*"]
+
+[tool.setuptools.package-data]
+adr_desktop = ["web/*", "native/*.c", "bin/*", "adapters/*.js", "plugins/*.json", "data/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]

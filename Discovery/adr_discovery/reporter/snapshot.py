@@ -20,6 +20,7 @@ from ..contracts.snapshot import (
     Denied,
     ProbeRun,
     RootSwept,
+    Skipped,
     Snapshot,
     Truncated,
     Unavailable,
@@ -62,7 +63,10 @@ def from_dict(document: dict) -> Snapshot:
         findings=tuple(_finding(f) for f in document.get("findings", ())),
         review_queue=tuple(
             ReviewItem(path=r.get("path", ""), score=r.get("score", 0.0),
-                       signals=tuple(r.get("signals", ())))
+                       signals=tuple(r.get("signals", ())),
+                       suspected_catalog_id=r.get("suspected_catalog_id"),
+                       suspected_name=r.get("suspected_name"),
+                       candidate_kind=r.get("candidate_kind"))
             for r in document.get("review_queue", ())
         ),
         coverage=_coverage(document.get("coverage") or {}),
@@ -121,11 +125,14 @@ def _coverage(row: dict) -> Coverage:
     return Coverage(
         roots_swept=tuple(RootSwept(**r) for r in row.get("roots_swept", ())),
         boundaries_hit=tuple(BoundaryHit(**b) for b in row.get("boundaries_hit", ())),
-        denied=tuple(Denied(**d) for d in row.get("denied", ())),
+        denied=tuple(Denied(**{**d, "operations": tuple(d.get("operations", ()))})
+                     for d in row.get("denied", ())),
         unavailable=tuple(Unavailable(**u) for u in row.get("unavailable", ())),
         truncated=tuple(Truncated(**t) for t in row.get("truncated", ())),
         probes=tuple(ProbeRun(**p) for p in row.get("probes", ())),
         out_of_scope=tuple(row.get("out_of_scope", ())),
+        skipped=tuple(Skipped(**{**s, "operations": tuple(s.get("operations", ()))})
+                      for s in row.get("skipped", ())),
     )
 
 
@@ -139,5 +146,6 @@ def stats(snapshot: Snapshot) -> dict[str, int]:
             + len(snapshot.coverage.unavailable)
             + len(snapshot.coverage.boundaries_hit)
             + len(snapshot.coverage.truncated)
+            + sum(item.reason != "missing" for item in snapshot.coverage.skipped)
         ),
     }

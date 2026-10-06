@@ -10,15 +10,19 @@ that hit the boundary, not inferred afterwards from a short result.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from ..contracts.snapshot import (
     BoundaryHit,
     Coverage,
     Denied,
     ProbeRun,
     RootSwept,
+    Skipped,
     Truncated,
     Unavailable,
 )
+from .reasons import classify_denial
 
 
 class Ledger:
@@ -30,13 +34,14 @@ class Ledger:
     forget to do.
     """
 
-    __slots__ = ("_roots", "_boundaries", "_denied", "_unavailable", "_truncated",
+    __slots__ = ("_roots", "_boundaries", "_denied", "_skipped", "_unavailable", "_truncated",
                  "_probes", "_seen_unavailable")
 
     def __init__(self) -> None:
         self._roots: list[RootSwept] = []
         self._boundaries: list[BoundaryHit] = []
-        self._denied: list[Denied] = []
+        self._denied: dict[tuple[str, str, int | None], Denied] = {}
+        self._skipped: dict[tuple[str, str, str, int | None], Skipped] = {}
         self._unavailable: list[Unavailable] = []
         self._truncated: list[Truncated] = []
         self._probes: list[ProbeRun] = []
@@ -48,8 +53,42 @@ class Ledger:
     def boundary(self, path: str, boundary: str, detail: str = "") -> None:
         self._boundaries.append(BoundaryHit(path, boundary, detail))
 
-    def deny(self, path: str, reason: str) -> None:
-        self._denied.append(Denied(path, reason))
+    def deny(
+        self, path: str, reason: str, *, errno: int | None = None, operation: str = "",
+    ) -> None:
+        """Record one access failure, retaining repeats without inflating rows.
+
+        Every path/reason remains visible. Repeated stages and overlapping
+        walks increase ``occurrences`` and merge their operation names.
+        Non-permission failures belong in ``skipped``, including known
+        legacy call sites that still call this method for policy exclusions.
+        """
+        section, category = classify_denial(reason, errno)
+        if section == "skipped":
+            self.skip(path, category, reason, errno=errno, operation=operation)
+            return
+        key = (path, reason, errno)
+        old = self._denied.get(key)
+        operations = tuple(dict.fromkeys((*old.operations, operation))) if old else (operation,)
+        self._denied[key] = Denied(
+            path, reason, errno, tuple(item for item in operations if item),
+            old.occurrences + 1 if old else 1,
+        )
+
+    def skip(
+        self, path: str, reason: str, detail: str = "", *,
+        errno: int | None = None, operation: str = "",
+    ) -> None:
+        key = (path, reason, detail, errno)
+        old = self._skipped.get(key)
+        if old is not None:
+            operations = tuple(dict.fromkeys((*old.operations, operation)))
+            self._skipped[key] = replace(
+                old, operations=tuple(item for item in operations if item),
+                occurrences=old.occurrences + 1,
+            )
+        else:
+            self._skipped[key] = Skipped(path, reason, detail, errno, (operation,) if operation else ())
 
     def unavailable(self, provider: str, reason: str) -> None:
         """A registry or service that could not be queried.
@@ -75,8 +114,9 @@ class Ledger:
         return Coverage(
             roots_swept=tuple(self._roots),
             boundaries_hit=tuple(self._boundaries),
-            denied=tuple(self._denied),
+            denied=tuple(self._denied.values()),
             unavailable=tuple(self._unavailable),
             truncated=tuple(self._truncated),
             probes=tuple(self._probes),
+            skipped=tuple(self._skipped.values()),
         )

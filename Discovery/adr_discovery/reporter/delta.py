@@ -13,6 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..contracts.snapshot import Snapshot
+from ..coverage.reasons import classify_denial
 from .identity import by_id, by_identity
 
 
@@ -104,14 +105,22 @@ def _config_of(asset) -> tuple:
 
 
 def _coverage_delta(before: Snapshot, after: Snapshot) -> tuple[str, ...]:
-    """A surface that became unreadable is a change, and a silent one."""
+    """Compare observed access failures, including legacy mixed denial rows.
+
+    A missing denial in the next scan does not prove a permission changed:
+    a budget or a scope boundary may have prevented checking that path.
+    """
     out: list[str] = []
-    old_denied = {d.path for d in before.coverage.denied}
-    new_denied = {d.path for d in after.coverage.denied}
+    old_denied = {
+        d.path for d in before.coverage.denied if classify_denial(d.reason, d.errno)[0] == "access"
+    }
+    new_denied = {
+        d.path for d in after.coverage.denied if classify_denial(d.reason, d.errno)[0] == "access"
+    }
     for path in sorted(new_denied - old_denied):
-        out.append(f"became unreadable: {path}")
+        out.append(f"access denial newly observed: {path}")
     for path in sorted(old_denied - new_denied):
-        out.append(f"became readable: {path}")
+        out.append(f"access denial no longer observed: {path}")
 
     old_gone = {u.provider for u in before.coverage.unavailable}
     new_gone = {u.provider for u in after.coverage.unavailable}

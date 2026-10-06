@@ -9,6 +9,8 @@ is the count that was in the file.
 from __future__ import annotations
 
 import re
+import shlex
+from types import MappingProxyType
 
 from ..contracts.records import Candidate, Declaration, ExtractError, Extraction, Kind
 from ..redact import rules as redact
@@ -160,15 +162,70 @@ def _hook_records(document: dict):
 def _hook(record, path: str, scope: str, index: int) -> Declaration:
     event, body = record
     command = as_text(body.get("command"), "command")
-    scrubbed = redact.scrub_argv((command,))[0]
+    label = {
+        "ADR: check file access": "ADR file protection",
+        "ADR: check tool output": "ADR output protection",
+    }.get(str(body.get("statusMessage", "")), _hook_label(command))
+    # A shell command is not one argv word. Passing the whole string to
+    # scrub_argv would leave "--token value" operands intact.
+    try:
+        scrubbed = shlex.join(redact.scrub_argv(shlex.split(command)))
+    except ValueError:
+        scrubbed = redact.REDACTED
+    event_label = _HOOK_EVENTS.get(event, "Agent hook")
     return Declaration(
         kind=Kind.HOOK,
-        name=f"{event} hook {index + 1}",
+        name=f"{label} · {event_label}",
         path=path,
         scope=scope,
         command=scrubbed,
-        raw={"event": event, "surface": Kind.HOOK.value},
+        raw={"event": event, "surface": Kind.HOOK.value, "hook_id": index, "executable": label},
     )
+
+
+_HOOK_EVENTS = MappingProxyType({
+    "PreToolUse": "Before tool use",
+    "PostToolUse": "After tool use",
+    "PostToolUseFailure": "After a tool error",
+    "UserPromptSubmit": "Before prompt submission",
+    "SessionStart": "Session start",
+    "SessionEnd": "Session end",
+    "Stop": "Agent finished",
+    "SubagentStart": "Sub-agent start",
+    "SubagentStop": "Sub-agent finished",
+    "PreCompact": "Before context compaction",
+    "Notification": "Notification",
+    "PermissionRequest": "Permission requested",
+    "preToolUse": "Before tool use",
+    "postToolUse": "After tool use",
+})
+_HOOK_EXECUTABLE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+_HOOK_SCRIPT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}\.(?:py|sh|js|mjs|cjs|ps1|rb)$")
+_HOOK_INTERPRETERS = frozenset({
+    "python", "python3", "node", "ruby", "bash", "sh", "zsh", "pwsh", "powershell",
+})
+
+
+def _hook_label(command: str) -> str:
+    """Only the executable/script basename, never flags or their operands."""
+    try:
+        words = shlex.split(command)
+    except ValueError:
+        return "Configured command"
+    while words and (re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", words[0]) or words[0] == "env"):
+        words.pop(0)
+    if not words:
+        return "Configured command"
+    executable = words[0].replace("\\", "/").rsplit("/", 1)[-1]
+    if not _HOOK_EXECUTABLE.fullmatch(executable):
+        return "Configured command"
+    if executable in {"adr-desktop", "ADRCore", "adr-hook", "adr-hook-bridge"}:
+        return "ADR protection"
+    if executable in _HOOK_INTERPRETERS and len(words) > 1:
+        script = words[1].replace("\\", "/").rsplit("/", 1)[-1]
+        if _HOOK_SCRIPT.fullmatch(script):
+            return script
+    return executable
 
 
 _EXPORT = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=")

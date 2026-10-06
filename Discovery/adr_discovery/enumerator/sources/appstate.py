@@ -17,6 +17,7 @@ from ..markers import (
     EDITOR_EXTENSION_ROOTS,
     FIREFOX_PROFILE_ROOTS,
     STATE_ROOTS,
+    SURFACE_ROOT_TEMPLATES,
 )
 
 
@@ -35,6 +36,14 @@ def from_app_state(gate, homes: tuple[str, ...]) -> tuple[Candidate, ...]:
                 kind = "shell_profile" if path.endswith(("/.bashrc", "/.zshrc")) else "marker_file"
                 out.append(Candidate(kind=kind, path=path, source="app_state:config",
                                      priority=Priority.HOME, detail={"marker": path.rsplit("/", 1)[-1]}))
+
+    for template in SURFACE_ROOT_TEMPLATES:
+        for path in _expand(gate, template, homes):
+            if gate.stat(path).ok:
+                out.append(Candidate(
+                    kind="marker_dir", path=path, source="app_state:surface",
+                    priority=Priority.HOME, detail={"marker": path.rsplit("/", 1)[-1]},
+                ))
 
     for template in STATE_ROOTS:
         for path in _expand(gate, template, homes):

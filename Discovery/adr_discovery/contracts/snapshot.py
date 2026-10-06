@@ -11,13 +11,11 @@ from dataclasses import dataclass, field
 
 from .records import Asset, Finding, ReviewItem
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"
 
 #: Categories discovery deliberately does not collect. Named rather than
 #: omitted, so a reader can tell a clean machine from an unasked question.
 OUT_OF_SCOPE: tuple[str, ...] = (
-    "instruction_files",
-    "agent_hooks",
     "scheduling_mechanisms",
 )
 
@@ -49,6 +47,26 @@ class BoundaryHit:
 class Denied:
     path: str
     reason: str
+    errno: int | None = None
+    operations: tuple[str, ...] = ()
+    occurrences: int = 1
+
+
+@dataclass(frozen=True, slots=True)
+class Skipped:
+    """A location not read for a reason other than an OS access denial.
+
+    Includes deliberate privacy/safety exclusions, missing optional roots,
+    and other filesystem errors. These are not all permission problems, nor
+    are they all intentional. Keep their reasons and paths in the answer.
+    """
+
+    path: str
+    reason: str
+    detail: str = ""
+    errno: int | None = None
+    operations: tuple[str, ...] = ()
+    occurrences: int = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,12 +102,17 @@ class Coverage:
     truncated: tuple[Truncated, ...] = ()
     probes: tuple[ProbeRun, ...] = ()
     out_of_scope: tuple[str, ...] = OUT_OF_SCOPE
+    # Appended so existing positional construction remains compatible.
+    skipped: tuple[Skipped, ...] = ()
 
     @property
     def is_complete(self) -> bool:
         """No surface went unread. Note this is never a claim that the
         inventory is complete -- only that nothing is known to be missing."""
-        return not (self.boundaries_hit or self.denied or self.unavailable or self.truncated)
+        return not (
+            self.boundaries_hit or self.denied or self.unavailable or self.truncated
+            or any(item.reason != "missing" for item in self.skipped)
+        )
 
 
 @dataclass(frozen=True, slots=True)

@@ -109,6 +109,8 @@ def identify(gate, candidate: Candidate, catalog) -> Verdict:
                      "no conclusive evidence", 0.0, None),
         ),
         signals=fired, score=value,
+        suspected_catalog_id=suspected.id if suspected else None,
+        suspected_name=suspected.name if suspected else None,
     )
 
 

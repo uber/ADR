@@ -78,7 +78,7 @@ def _is_member(entry, suffixes: tuple[str, ...], nested: bool) -> bool:
 #: endpoint reported 191 assets, most of them internal bookkeeping.
 MANIFESTS = MappingProxyType({
     Kind.SKILL: ("/SKILL.md",),
-    Kind.PLUGIN: ("/.claude-plugin/plugin.json", "/plugin.json"),
+    Kind.PLUGIN: ("/.claude-plugin/plugin.json", "/.codex-plugin/plugin.json", "/plugin.json"),
 })
 
 

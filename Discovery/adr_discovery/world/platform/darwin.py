@@ -76,7 +76,9 @@ class DarwinProviders(NullProviders):
         from ..gate import Ok
 
         apps: list[Application] = []
-        for root in ("/Applications", "/System/Applications"):
+        roots = ["/Applications", "/System/Applications"]
+        roots.extend(home + "/Applications" for home in self.homes(gate))
+        for root in dict.fromkeys(roots):
             listing = gate.list_dir(root)
             if not listing.ok:
                 continue

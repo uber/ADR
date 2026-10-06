@@ -27,8 +27,6 @@ ROOT_TEMPLATES: tuple[tuple[str, Priority], ...] = (
     ("/srv", Priority.SYSTEM),
     ("/usr/local", Priority.SYSTEM),
     ("/workspace", Priority.SYSTEM),
-    ("/Users", Priority.BREADTH),
-    ("/home", Priority.BREADTH),
 )
 
 #: Scope is policy, not a constant. Whether a dependency cache is in scope is
@@ -98,7 +96,20 @@ def ordered_roots(gate) -> tuple[tuple[str, Priority], ...]:
             if path not in seen:
                 seen.add(path)
                 out.append((path, priority))
-    for template, priority in ROOT_TEMPLATES:
+    # The provider's home parents also define the breadth sweep. In
+    # particular, /home on macOS is autofs, not a second home directory:
+    # reintroducing it here bypasses DarwinProviders' deliberate exclusion.
+    home_parents = gate.providers.home_roots()
+    breadth = tuple((path, Priority.BREADTH) for path in home_parents)
+    ledger = getattr(gate, "ledger", None)
+    if ledger is not None:
+        for path in ("/Users", "/home"):
+            if path not in home_parents:
+                ledger.skip(
+                    path, "platform_root", "Not a configured home parent on this platform; not traversed",
+                    operation="select_roots",
+                )
+    for template, priority in (*ROOT_TEMPLATES, *breadth):
         if template.startswith("~") or template in seen:
             continue
         seen.add(template)

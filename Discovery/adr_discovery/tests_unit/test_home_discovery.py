@@ -95,10 +95,12 @@ def test_home_fallback_cannot_escape_fixture_root(home_world, tmp_path_factory):
     gate = world.gate(providers=provider, env={"HOME": "/data/alice"})
 
     assert homes(gate) == (root_home,)
+    coverage = gate.ledger.freeze()
     assert any(
-        denied.path == "/data/alice" and denied.reason == "outside_root"
-        for denied in gate.ledger.freeze().denied
+        item.path == "/data/alice" and item.reason == "outside_root"
+        for item in coverage.skipped
     )
+    assert not coverage.denied, "containment exclusions must not suggest an OS permission grant"
 
 
 @pytest.mark.parametrize(

@@ -14,7 +14,7 @@ from __future__ import annotations
 #: Directory names that mark a surface worth reading.
 DIR_MARKERS: frozenset[str] = frozenset(
     {
-        ".git", ".claude", ".cursor", ".windsurf", ".aider", ".continue",
+        ".git", ".claude", ".codex", ".copilot", ".cursor", ".windsurf", ".aider", ".continue",
         ".codeium", ".gemini", ".goose", ".opencode", ".zed",
         "agents", "skills", "commands", "prompts", "output-styles", "plugins",
         ".github", ".devcontainer", ".vscode",
@@ -61,6 +61,9 @@ STATE_ROOTS: tuple[str, ...] = (
 #: independently of the breadth sweep so a dependency cache cannot hide them.
 CONFIG_FILE_TEMPLATES: tuple[str, ...] = (
     "~/.claude.json",
+    "~/.claude/settings.json",
+    "~/.claude/settings.local.json",
+    "~/Library/Application Support/Claude/claude_desktop_config.json",
     "~/.config/claude-desktop/claude_desktop_config.json",
     "~/.cursor/mcp.json",
     "~/.codeium/windsurf/mcp_config.json",
@@ -70,11 +73,21 @@ CONFIG_FILE_TEMPLATES: tuple[str, ...] = (
     "~/.config/JetBrains/options/mcp.json",
     "~/.config/opencode/opencode.json",
     "~/.codex/config.toml",
+    "~/.codex/hooks.json",
+    "~/.copilot/mcp-config.json",
     "~/.config/goose/config.yaml",
     "~/.bashrc",
     "~/.zshrc",
     "/etc/claude-code/managed-settings.json",
     "/etc/adr/managed-mcp.json",
+)
+
+# These small, explicit directories are independent of the broad home walk.
+# Merely seeing a state directory never proves an agent is installed.
+SURFACE_ROOT_TEMPLATES: tuple[str, ...] = tuple(
+    f"{root}/{surface}"
+    for root in ("~/.claude", "~/.codex", "~/.copilot", "~/.config/opencode")
+    for surface in ("skills", "commands", "agents", "plugins")
 )
 
 #: Browser profile parents. Every profile, not just the default -- a large

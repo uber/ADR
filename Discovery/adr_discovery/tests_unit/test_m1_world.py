@@ -21,7 +21,9 @@ def test_u1_01_symlink_escape_is_refused(world):
 
     assert not result.ok
     assert result.reason == "outside_root"
-    assert any(d.reason == "outside_root" for d in gate.ledger.freeze().denied)
+    coverage = gate.ledger.freeze()
+    assert any(item.reason == "outside_root" for item in coverage.skipped)
+    assert not coverage.denied, "containment is a scanner safety policy, not an OS access denial"
 
 
 def test_u1_02_containment_is_decided_on_the_resolved_target(world):

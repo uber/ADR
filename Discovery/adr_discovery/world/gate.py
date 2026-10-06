@@ -23,7 +23,7 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass
-from typing import Generic, Iterator, TypeVar
+from typing import Callable, Generic, Iterator, TypeVar
 
 from ..coverage.ledger import Ledger
 from ..redact import rules as redact
@@ -50,6 +50,7 @@ class Refused:
     detail: str = ""
 
     ok: bool = False
+    errno: int | None = None
 
 
 Result = Ok[T] | Refused
@@ -137,22 +138,47 @@ class Gate:
         candidate = self.host_path(logical)
         try:
             resolved = os.path.realpath(candidate)
-        except (OSError, ValueError) as exc:
+        except OSError as exc:
+            self.ledger.deny(logical, exc.strerror or "Path resolution failed",
+                             errno=exc.errno, operation="resolve")
+            return Refused("unresolvable", exc.strerror or str(exc), errno=exc.errno)
+        except ValueError as exc:
+            self.ledger.skip(logical, "invalid_path", str(exc), operation="resolve")
             return Refused("unresolvable", str(exc))
 
         if self._root != "/" and not (
             resolved == self._root or resolved.startswith(self._root + os.sep)
         ):
-            self.ledger.deny(logical, "outside_root")
+            self.ledger.skip(logical, "outside_root", "Resolved target is outside the scan root",
+                             operation="resolve")
             return Refused("outside_root", self.logical_path(resolved))
 
         if redact.is_personal(self.logical_path(resolved)):
-            self.ledger.deny(logical, "personal_path")
+            self.ledger.skip(logical, "personal_path", "Excluded by the inventory privacy policy",
+                             operation="resolve")
             return Refused("personal_path", "")
 
         return Ok(resolved)
 
     # ---------------------------------------------------------------- reads
+
+    def _record_refusal(
+        self, logical: str, result: Refused, operation: str, *, include_missing: bool = False,
+    ) -> None:
+        if result.reason in ("outside_root", "personal_path", "unresolvable"):
+            return  # _validate recorded the reason at its source.
+        if result.reason == "absent":
+            if include_missing:
+                self.ledger.skip(logical, "missing", "Location was not present when checked",
+                                 errno=result.errno, operation=operation)
+        elif result.reason == "swapped":
+            self.ledger.skip(
+                logical, "symlink_safety" if result.errno == errno.ELOOP else "changed_path",
+                result.detail, errno=result.errno, operation=operation,
+            )
+        else:
+            self.ledger.deny(logical, result.detail or result.reason,
+                             errno=result.errno, operation=operation)
 
     def _open_verified(self, logical: str, resolved: str, flags: int = os.O_RDONLY) -> Result[int]:
         """Open a target, then prove the descriptor still names the validated path.
@@ -166,23 +192,31 @@ class Gate:
 
         try:
             fd = os.open(resolved, flags | getattr(os, "O_NOFOLLOW", 0))
-        except FileNotFoundError:
-            return Refused("absent", resolved)
+        except FileNotFoundError as exc:
+            return Refused("absent", logical, errno=exc.errno)
         except OSError as exc:
             if exc.errno == errno.ELOOP:
-                return Refused("swapped", "target became a symlink after validation")
-            return Refused("open_failed", exc.strerror or str(exc))
+                return Refused("swapped", "Target could not be opened without following a symlink",
+                               errno=exc.errno)
+            return Refused("open_failed", exc.strerror or str(exc), errno=exc.errno)
 
         current = self._validate(logical)
+        if not current.ok:
+            os.close(fd)
+            if current.reason in ("outside_root", "personal_path"):
+                return Refused("swapped", "Target changed to an excluded location during verification")
+            return current
         try:
             descriptor = os.fstat(fd)
             path_stat = os.stat(resolved, follow_symlinks=False)
+        except FileNotFoundError as exc:
+            os.close(fd)
+            return Refused("swapped", "Target disappeared during descriptor verification", errno=exc.errno)
         except OSError as exc:
             os.close(fd)
-            return Refused("swapped", exc.strerror or str(exc))
+            return Refused("verify_failed", exc.strerror or str(exc), errno=exc.errno)
         if (
-            not current.ok
-            or current.value != resolved
+            current.value != resolved
             or (descriptor.st_dev, descriptor.st_ino) != (path_stat.st_dev, path_stat.st_ino)
         ):
             os.close(fd)
@@ -199,15 +233,16 @@ class Gate:
 
         opened = self._open_verified(logical, resolved)
         if not opened.ok:
-            if opened.reason in ("open_failed", "stat_failed"):
-                self.ledger.deny(logical, opened.detail or opened.reason)
-            elif opened.reason == "swapped":
-                self.ledger.deny(logical, "target swapped after validation")
+            self._record_refusal(logical, opened, "read")
             return opened
         fd = opened.value
         try:
             size = os.fstat(fd).st_size
             data = os.read(fd, ceiling)
+        except OSError as exc:
+            refused = Refused("read_failed", exc.strerror or str(exc), errno=exc.errno)
+            self._record_refusal(logical, refused, "read")
+            return refused
         finally:
             os.close(fd)
 
@@ -229,21 +264,30 @@ class Gate:
         resolved = validated.value
         try:
             st = os.stat(resolved)
-        except FileNotFoundError:
-            return Refused("absent", logical)
+        except FileNotFoundError as exc:
+            return Refused("absent", logical, errno=exc.errno)
         except OSError as exc:
-            self.ledger.deny(logical, exc.strerror or str(exc))
-            return Refused("stat_failed", exc.strerror or str(exc))
+            refused = Refused("stat_failed", exc.strerror or str(exc), errno=exc.errno)
+            self._record_refusal(logical, refused, "stat")
+            return refused
         current = self._validate(logical)
+        if not current.ok and current.reason == "unresolvable":
+            return current
         if not current.ok or current.value != resolved:
-            self.ledger.deny(logical, "target swapped after validation")
+            self.ledger.skip(logical, "changed_path", "Path changed during stat", operation="stat")
             return Refused("swapped", "path changed during stat")
         try:
             after = os.stat(resolved)
+        except FileNotFoundError as exc:
+            self.ledger.skip(logical, "changed_path", "Target disappeared during stat",
+                             errno=exc.errno, operation="stat")
+            return Refused("swapped", "Target disappeared during stat", errno=exc.errno)
         except OSError as exc:
-            return Refused("swapped", exc.strerror or str(exc))
+            refused = Refused("stat_failed", exc.strerror or str(exc), errno=exc.errno)
+            self._record_refusal(logical, refused, "stat")
+            return refused
         if (st.st_dev, st.st_ino) != (after.st_dev, after.st_ino):
-            self.ledger.deny(logical, "target swapped after validation")
+            self.ledger.skip(logical, "changed_path", "Path changed during stat", operation="stat")
             return Refused("swapped", "path changed during stat")
         return Ok(
             Stat(
@@ -257,7 +301,7 @@ class Gate:
             )
         )
 
-    def list_dir(self, logical: str) -> Result[tuple[Entry, ...]]:
+    def list_dir(self, logical: str, *, reserved_entries: int = 0) -> Result[tuple[Entry, ...]]:
         validated = self._validate(logical)
         if not validated.ok:
             return validated
@@ -265,8 +309,7 @@ class Gate:
         directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
         opened = self._open_verified(logical, resolved, directory_flags)
         if not opened.ok:
-            if opened.reason not in ("absent",):
-                self.ledger.deny(logical, opened.detail or opened.reason)
+            self._record_refusal(logical, opened, "list_directory", include_missing=True)
             return opened
 
         fd = opened.value
@@ -275,37 +318,51 @@ class Gate:
         try:
             with os.scandir(fd) as listing:
                 for e in listing:
-                    if not self.budget.take_entries():
+                    if self.budget.entries_remaining <= reserved_entries or not self.budget.take_entries():
                         exhausted = True
                         break
+                    path = os.path.join(logical, e.name) if logical != "/" else "/" + e.name
                     try:
                         info = e.stat(follow_symlinks=False)
                         is_dir = e.is_dir(follow_symlinks=False)
                         entries.append(
                             Entry(
-                                path=os.path.join(logical, e.name) if logical != "/" else "/" + e.name,
+                                path=path,
                                 is_dir=is_dir,
                                 is_symlink=e.is_symlink(),
                                 size=info.st_size,
                                 is_exec=bool(info.st_mode & 0o111) and not is_dir,
                             )
                         )
-                    except OSError:
+                    except OSError as exc:
+                        refused = Refused("stat_failed", exc.strerror or str(exc), errno=exc.errno)
+                        self._record_refusal(path, refused, "stat_entry", include_missing=True)
                         continue
-        except (OSError, TypeError) as exc:
-            self.ledger.deny(logical, getattr(exc, "strerror", None) or str(exc))
+        except OSError as exc:
+            refused = Refused("listdir_failed", exc.strerror or str(exc), errno=exc.errno)
+            self._record_refusal(logical, refused, "list_directory", include_missing=True)
+            return refused
+        except TypeError as exc:
+            self.ledger.skip(logical, "unsupported_operation", str(exc), operation="list_directory")
             return Refused("listdir_failed", str(exc))
         finally:
             os.close(fd)
 
         if exhausted:
             self.ledger.boundary(
-                logical, "budget_exhausted", f"cap {self.budget.max_entries}; directory truncated"
+                logical, "budget_exhausted",
+                f"cap {self.budget.max_entries}; {reserved_entries} entries reserved; directory truncated",
             )
         entries.sort(key=lambda entry: entry.path)
         return Ok(tuple(entries))
 
-    def walk(self, logical_root: str, max_depth: int | None = None) -> Iterator[Entry]:
+    def walk(
+        self,
+        logical_root: str,
+        max_depth: int | None = None,
+        *,
+        descend: Callable[[str], bool] | None = None,
+    ) -> Iterator[Entry]:
         """Breadth-first under the shared entry ceiling.
 
         Breadth-first on purpose: a budget exhausted late still covered the
@@ -317,28 +374,51 @@ class Gate:
         seen: set[str] = set()
         deepest = 0
         count = 0
+        root_listed = False
 
         while frontier:
+            if self.budget.entries_remaining <= self.budget.reserved_walk_entries:
+                self.ledger.boundary(
+                    logical_root, "budget_exhausted",
+                    f"walk stopped; {len(frontier)} queued locations not checked; "
+                    f"{self.budget.reserved_walk_entries} entries reserved for manifest extraction",
+                )
+                if root_listed:
+                    self.ledger.swept(logical_root, deepest, count)
+                return
             path, depth = frontier.popleft()
             if depth > depth_cap:
                 self.ledger.boundary(path, "depth", f"cap {depth_cap}")
                 continue
             if self.budget.time_exhausted:
                 self.ledger.boundary(path, "time_exhausted", f"cap {self.budget.max_seconds}s")
-                self.ledger.swept(logical_root, deepest, count)
+                if root_listed:
+                    self.ledger.swept(logical_root, deepest, count)
                 return
-            listing = self.list_dir(path)
+            listing = self.list_dir(path, reserved_entries=self.budget.reserved_walk_entries)
             if not listing.ok:
                 continue
+            if path == logical_root:
+                root_listed = True
             deepest = max(deepest, depth)
             for entry in listing.value:
                 count += 1
                 yield entry
+                if entry.is_symlink:
+                    self.ledger.skip(
+                        entry.path, "symlink_not_followed",
+                        "Broad walk does not follow symlinks; targeted checks may still inspect an allowed target",
+                        operation="walk",
+                    )
                 if entry.is_dir and not entry.is_symlink and entry.path not in seen:
+                    if descend is not None and not descend(entry.path):
+                        self.ledger.boundary(entry.path, "scope_excluded", "dependency or cache directory")
+                        continue
                     seen.add(entry.path)
                     frontier.append((entry.path, depth + 1))
 
-        self.ledger.swept(logical_root, deepest, count)
+        if root_listed:
+            self.ledger.swept(logical_root, deepest, count)
 
     # ------------------------------------------------------------ processes
 

@@ -6,6 +6,28 @@ ADR (Agentic AI Detection and Response) is an enterprise security system for AI 
 
 ADR is **deployed in production at Uber**, and the accompanying paper was accepted to **MLSys 2026**: [Paper PDF](docs/adr-paper.pdf) · [Slides PDF](docs/adr-mlsys-2026-slides.pdf)
 
+## ADR Desktop: a local workspace for individuals
+
+[ADR Desktop](Desktop/) is a developer preview for people using AI coding agents
+on their own device. Its macOS menu-bar app combines local **ADR Insights**,
+opt-in **file-protection hooks** for Claude Code, Codex, opencode, and Copilot CLI,
+and an **encrypted local credential vault** for agent commands and scoped API
+requests. The ADR agent integration bundles protection hooks
+with **ADR Context**, a read-only MCP service for agents to search captured
+conversations across agents and projects on the device.
+It reuses the existing collectors and keeps their captures on device without
+ADR product telemetry. Optional **Security reviews** run the user's local
+Claude Code or Codex CLI; only after explicit consent do they send selected
+session evidence through that agent's configured model provider.
+
+**Desktop development stays on `desktop-dev` until community launch.** Base
+Desktop work on this branch; it is not a released application or a replacement
+for `main`.
+
+Desktop does not replace ADR's enterprise components or an operating-system
+sandbox. Read the [preview scope, setup, and verification guide](Desktop/README.md)
+and [security boundaries](Desktop/docs/SECURITY.md) before enabling protection.
+
 ## How ADR secures enterprise AI agents
 
 ADR secures enterprise AI agents through five complementary capabilities: discovering unsanctioned AI tools, observing agent activity, evaluating defenses, detecting threats, and preventing unsafe actions.
@@ -14,7 +36,7 @@ ADR secures enterprise AI agents through five complementary capabilities: discov
 2. **ADR Observability: Understand what AI agents are doing and why.** In production, ADR captures agent intent, tool use, and execution traces across 7+ AI coding tools on macOS, Linux, and Windows, as well as internal automation and customer-facing support agents.
 3. **ADR Benchmark: Test agent security under realistic enterprise conditions.** ADR-Bench includes 300+ tasks, 134 MCP servers, and coverage of all 17 agent attack techniques.
 4. **ADR Detection: Detect risky agent behavior efficiently.** Its two-tier architecture combines high-recall triage with deeper agentic reasoning for suspicious sessions.
-5. **ADR Prevention: Stop unsafe actions before they cause harm.** This component is not included in the current open-source release. **Stay tuned.**
+5. **ADR Prevention: Stop unsafe actions before they cause harm.** The enterprise prevention component is not included in the current open-source release. The [Desktop preview](Desktop/) separately offers cooperative pre-tool file controls for individual users; it is not a full enterprise prevention engine.
 
 ## Repository layout
 
@@ -22,6 +44,7 @@ This repository contains the open-source **ADR Discovery**, **ADR Sensor**, **AD
 
 | Path                                               | ADR component              | Description                                                                          |
 | -------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------ |
+| [Desktop/](Desktop/)                               | ADR Desktop preview        | Local menu-bar app, session Insights, file hooks, and credential brokering for individual users |
 | [Discovery/](Discovery/)                           | ADR Discovery              | Inventory the AI apps, CLI agents, IDE extensions, model runtimes, and MCP servers on an endpoint, and flag unknown surfaces for review |
 | [Sensor/](Sensor/)                                 | ADR Observability          | Collect and normalize agent telemetry from Claude Code, Cursor, Codex, GitHub Copilot CLI, DeepSeek Harness, opencode, Claude Desktop, and others |
 | [Detection/](Detection/)                           | ADR Benchmark + Detection  | Dual-agent detector, 134 MCP servers, 304 benchmark tasks, baselines, figure scripts |

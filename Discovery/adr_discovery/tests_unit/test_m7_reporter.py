@@ -83,7 +83,7 @@ def test_u7_06_a_surface_that_went_dark_is_a_change():
 
     delta = diff(before, after)
 
-    assert any("became unreadable" in c for c in delta.coverage_delta)
+    assert any("access denial newly observed" in c for c in delta.coverage_delta)
     assert any("provider became unavailable" in c for c in delta.coverage_delta)
 
 

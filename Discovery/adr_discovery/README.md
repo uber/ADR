@@ -27,7 +27,39 @@ The rewrite exists because the old layout had no boundary a linter could check. 
 - WSL, containers, remote/cloud agents, scheduled agents, account identity and code-signature collection are not implemented.
 - Fleet aggregation, fan-out and trend tracking belong to the central plane and are not part of this endpoint package.
 - The black-box harness is operational for a subset of the manifest. Vendor applications, authenticated sessions, services and model-weight scenarios still need additional install recipes and golden guests.
-- `coverage.out_of_scope` still names instruction files and hooks even though the collector now inventories them. The snapshot vocabulary must be corrected before treating that field as authoritative.
+- Standalone executables without recognized package ownership or content hashes
+  can appear as **unverified candidates**, not installed assets. A filename is
+  a useful lead, not proof of a publisher. Code-signature verification is not
+  implemented.
+
+### Local inventory behavior
+
+- macOS application checks include `/Applications`, `/System/Applications`,
+  and each discovered user's `Applications` directory. The catalog recognizes
+  `com.openai.codex`, used by Codex and current ChatGPT desktop builds.
+  Codex CLI remains a separate `cli_agent` kind; a `.codex` directory alone
+  never proves either application is installed.
+- Known host configuration files and direct skills/plugin directories are
+  checked independently of the broad folder walk. Codex plugin manifests
+  (`.codex-plugin/plugin.json`) are recognized alongside Claude manifests.
+- The broad walk prunes dependency/cache trees before descending, not after
+  spending the budget inside them. Reaching the entry cap stops the walk and
+  reports how many queued locations remain, rather than reopening every
+  queued directory after the cap.
+- Embedders may reserve entries from the same shared budget for the later
+  manifest-extraction phase with `Budget.reserved_walk_entries`. This is
+  not an additional or unbounded budget. ADR Desktop reserves 3,000 of its
+  15,000-entry limit for this purpose.
+- Hook titles name the executable or script and the event, such as
+  `audit.py · After tool use`. Command arguments are not used in titles.
+  Separate callbacks remain separate even when their readable titles match.
+
+The application identifier is documented by the public
+[Codex cask](https://github.com/Homebrew/homebrew-cask/blob/master/Casks/c/codex-app.rb)
+and [ChatGPT cask](https://github.com/Homebrew/homebrew-cask/blob/master/Casks/c/chatgpt.rb).
+macOS application detection has local validation and synthetic regression
+tests. Cross-platform package identity has fixture tests; this does not claim
+that native Windows or Linux GUI installations were tested.
 
 ### Run it
 

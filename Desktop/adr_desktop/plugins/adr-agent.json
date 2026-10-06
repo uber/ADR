@@ -1,0 +1,17 @@
+{
+  "name": "adr-agent",
+  "version": "0.1.0",
+  "description": "Local agent protection, conversation search, and credentials without raw values in model requests.",
+  "author": {"name": "ADR Project Contributors"},
+  "license": "Apache-2.0",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "ADR",
+    "shortDescription": "One plugin for agent security and observability.",
+    "longDescription": "Search local conversations, use saved credentials in local commands, and apply your file-protection rules. Credentials reach local programs; filtered output reaches the model. No per-key or per-project setup.",
+    "developerName": "ADR Project Contributors",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write"],
+    "defaultPrompt": ["Find the earlier conversation about this task."]
+  }
+}

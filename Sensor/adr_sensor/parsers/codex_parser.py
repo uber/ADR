@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..schemas.agent_event_schema import AgentEvent, ChatMessage, ToolUsage
+from ..utils.codex_context import codex_session_context
 from ..utils.string_utils import truncate_middle
 from ..utils.timestamp_utils import normalize_timestamp
 from .base_parser import BaseParser
@@ -67,6 +68,7 @@ class CodexParser(BaseParser):
         self.codex_home = Path(codex_home_env).expanduser() if codex_home_env else Path.home() / ".codex"
         self.base_path = self.codex_home / "sessions"
         self.max_age_days = max_age_days
+        self._catalog_metadata: Dict[str, dict] = {}
 
     def parse_all(self) -> List[AgentEvent]:
         """Parse all available Codex logs."""
@@ -112,6 +114,7 @@ class CodexParser(BaseParser):
     def _discover_rollout_files(self) -> Dict[Path, datetime]:
         """Return valid rollout paths and their latest known activity times."""
         candidates: Dict[Path, datetime] = {}
+        self._catalog_metadata = {}
 
         try:
             for rollout_path in self.base_path.glob("**/*.jsonl"):
@@ -174,7 +177,13 @@ class CodexParser(BaseParser):
                 return
 
             timestamp_columns = [name for name in ("updated_at", "updated_at_ms") if name in columns]
-            selected_columns = ['"id"', '"rollout_path"', *(f'"{name}"' for name in timestamp_columns)]
+            metadata_columns = [
+                name for name in ("name", "title", "source", "agent_path", "agent_nickname", "agent_role")
+                if name in columns
+            ]
+            selected_columns = [
+                '"id"', '"rollout_path"', *(f'"{name}"' for name in timestamp_columns + metadata_columns)
+            ]
             query = f'SELECT {", ".join(selected_columns)} FROM "threads"'
 
             for row in connection.execute(query):
@@ -196,6 +205,10 @@ class CodexParser(BaseParser):
                         catalog_timestamp = timestamp
 
                 self._add_rollout_candidate(candidates, rollout_path, catalog_timestamp)
+                if isinstance(row[0], str):
+                    self._catalog_metadata[row[0]] = dict(
+                        zip(metadata_columns, row[2 + len(timestamp_columns):])
+                    )
         except (OSError, sqlite3.Error, ValueError) as e:
             self.record_diagnostic("database_error")
             logger.warning("[CODEX] Error reading state catalog %s: %s", catalog_path, e)
@@ -259,6 +272,7 @@ class CodexParser(BaseParser):
                 "token_usage": None,
                 "messages": [],
                 "pending_tool_calls": {},
+                "session_context": {},
             }
 
             with open(file_path, encoding="utf-8") as file:
@@ -332,14 +346,15 @@ class CodexParser(BaseParser):
                 token_usage=session_data["token_usage"],
                 chat_history=chat_history,
                 raw_log_path=str(file_path),
-                session_context=(
-                    {
+                session_context={
+                    **session_data["session_context"],
+                    **({
                         "last_event_at": session_data["last_event_timestamp"].isoformat(),
                         "event_count": session_data["event_count"],
                     }
                     if session_data["last_event_timestamp"]
-                    else {"event_count": session_data["event_count"]}
-                ),
+                    else {"event_count": session_data["event_count"]}),
+                },
             )
 
         except Exception as e:
@@ -648,6 +663,9 @@ class CodexParser(BaseParser):
             session_data["id"] = session_id
             session_data["timestamp"] = normalized_timestamp
             session_data["cwd"] = payload.get("cwd")
+            session_data["session_context"] = codex_session_context(
+                {**getattr(self, "_catalog_metadata", {}).get(session_id, {}), **payload}
+            )
 
         elif evt_type == "turn_context":
             if payload.get("model"):

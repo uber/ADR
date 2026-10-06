@@ -24,6 +24,10 @@ class Budget:
     #: The whole scan, wall clock. Plane A promises seconds, and a promise
     #: with no ceiling behind it is a hope.
     max_seconds: float = 120.0
+    #: Leave part of the same total ceiling for reading skills/plugin
+    #: manifests after the broad walk. Appended to preserve positional callers.
+    #: Does not give extraction a new budget.
+    reserved_walk_entries: int = 0
 
     entries_used: int = field(default=0, init=False)
     started: float = field(default_factory=time.monotonic, init=False)

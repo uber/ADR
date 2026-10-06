@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "feed_id": "adr-public-artifacts",
+  "revision": 1,
+  "published_at": "2026-10-05T00:00:00Z",
+  "indicators": [
+    {
+      "id": "postmark-mcp-1.0.16",
+      "status": "active",
+      "kind": "package",
+      "summary": "Postmark identified an email-exfiltration backdoor in the impersonating public npm package postmark-mcp version 1.0.16. This does not identify the official Postmark MCP repository as malicious.",
+      "references": [
+        "https://postmarkapp.com/blog/information-regarding-malicious-postmark-mcp-package"
+      ],
+      "target": {
+        "ecosystem": "npm",
+        "registry": "https://registry.npmjs.org",
+        "name": "postmark-mcp",
+        "versions": ["1.0.16"]
+      }
+    },
+    {
+      "id": "ua-parser-js-2021-compromise",
+      "status": "active",
+      "kind": "package",
+      "summary": "GitHub-reviewed advisory GHSA-pjwm-rvh2-c87w identifies malicious code in these three public npm releases of ua-parser-js.",
+      "references": [
+        "https://github.com/advisories/GHSA-pjwm-rvh2-c87w"
+      ],
+      "target": {
+        "ecosystem": "npm",
+        "registry": "https://registry.npmjs.org",
+        "name": "ua-parser-js",
+        "versions": ["0.7.29", "0.8.0", "1.0.0"]
+      }
+    },
+    {
+      "id": "ultralytics-2024-compromise",
+      "status": "active",
+      "kind": "package",
+      "summary": "PyPI's December 11, 2024 incident analysis identifies these four compromised ultralytics releases. Other versions and source checkouts are not covered by this indicator.",
+      "references": [
+        "https://blog.pypi.org/posts/2024-12-11-ultralytics-attack-analysis/"
+      ],
+      "target": {
+        "ecosystem": "pypi",
+        "registry": "https://pypi.org",
+        "name": "ultralytics",
+        "versions": ["8.3.41", "8.3.42", "8.3.45", "8.3.46"]
+      }
+    },
+    {
+      "id": "torchtriton-2022-malicious-binary",
+      "status": "active",
+      "kind": "file_sha256",
+      "summary": "PyTorch published this SHA-256 for the malicious triton/runtime/triton binary from the December 2022 torchtriton dependency compromise. It is not a skill or package archive hash.",
+      "references": [
+        "https://pytorch.org/blog/compromised-nightly-dependency/"
+      ],
+      "target": {
+        "sha256": "2385b29489cd9e35f92c072780f903ae2e517ed422eae67246ae50a5cc738a0e"
+      }
+    }
+  ]
+}

@@ -82,6 +82,7 @@ def discover(
     # -- M4 ------------------------------------------------------------
     observations: list[Observation] = []
     review: list[ReviewItem] = []
+    review_seen: set[tuple[str, str | None]] = set()
 
     for candidate in candidates:
         if candidate.kind in CONFIG_KINDS | LOCATOR_KINDS:
@@ -93,10 +94,22 @@ def discover(
         value, fired = score(candidate, signals_for(candidate))
         # Network intent is uniquely strong operational evidence even though
         # its generic open-world score remains below the multi-signal cutoff.
-        if is_reviewable(value) or "network_intent" in fired:
-            review.append(
-                ReviewItem(path=candidate.path, score=value, signals=fired, evidence=verdict.evidence)
-            )
+        named_executable = (
+            verdict.suspected_catalog_id is not None
+            and candidate.kind in ("binary", "process", "exec_event")
+        )
+        if is_reviewable(value) or "network_intent" in fired or named_executable:
+            observed = gate.stat(candidate.path) if named_executable else None
+            path = observed.value.real_path if observed is not None and observed.ok else candidate.path
+            review_key = (path, verdict.suspected_catalog_id)
+            if review_key not in review_seen:
+                review_seen.add(review_key)
+                review.append(ReviewItem(
+                    path=path, score=value, signals=fired, evidence=verdict.evidence,
+                    suspected_catalog_id=verdict.suspected_catalog_id,
+                    suspected_name=verdict.suspected_name,
+                    candidate_kind=candidate.kind,
+                ))
 
     for candidate, declaration in declarations:
         observations.append(_observation_from_declaration(candidate, declaration))
@@ -174,9 +187,14 @@ def _observation_from_declaration(candidate: Candidate, declaration: Declaration
     detail.update(declaration.raw)
     if declaration.kind is not Kind.MCP_SERVER:
         detail["install_method"] = "agent_artifact"
+    identity = f"{declaration.kind.value}:{declaration.name}"
+    if declaration.kind is Kind.HOOK:
+        # A readable title is not a merge key: two callbacks running the
+        # same executable still represent separate hook declarations.
+        identity = f"hook:{declaration.path}:{declaration.raw.get('hook_id', declaration.name)}"
     return Observation(
         kind=declaration.kind,
-        identity=f"{declaration.kind.value}:{declaration.name}",
+        identity=identity,
         path=declaration.path,
         install_root=_root_of(declaration.path),
         liveness=Liveness.DECLARED_ONLY,
@@ -214,7 +232,15 @@ def _mark_undeclared(assets: tuple[Asset, ...], declarations) -> tuple[Asset, ..
 
 def _declarations_by_asset(assets: tuple[Asset, ...], declarations) -> dict[str, Declaration]:
     by_name = {d.name: d for _, d in declarations}
-    return {a.asset_id: by_name[a.name] for a in assets if a.name in by_name}
+    hooks = {
+        f"hook:{d.path}:{d.raw.get('hook_id', d.name)}": d
+        for _, d in declarations if d.kind is Kind.HOOK
+    }
+    return {
+        a.asset_id: hooks[a.identity] if a.kind is Kind.HOOK else by_name[a.name]
+        for a in assets
+        if (a.identity in hooks if a.kind is Kind.HOOK else a.name in by_name)
+    }
 
 
 def _is_file(stat) -> bool:

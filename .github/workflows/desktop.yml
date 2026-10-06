@@ -1,0 +1,48 @@
+name: Desktop preview
+
+on:
+  pull_request:
+    paths:
+      - "Desktop/**"
+      - "Sensor/**"
+      - "Discovery/**"
+      - ".github/workflows/desktop.yml"
+  push:
+    branches: [desktop-dev]
+    paths:
+      - "Desktop/**"
+      - "Sensor/**"
+      - "Discovery/**"
+      - ".github/workflows/desktop.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: Desktop
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --frozen --extra dev --python 3.11
+      - run: uv run ruff check adr_desktop tests scripts
+      - run: uv run pytest -q
+      - if: runner.os == 'Linux'
+        run: uv run python -m playwright install --with-deps chromium
+      - if: runner.os == 'Linux'
+        run: uv run python scripts/ui_qa.py
+      - if: runner.os == 'macOS'
+        run: uv run python scripts/build_macos.py
+      - if: runner.os == 'macOS'
+        run: dist/ADR.app/Contents/MacOS/ADR --self-test
+      - if: runner.os == 'macOS'
+        run: dist/ADR.app/Contents/MacOS/ADR --vault-self-test
+      - if: runner.os == 'macOS'
+        run: uv run python scripts/package_smoke.py

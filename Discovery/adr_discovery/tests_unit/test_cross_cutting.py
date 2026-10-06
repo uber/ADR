@@ -141,7 +141,9 @@ def test_uc3_02_out_of_scope_is_named_on_a_machine_that_has_none(world, catalog)
     snapshot = discover(world.gate(), catalog)
 
     assert snapshot.coverage.out_of_scope == OUT_OF_SCOPE
-    assert "instruction_files" in snapshot.coverage.out_of_scope
+    assert "scheduling_mechanisms" in snapshot.coverage.out_of_scope
+    assert "instruction_files" not in snapshot.coverage.out_of_scope
+    assert "agent_hooks" not in snapshot.coverage.out_of_scope
 
 
 def test_uc3_03_every_boundary_kind_is_reachable(world):
