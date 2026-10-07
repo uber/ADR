@@ -256,6 +256,7 @@ def check_csrf_retry_boundaries(page):
     """Only an explicit, pre-execution CSRF rejection permits one retry."""
     page.locator('a[data-route="/settings"]').click()
     page.get_by_role("heading", name="Setup & settings", exact=True).wait_for()
+    expect(page.locator("#page")).to_have_attribute("aria-busy", "false")
     page.locator('details[data-view-key="capture-preferences"] > summary').click()
     interval = page.get_by_label("Capture interval", exact=True)
     stale = {"code": "csrf_mismatch", "message": "Synthetic stale token"}
@@ -321,6 +322,9 @@ def check_csrf_retry_boundaries(page):
 def check_capture_intervals(page, runtime):
     page.locator('a[data-route="/settings"]').click()
     page.get_by_role("heading", name="Setup & settings", exact=True).wait_for()
+    # This can be a same-route navigation: the previous heading remains
+    # visible while the replacement is loading. Do not open the old panel.
+    expect(page.locator("#page")).to_have_attribute("aria-busy", "false")
     page.locator('details[data-view-key="capture-preferences"] > summary').click()
     interval = page.get_by_label("Capture interval", exact=True)
     assert interval.locator("option").all_text_contents() == [
@@ -340,6 +344,7 @@ def check_capture_intervals(page, runtime):
         assert runtime.store.settings()["recording"] is False
         page.reload()
         page.get_by_role("heading", name="Setup & settings", exact=True).wait_for()
+        expect(page.locator("#page")).to_have_attribute("aria-busy", "false")
         page.locator('details[data-view-key="capture-preferences"] > summary').click()
         assert interval.input_value() == str(seconds)
     assert page.get_by_role("alert").count() == 0
