@@ -9,6 +9,7 @@ description = "Local-first agent insights, file protection, and credential broke
 requires-python = ">=3.11"
 license = "Apache-2.0"
 dependencies = [
+    "adr-protection==0.1.0",
     "adr-sensor==1.0.0",
     "adr-discovery==0.2.0",
     "fastapi>=0.115,<1",
@@ -22,6 +23,7 @@ dev = ["pytest>=8", "httpx>=0.28", "ruff>=0.11", "pyinstaller>=6.16,<7", "playwr
 adr-desktop = "adr_desktop.cli:main"
 
 [tool.uv.sources]
+adr-protection = { path = "../Protection", editable = true }
 adr-sensor = { path = "../Sensor", editable = true }
 adr-discovery = { path = "../Discovery", editable = true }
 

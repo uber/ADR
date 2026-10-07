@@ -23,6 +23,23 @@ commit-labelled Apple Silicon/Intel preview archives. See
 [development CI and preview builds](docs/CI.md) for checks, diagnostics, and
 the distinction between a development artifact and a public release.
 
+## Start with what you need
+
+**Setup & settings** is the home for capture and agent connections:
+
+- **Local capture** builds searchable history without installing an agent plugin.
+- **Agent connections** installs the combined history, credential, and protection
+  integration after you approve its access. Feature pages link back here to manage it.
+- **AI inventory** runs only when you request a scan. **Security reviews** has
+  separate data-sharing consent and usage limits.
+
+Device-access guidance and advanced preferences are expandable, not mandatory
+setup steps. Browsing features or hiding the introduction does not enable them.
+
+Contributing to the code? Start with [component ownership and contracts](docs/COMPONENTS.md)
+and the [tracked refinement tasks](docs/DEVELOPMENT_TASKS.md). Libraries run within
+the existing core; separating code does not add a daemon for each feature.
+
 ## Included in this preview
 
 ### ADR Insights
@@ -265,8 +282,9 @@ The app appears as a shield and **ADR** in the menu bar. Choose **Open ADR
 Insights**. Its private, one-time link authenticates the local browser; there is
 no operator-token copy/paste step.
 
-1. **Start local capture** to opt into reading supported agents' existing logs.
-2. Choose **Connect installed agents** in the app, or run
+1. Open **Setup & settings → Start local capture** to opt into reading supported
+   agents' existing logs. You can also start/pause capture from the menu bar or top bar.
+2. Choose **Setup & settings → Connect installed agents**, or run
    `adr-desktop connect all --allow-agent-access`. This installs protection,
    Context, and vault command tools together. Restart/trust the integration, then add starter
    protections or custom rules in **File protection**. A saved hook
@@ -353,15 +371,23 @@ uv run pytest -q
 uv run ruff check adr_desktop tests scripts
 uv run python -m playwright install chromium
 uv run python scripts/ui_qa.py
-uv run python scripts/build_macos.py
-dist/ADR.app/Contents/MacOS/ADR --self-test
-dist/ADR.app/Contents/MacOS/ADR --vault-self-test
-uv run python scripts/package_smoke.py
+uv run python scripts/setup_ui_qa.py --output test-results/setup
+uv run python scripts/build_macos.py --output dist/ADR-check.app
+dist/ADR-check.app/Contents/MacOS/ADR --self-test
+dist/ADR-check.app/Contents/MacOS/ADR --vault-self-test
+uv run python scripts/package_smoke.py --app dist/ADR-check.app
 ```
 
 UI QA uses a disposable synthetic profile and a fresh browser, never the
 developer's logged-in browser. Native vault checks use disposable encrypted
 files and a synthetic legacy source, never real Keychain items.
+The fresh-profile setup suite checks passive navigation, explicit capture,
+connection consent/cancellation, partial installation and retry, and narrow/dark
+layouts. Use a separate build output to keep a running app unchanged.
+
+The extracted [Protection library](../Protection/) has its own tests and wheel
+check. Desktop imports it in-process and retains its existing enforcement,
+native vault, storage, and authorization boundaries.
 For interactive MCP/browser testing and repeatable improvement passes, see
 [the community UI lab](docs/COMMUNITY_QA.md).
 

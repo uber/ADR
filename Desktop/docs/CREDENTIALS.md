@@ -56,7 +56,8 @@ retained Keychain originals and historical filesystem backups.
 
 ## One plugin for your installed agents
 
-Choose **Connect installed agents** in Credential vault or File protection.
+Choose **Setup & settings → Connect installed agents**. The vault's
+**Manage agent connections** link opens this shared setup page.
 ADR detects the supported local CLIs and installs the same ADR integration for
 Claude Code, Codex, opencode, and GitHub Copilot CLI in one action. Missing or
 failed installations are reported separately; they are not shown as protected.

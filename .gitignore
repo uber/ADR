@@ -17,6 +17,7 @@ dist/
 .coverage
 htmlcov/
 .tox/
+test-results/
 
 # Local environments and outputs
 .venv/

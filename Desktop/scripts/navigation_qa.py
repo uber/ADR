@@ -111,13 +111,13 @@ def check_routes(page, parent_id, child_id):
         expect(page.locator("#view-status")).to_have_text("Opening view…")
         expect(page.locator("#page")).to_have_attribute("aria-busy", "true")
         page.locator('a[data-route="/settings"]').click()
-        page.get_by_role("heading", name="Your device. Your settings.", exact=True).wait_for()
+        page.get_by_role("heading", name="Setup & settings", exact=True).wait_for()
         assert held
         with page.expect_response(f"**/api/sessions/{parent_id}"):
             held[0].continue_()
         page.evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
         wait_for_view(page)
-        expect(page.get_by_role("heading", name="Your device. Your settings.", exact=True)).to_be_visible()
+        expect(page.get_by_role("heading", name="Setup & settings", exact=True)).to_be_visible()
         assert page.evaluate("window.scrollY") == 0
     finally:
         page.unroute(f"**/api/sessions/{parent_id}", defer)

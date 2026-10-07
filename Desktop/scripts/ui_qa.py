@@ -255,7 +255,8 @@ def check_capture_controls(page, context, runtime):
 def check_csrf_retry_boundaries(page):
     """Only an explicit, pre-execution CSRF rejection permits one retry."""
     page.locator('a[data-route="/settings"]').click()
-    page.get_by_role("heading", name="Your device. Your settings.", exact=True).wait_for()
+    page.get_by_role("heading", name="Setup & settings", exact=True).wait_for()
+    page.locator('details[data-view-key="capture-preferences"] > summary').click()
     interval = page.get_by_label("Capture interval", exact=True)
     stale = {"code": "csrf_mismatch", "message": "Synthetic stale token"}
     for status, detail, expected_attempts, expired in [
@@ -319,7 +320,8 @@ def check_csrf_retry_boundaries(page):
 
 def check_capture_intervals(page, runtime):
     page.locator('a[data-route="/settings"]').click()
-    page.get_by_role("heading", name="Your device. Your settings.", exact=True).wait_for()
+    page.get_by_role("heading", name="Setup & settings", exact=True).wait_for()
+    page.locator('details[data-view-key="capture-preferences"] > summary').click()
     interval = page.get_by_label("Capture interval", exact=True)
     assert interval.locator("option").all_text_contents() == [
         "Every 5 minutes",
@@ -337,7 +339,8 @@ def check_capture_intervals(page, runtime):
         assert runtime.store.settings()["interval_seconds"] == seconds
         assert runtime.store.settings()["recording"] is False
         page.reload()
-        page.get_by_role("heading", name="Your device. Your settings.", exact=True).wait_for()
+        page.get_by_role("heading", name="Setup & settings", exact=True).wait_for()
+        page.locator('details[data-view-key="capture-preferences"] > summary').click()
         assert interval.input_value() == str(seconds)
     assert page.get_by_role("alert").count() == 0
 
@@ -358,22 +361,31 @@ def check_starter_protection(page, runtime, screenshots):
     page.get_by_role("heading", name="File protection", exact=True).wait_for()
     expect(page.get_by_role("button", name="Add starter protections", exact=True)).to_be_disabled()
     assert not any(item["installed"] for item in runtime.status()["hooks"])
-    page.get_by_role("button", name="Connect installed agents", exact=True).click()
-    modal = page.locator("dialog[open]")
-    expect(modal.locator('input[name="project"], input[name="credentials"]')).to_have_count(0)
-    # Setup includes local bundle writes and guardian compilation; completing
-    # a click does not mean this asynchronous operation has finished. Keep the
-    # short UI assertion after an explicit, bounded wait for the actual result.
-    with page.expect_response(
-        lambda response: (
-            response.url.endswith("/api/integrations/connect-all")
-            and response.request.method == "POST"
-        ),
-        timeout=60000,
-    ) as connected:
-        modal.get_by_role("button", name="Connect installed agents", exact=True).click()
-        expect(modal.get_by_role("button", name="Working…", exact=True)).to_be_disabled()
-        expect(page.get_by_role("button", name="Add starter protections", exact=True)).to_be_disabled()
+    protection_tab = page.context.new_page()
+    try:
+        protection_tab.goto(f"http://127.0.0.1:{runtime.port}/protection")
+        protection_tab.get_by_role("heading", name="File protection", exact=True).wait_for()
+        page.get_by_role("link", name="Manage agent connections", exact=True).click()
+        page.get_by_role("heading", name="Setup & settings", exact=True).wait_for()
+        page.get_by_role("button", name="Connect installed agents", exact=True).click()
+        modal = page.locator("dialog[open]")
+        expect(modal.locator('input[name="project"], input[name="credentials"]')).to_have_count(0)
+        # Wait for setup itself, not just the click. A separate feature tab
+        # must keep its starter action disabled while installation is pending.
+        with page.expect_response(
+            lambda response: (
+                response.url.endswith("/api/integrations/connect-all")
+                and response.request.method == "POST"
+            ),
+            timeout=60000,
+        ) as connected:
+            modal.get_by_role("button", name="Connect installed agents", exact=True).click()
+            expect(modal.get_by_role("button", name="Working…", exact=True)).to_be_disabled()
+            expect(protection_tab.get_by_role(
+                "button", name="Add starter protections", exact=True
+            )).to_be_disabled()
+    finally:
+        protection_tab.close()
     assert connected.value.status == 200
     assert {item["harness"]: item["status"] for item in connected.value.json()["items"]} == {
         "claude": "configured", "codex": "configured",
@@ -381,6 +393,8 @@ def check_starter_protection(page, runtime, screenshots):
     }
     expect(modal).to_have_count(0)
     assert runtime.starter_protection()["connected"] is True
+    page.locator('a[data-route="/protection"]').click()
+    page.get_by_role("heading", name="File protection", exact=True).wait_for()
     expect(page.get_by_role("button", name="Add starter protections", exact=True)).to_be_enabled()
     page.locator(".starter-preview > summary").click()
     page.get_by_text("Ask first kept", exact=True).wait_for()
@@ -737,7 +751,7 @@ def main():
                         ("/inventory", "AI inventory"),
                         ("/protection", "File protection"),
                         ("/credentials", "Credential vault"),
-                        ("/settings", "Your device. Your settings."),
+                        ("/settings", "Setup & settings"),
                     ]:
                         page.locator(f'nav a[href="{route}"], .sidebar-bottom a[href="{route}"]').click()
                         page.get_by_role("heading", name=title, exact=True).wait_for()

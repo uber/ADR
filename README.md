@@ -34,6 +34,10 @@ see the [download and verification instructions](Desktop/docs/CI.md#trying-a-pre
 Desktop does not replace ADR's enterprise components or an operating-system
 sandbox. Read the [preview scope, setup, and verification guide](Desktop/README.md)
 and [security boundaries](Desktop/docs/SECURITY.md) before enabling protection.
+For contributors, the [component architecture](Desktop/docs/COMPONENTS.md)
+explains how reusable libraries plug into the same local process. The
+[refinement tasks](Desktop/docs/DEVELOPMENT_TASKS.md) distinguish completed
+extractions from planned work.
 
 ## How ADR secures enterprise AI agents
 
@@ -52,6 +56,7 @@ This repository contains the open-source **ADR Discovery**, **ADR Sensor**, **AD
 | Path                                               | ADR component              | Description                                                                          |
 | -------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------ |
 | [Desktop/](Desktop/)                               | ADR Desktop preview        | Local menu-bar app, session Insights, file hooks, and credential brokering for individual users |
+| [Protection/](Protection/)                         | ADR Protection library     | Offline artifact-feed validation and exact-identity matching through an in-process v1 API; no service or enforcement side effects |
 | [Discovery/](Discovery/)                           | ADR Discovery              | Inventory the AI apps, CLI agents, IDE extensions, model runtimes, and MCP servers on an endpoint, and flag unknown surfaces for review |
 | [Sensor/](Sensor/)                                 | ADR Observability          | Collect and normalize agent telemetry from Claude Code, Cursor, Codex, GitHub Copilot CLI, DeepSeek Harness, opencode, Claude Desktop, and others |
 | [Detection/](Detection/)                           | ADR Benchmark + Detection  | Dual-agent detector, 134 MCP servers, 304 benchmark tasks, baselines, figure scripts |
@@ -77,6 +82,7 @@ on macOS, Linux, and Windows, including tool results and nested subagent session
 
 - [Discovery/README.md](Discovery/README.md): endpoint inventory, probes, and the fingerprint catalog
 - [Sensor/README.md](Sensor/README.md): telemetry collection and unified schema
+- [Protection/README.md](Protection/README.md): offline artifact API and compatibility contract
 - [Detection/README.md](Detection/README.md): ADR-Bench, detector baselines, MCP infrastructure
 
 ## Citation

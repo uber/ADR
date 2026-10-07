@@ -6,9 +6,9 @@ import subprocess
 import urllib.request
 from dataclasses import FrozenInstanceError
 
+import adr_protection.artifacts as threat_feed
 import pytest
 
-import adr_desktop.threat_feed as threat_feed
 from adr_desktop.threat_feed import (
     BUNDLED_FEED_ID,
     MAX_FEED_BYTES,

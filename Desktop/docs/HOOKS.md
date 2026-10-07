@@ -6,7 +6,7 @@ Protection hooks and MCP connections serve different purposes:
 | --- | --- | --- |
 | Protection hook/plugin | Check file operations and supported tool outputs | Installed integration, enabled rules, and a harness that has loaded/trusted it |
 | ADR Context (MCP) | Search captured conversations across agents on this endpoint | Device-context consent during ADR agent setup and a running ADR service |
-| Vault MCP | Use selected credentials without returning their values | Native Keychain host and an explicit credential access grant |
+| Vault MCP | Use selected credentials without returning their values | Native encrypted-local-vault host and an explicit credential access grant |
 | Vault commands in the ADR plugin | Run Bash/code with saved environment variables and filtered results | One-time ADR integration consent and the native host; no per-key or per-project setup |
 | Prompt guard | Stop recognized credentials before prompt submission | Updated/trusted Claude Code or Codex UserPromptSubmit hook and running ADR service |
 
@@ -18,7 +18,7 @@ Hooks reread/recheck the policy in the calling agent's context after positive
 native approval, so a changed feed cannot be overridden by a stale approval.
 
 Installing or updating the app does not install or trust any agent integration.
-Use **Connect installed agents** or the [agent integration command](AGENT_INTEGRATION.md),
+Use **Setup & settings → Connect installed agents** or the [agent integration command](AGENT_INTEGRATION.md),
 then restart the agent. Native plugins contain both the hooks below and
 ADR Context and vault commands through one MCP connection. A
 configuration file alone is not proof that a running session loaded the hook:

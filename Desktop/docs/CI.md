@@ -18,8 +18,8 @@ to `main` or change the default branch to enable it.
 | --- | --- |
 | Lint and workflow validation | Python lint, browser/adapter JavaScript syntax, actionlint, and unchanged lockfiles |
 | Desktop tests | The full unit/API/guardian/synthetic CLI suite on Linux with Python 3.11 and 3.13, and macOS with Python 3.11 |
-| Shared component tests | The complete Sensor and Discovery suites in their own locked environments on Linux |
-| Browser workflows | Overview, navigation, session retrieval, credential-to-session links, malicious artifacts, and Security reviews, using real loopback APIs and synthetic data |
+| Shared component tests | Complete Sensor, Discovery, and Protection suites in their own locked environments; the Protection wheel is also installed and exercised outside the checkout without Desktop |
+| Browser workflows | Fresh-profile setup and consent, overview, navigation, session retrieval, credential-to-session links, malicious artifacts, and Security reviews, using real loopback APIs and synthetic data |
 | macOS preview | Separate Apple Silicon and Intel builds, frozen parser/dependency checks, archive extraction, signature verification, native self-tests, and packaged-core/MCP/guardian smoke checks |
 | Desktop CI | A stable aggregate check that fails if any required job fails, is cancelled, or is skipped |
 
@@ -39,7 +39,7 @@ An outdated lockfile fails rather than being rewritten or silently accepted.
 GitHub Actions are pinned to commit SHAs, checkout does not persist GitHub
 credentials, and the workflow has read-only repository permissions.
 
-Sensor and Discovery are editable local dependencies in Desktop's uv
+Sensor, Discovery, and Protection are editable local dependencies in Desktop's uv
 environment. Tests and PyInstaller therefore see the source in this checkout,
 not a cached wheel from an earlier local development session. Their standalone
 CI jobs still use their own package definitions and lockfiles.
@@ -109,6 +109,7 @@ uv run --locked ruff check adr_desktop tests scripts
 uv run --locked pytest -q
 uv run --locked python -m playwright install chromium
 uv run --locked python scripts/ui_qa.py --output test-results/ui
+uv run --locked python scripts/setup_ui_qa.py --output test-results/setup
 uv run --locked python scripts/navigation_qa.py --output test-results/navigation
 uv run --locked python scripts/sessions_ui_qa.py --output test-results/sessions
 uv run --locked python scripts/credential_activity_ui_qa.py --output test-results/credentials

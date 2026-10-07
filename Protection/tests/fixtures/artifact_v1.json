@@ -1,0 +1,79 @@
+{
+  "input": {
+    "schema_version": 1,
+    "feed_id": "adr-public-artifacts",
+    "revision": 1,
+    "published_at": "2026-10-05T00:00:00Z",
+    "indicators": [{
+      "id": "sample",
+      "kind": "package",
+      "status": "active",
+      "summary": "Synthetic fixture; not a malware claim.",
+      "references": ["https://example.org/advisory"],
+      "target": {
+        "ecosystem": "pypi",
+        "registry": "https://PYPI.ORG/simple/",
+        "name": "Example_Package",
+        "versions": ["2.0.0", "1.0.0"]
+      }
+    }]
+  },
+  "generation": {
+    "schema_version": 1,
+    "feeds": [{
+      "schema_version": 1,
+      "feed_id": "adr-public-artifacts",
+      "revision": 1,
+      "published_at": "2026-10-05T00:00:00Z",
+      "indicators": [{
+        "id": "sample",
+        "status": "active",
+        "kind": "package",
+        "summary": "Synthetic fixture; not a malware claim.",
+        "references": ["https://example.org/advisory"],
+        "target": {
+          "ecosystem": "pypi",
+          "registry": "https://pypi.org",
+          "name": "example-package",
+          "versions": ["1.0.0", "2.0.0"]
+        }
+      }]
+    }],
+    "digest": "5d1193f0ab2f78b45fd82965efc77383e5823a10333c0cdc2b1877b022d62a28"
+  },
+  "subject": {
+    "kind": "package",
+    "ecosystem": "pypi",
+    "registry": "https://pypi.org",
+    "name": "example-package",
+    "version": "1.0.0"
+  },
+  "matches": [{
+    "indicator_id": "adr-public-artifacts/sample",
+    "source_id": "adr-public-artifacts",
+    "feed_id": "adr-public-artifacts",
+    "kind": "package",
+    "summary": "Synthetic fixture; not a malware claim.",
+    "references": ["https://example.org/advisory"],
+    "target_display": "pypi:example-package (1.0.0, 2.0.0) at https://pypi.org",
+    "generation_digest": "5d1193f0ab2f78b45fd82965efc77383e5823a10333c0cdc2b1877b022d62a28"
+  }],
+  "summary": {
+    "file_sha256": 0,
+    "skill_sha256": 0,
+    "npm": 0,
+    "pypi": 1,
+    "mcp_endpoint": 0,
+    "package_versions": 2,
+    "total": 1,
+    "revoked": 0,
+    "digest": "5d1193f0ab2f78b45fd82965efc77383e5823a10333c0cdc2b1877b022d62a28",
+    "feeds": [{
+      "feed_id": "adr-public-artifacts",
+      "revision": 1,
+      "published_at": "2026-10-05T00:00:00Z",
+      "active": 1,
+      "revoked": 0
+    }]
+  }
+}

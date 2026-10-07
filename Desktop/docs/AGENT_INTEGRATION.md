@@ -14,7 +14,7 @@ The ADR integration combines:
   recognized pasted credentials and directing the user to the local vault UI.
 - A single `adr` MCP server with conversation search and credential-backed
   command execution. History uses the local captured-session database and
-  full-text index; commands use the native Keychain host.
+  full-text index; commands use the native host and encrypted local vault.
 - A short usage guide: use saved `$VARIABLE` names and run credential-dependent
   programs through `adr_run_command`. Local programs receive actual values;
   the model receives filtered results, never a raw-value retrieval tool.
@@ -26,8 +26,9 @@ collection or search implementation.
 
 ## Connect
 
-Keep ADR running and choose **Connect installed agents** in Credential vault
-or File protection. The equivalent CLI is:
+Keep ADR running and choose **Setup & settings → Connect installed agents**.
+File protection and Credential vault link to this shared setup page. Local
+capture is independent and does not need an agent connection. The equivalent CLI is:
 
 ```sh
 adr-desktop connect all --allow-agent-access

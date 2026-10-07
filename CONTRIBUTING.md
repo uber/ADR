@@ -52,8 +52,11 @@ Each component has its own README and, for Sensor, a component-specific contribu
 
 - [Sensor/](Sensor/) — telemetry collection. See [Sensor/CONTRIBUTING.md](Sensor/CONTRIBUTING.md) for parser-specific guidance, code style, and testing conventions.
 - [Discovery/](Discovery/) — local AI application, agent, and extension inventory.
+- [Protection/](Protection/) — offline artifact intelligence. Use its versioned public
+  API and preserve fixed compatibility fixtures; identity acquisition and enforcement
+  belong to the host. This development component currently targets `desktop-dev`.
 - [Detection/](Detection/) — ADR Detector and ADR-Bench. For adding MCP servers, benchmark tasks, or malicious test servers, see the [Detection README](Detection/README.md#part-3-enriching-the-benchmark); other contributions follow the guidance in this file.
-- [Desktop/](Desktop/) — individual-user app and integrations. Until community launch, create Desktop feature branches from **`desktop-dev`** and target **`desktop-dev`**, not `main`, for Desktop pull requests and their supporting Sensor/Discovery changes. See the [Desktop development checks](Desktop/README.md#development-checks).
+- [Desktop/](Desktop/) — individual-user app and integrations. Until community launch, create Desktop feature branches from **`desktop-dev`** and target **`desktop-dev`**, not `main`, for Desktop pull requests and their supporting component changes. Read [component ownership and contracts](Desktop/docs/COMPONENTS.md), the [refinement tasks](Desktop/docs/DEVELOPMENT_TASKS.md), and the [Desktop development checks](Desktop/README.md#development-checks).
 
 ## I Want To Contribute
 

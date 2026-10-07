@@ -1,9 +1,41 @@
 # P0 validation record
 
-Validated locally through October 5, 2026, on macOS 26.7 / Apple Silicon with
+Validated locally through October 7, 2026, on macOS 26.7 / Apple Silicon with
 Python 3.11.16. This is a developer-preview validation record, not a claim of
 production certification or cross-platform native testing. Earlier runs are
 retained below.
+
+## Component boundary and simpler setup — October 7, 2026
+
+- **934 Desktop**, **586 Sensor**, **359 Discovery**, and **26 Protection**
+  tests passed. Protection was checked on Python 3.11 and 3.13 and installed as
+  a non-editable wheel into an empty environment outside the checkout, without
+  Desktop or its dependencies.
+- The artifact engine retains the original validation, normalization, matching
+  order, and canonical digest behavior. Fixed expected records were captured
+  from the original implementation before extraction. Desktop's compatibility
+  adapter and existing enforcement tests exercise the same implementation.
+- All seven synthetic browser suites passed, including the new empty-profile
+  setup suite. Viewing features and hiding the introduction leave capture,
+  scanning, agent installation, login startup, and model reviews off.
+- Browser checks cover explicit capture failure/recovery, duplicate-click
+  protection, slow installation, cancelled consent, missing/failed agents,
+  idempotent retry, configured-versus-reported status, and preserved keyboard
+  focus/disclosures during background refresh. Zero-session users still see
+  pending approvals; update-needed vault connections are not called disconnected.
+- Light, dark, and narrow screenshots were inspected. Testing used fresh
+  Playwright browsers, temporary agent configuration roots, and synthetic native
+  and plugin drivers—not the user's logged-in browser or live application.
+- An Apple Silicon staging app built and passed signature/module verification,
+  native security/local-vault self-tests, and packaged-core/MCP/guardian checks.
+  The running app was not replaced. This pass does not claim new live-harness
+  trust validation or change the native acceptance limitations recorded below.
+- Ruff, JavaScript syntax, actionlint, and whitespace checks passed. The branch
+  CI adds independent Protection tests and wheel installation, plus first-run
+  browser coverage. Linux/Intel execution for this revision is pending branch CI.
+
+No extra long-lived process, new database, permission migration, automatic
+model request, or public release was introduced.
 
 ## Known-malicious artifact protection — October 5, 2026
 

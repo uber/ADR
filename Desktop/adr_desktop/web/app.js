@@ -130,7 +130,7 @@ function rememberView() {
   history.replaceState({ ...history.state, adrView: {
     route: state.route, x: window.scrollX, y: window.scrollY,
     search: state.search, source: state.source, offset: state.offset,
-    sessionFocus: state.route.startsWith("/sessions") ? focusedControl(page) : null,
+    sessionFocus: focusedControl(page),
     disclosures: [...page.querySelectorAll("details[data-view-key][open]")].map(node => node.dataset.viewKey),
   } }, "", location.href);
 }
@@ -180,17 +180,17 @@ function card(title, subtitle, ...content) {
 }
 function pageHeading(eyebrow, title, subtitle, ...actions) {
   return el("div", { class: "page-heading" },
-    el("div", {}, el("span", { class: "eyebrow" }, eyebrow), el("h1", {}, title), el("p", {}, subtitle)),
+    el("div", {}, eyebrow && el("span", { class: "eyebrow" }, eyebrow), el("h1", {}, title), el("p", {}, subtitle)),
     el("div", { class: "actions" }, ...actions));
 }
 function shell() {
   const nav = [
-    ["INSIGHTS", [
+    ["Activity", [
       ["/", "home", "Overview"], ["/sessions", "sessions", "Sessions"],
       ["/inventory", "inventory", "AI inventory"],
       ["/reviews", "activity", "Security reviews"],
     ]],
-    ["PROTECTION", [
+    ["Protection", [
       ["/protection", "shield", "File protection"], ["/threats", "packageBlock", "Malicious artifacts"],
       ["/credentials", "key", "Credential vault"],
     ]],
@@ -206,7 +206,7 @@ function shell() {
       }, icon(symbol), text, href === "/credentials" && el("span", { id: "approval-count", class: "count" }, "0"))))),
     el("div", { class: "sidebar-bottom" },
       el("a", { href: "/settings", "data-route": "/settings", class: "nav-item",
-        title: "Settings", onClick: routeClick }, icon("settings"), "Settings"),
+        title: "Setup & settings", onClick: routeClick }, icon("settings"), "Setup & settings"),
       el("div", { class: "local-note" }, icon("lock"), el("div", {},
         el("strong", {}, "Stored on this device."), el("span", {}, "Agent reviews share only what you approve."))))),
     topbar = el("header", { class: "topbar" },
@@ -215,7 +215,7 @@ function shell() {
         el("span", { id: "view-status", class: "view-status", role: "status", "aria-live": "polite" })),
       el("div", { class: "topbar-actions" },
         button("Refresh", () => render(), { variant: "quiet", symbol: "refresh", title: "Refresh this view" }),
-        button("Start capture", toggleCapture, { id: "capture-toggle", symbol: "play" })));
+        button("Start capture", toggleCapture, { id: "capture-toggle", "data-capture-toggle": "header", symbol: "play" })));
   root.replaceChildren(el("a", { href: "#page", class: "skip-link", onClick: event => {
     event.preventDefault(); document.querySelector("#page").focus({ preventScroll: true });
   } }, "Skip to content"), sidebar, el("div", { class: "workspace" }, topbar,
@@ -232,9 +232,12 @@ function updateChrome() {
   const label = document.querySelector("#collection-label");
   if (label) label.textContent = state.status.collector.recording ?
     (state.status.collector.phase === "collecting" ? "Collecting local activity…" : "Local capture on") : "Capture paused";
-  const toggle = document.querySelector("#capture-toggle");
-  if (toggle) toggle.replaceChildren(icon(state.status.collector.recording ? "pause" : "play"),
-    document.createTextNode(state.status.collector.recording ? "Pause capture" : "Start capture"));
+  document.querySelectorAll("[data-capture-toggle]").forEach(toggle => {
+    const local = toggle.dataset.captureToggle === "local" ? "local capture" : "capture";
+    toggle.replaceChildren(icon(state.status.collector.recording ? "pause" : "play"),
+      document.createTextNode(`${state.status.collector.recording ? "Pause" : "Start"} ${local}`));
+    toggle.disabled = Boolean(state.capturePending);
+  });
   const count = document.querySelector("#approval-count");
   if (count) { count.textContent = state.status.pending; count.hidden = !state.status.pending; }
   const hooks = new Map(state.status.hooks.map(hook => [hook.harness, hook]));
@@ -246,13 +249,22 @@ function hookConnectionState(hooks) {
   return JSON.stringify(hooks.map(hook => ({ ...hook, last_event: Boolean(hook.last_event) })));
 }
 async function toggleCapture() {
-  const toggle = document.querySelector("#capture-toggle");
-  toggle.disabled = true;
+  if (state.capturePending) return;
+  const returnFocus = document.activeElement?.matches("[data-capture-toggle]") ? document.activeElement.id : "";
+  const route = state.route;
+  state.capturePending = true;
+  updateChrome();
   try {
     await perform(() => api(`/collector/${state.status.collector.recording ? "pause" : "start"}`, { method: "POST" }));
-    if (state.route === "/") await render();
+    if (["/", "/settings"].includes(state.route)) await render();
   } catch { /* perform already displayed the error; leave the control usable. */ }
-  finally { toggle.disabled = false; }
+  finally {
+    state.capturePending = false; updateChrome();
+    // Disabling/replacing the initiating control can move focus to body.
+    // Restore it only if the user has not navigated or focused something else.
+    if (returnFocus && route === state.route && document.activeElement === document.body)
+      document.getElementById(returnFocus)?.focus({ preventScroll: true });
+  }
 }
 function metric(label, value, footnote, symbol) {
   return el("div", { class: "metric" }, el("div", { class: "metric-label" }, label, icon(symbol)),
@@ -419,16 +431,42 @@ async function overview() {
   const data = await api("/overview"), totals = data.totals;
   const intro = !state.status.settings.onboarding_complete ?
     el("section", { class: "welcome card" },
-      el("div", {}, el("h2", {}, "Your agents, on your terms."),
-        el("p", {}, "Find previous work, protect the files that matter, and use credentials without putting their values in chat."),
-        el("p", { class: "muted small" }, "Start with readable local logs. Capture stays on this device. Optional security reviews share approved evidence through your agent.")),
+      el("div", {}, el("h2", {}, "Start with your agent history."),
+        el("p", {}, "Bring your agents’ saved conversations together. Search previous work, then add file protection or saved credentials when you need them."),
+        el("p", { class: "muted small" }, "Capture stays on this device and needs no agent plugin. You choose which other features to enable.")),
       el("div", { class: "actions" },
-        button("Set up device access", () => navigate("/settings"), { symbol: "settings" }),
-        button("Start local capture", async () => {
-          await api("/collector/start", { method: "POST" });
-          await api("/settings", { method: "PATCH", body: { onboarding_complete: true } });
-          await loadStatus(); render();
-        }, { variant: "primary", symbol: "play" }))) : null;
+        link("Set up ADR", "/settings", "button primary"),
+        button("Hide introduction", async event => {
+          const control = event.currentTarget;
+          control.disabled = true;
+          try {
+            await perform(() => api("/settings", { method: "PATCH", body: { onboarding_complete: true } }));
+            await render();
+          } catch { control.disabled = false; }
+        }, { variant: "quiet" }))) : null;
+  const heading = pageHeading("", "Your agents, at a glance", "Your local agent history and the protections you choose.");
+  const warnings = state.status.collector.error ? el("div", { class: "banner warning", role: "status" },
+    icon("alert"), el("div", {}, el("strong", {}, "Collection needs attention"), el("p", {}, state.status.collector.error))) : null;
+  const privacy = el("div", { class: "page-footnote" }, icon("lock"),
+    "Collected history stays on this device. No LLM key is needed for Insights.");
+  const pending = totals.pending > 0 && el("div", { class: "banner warning" }, icon("key"),
+    link(`${totals.pending} credential request${totals.pending === 1 ? " needs" : "s need"} your approval`, "/credentials"));
+  if (!totals.sessions && !totals.rules && !totals.credentials) return [
+    heading, intro, warnings, pending,
+    card(state.status.collector.recording ? "Waiting for your first capture" : "No captured sessions yet",
+      state.status.collector.recording ?
+        "Capture is on. Supported agents’ readable local logs will appear here after a collection pass." :
+        "Turn on local capture in Setup & settings to start building your searchable history.",
+      !intro && link("Open Setup & settings", "/settings", "button"),
+      el("div", { class: "capability-list" },
+        capabilityLink("Browse your agent history", "/sessions", "sessions",
+          "Messages, tool calls, and results from your captured conversations."),
+        capabilityLink("See your installed AI tools", "/inventory", "inventory",
+          "Run a scan when you want to find apps, skills, plugins, and MCP servers."),
+        capabilityLink("Choose files to protect", "/protection", "shield",
+          "Connect an agent, then choose which files require approval or stay blocked."))),
+    privacy,
+  ];
   const sources = new Map(data.sources.map(row => [row.source, row]));
   const diagnostics = new Map((state.status.collector.diagnostics || []).map(row => [row.source, row]));
   const agents = card("Your agents", "Collection and protection are separate capabilities.",
@@ -443,11 +481,8 @@ async function overview() {
     el("div", { class: "action-list" },
       button("Choose files to protect", () => navigate("/protection"), { variant: "card-action", symbol: "shield" }),
       button("Add a credential", () => navigate("/credentials"), { variant: "card-action", symbol: "key" })));
-  const warnings = state.status.collector.error ? el("div", { class: "banner warning", role: "status" },
-    icon("alert"), el("div", {}, el("strong", {}, "Collection needs attention"), el("p", {}, state.status.collector.error))) : null;
   return [
-    pageHeading("INSIGHTS", "Your agents, at a glance", "Understand the activity on your device. Stay in control of what comes next."),
-    intro, warnings,
+    heading, intro, warnings,
     el("div", { class: "metric-grid" },
       metric("Conversations", totals.conversations,
         `${number(totals.sessions)} captured sessions · ${number(totals.subagents)} sub-agents`, "sessions"),
@@ -455,8 +490,7 @@ async function overview() {
       metric("Saved file rules", totals.rules, !state.status.protection.enabled ? "Protection paused" :
         state.status.hooks.some(item => item.installed) ? "Ready for connected hooks" : "Not active · connect an agent", "shield"),
       metric("Vault credentials", totals.credentials, "Use accounts without sharing keys", "key")),
-    totals.pending > 0 && el("div", { class: "banner warning" }, icon("key"),
-      link(`${totals.pending} credential request${totals.pending === 1 ? " needs" : "s need"} your approval`, "/credentials")),
+    pending,
     el("div", { class: "two-column" },
       card("The shape of your work", "Sessions updated each day · UTC · last 14 days", activityChart(data.days)),
       actions),
@@ -464,11 +498,15 @@ async function overview() {
       card("Recent sessions", "Pick up the context, not just the last message.",
         data.recent.length ? el("div", {}, ...data.recent.map(sessionFamily)) :
           empty("Your first session will appear here", "Start capture, then use a supported coding agent.",
-            button("Start capture", () => perform(() => api("/collector/start", { method: "POST" })), { symbol: "play" })),
+            link("Open Setup & settings", "/settings", "button")),
         data.recent.length ? link("View all sessions", "/sessions", "card-footer-link") : null),
       agents),
-    el("div", { class: "page-footnote" }, icon("lock"), "Collected history stays on this device. No LLM key is needed for Insights."),
+    privacy,
   ];
+}
+function capabilityLink(title, href, symbol, description) {
+  return el("a", { href, id: `capability-${href.slice(1)}`, class: "capability-link", onClick: routeClick }, icon(symbol),
+    el("div", {}, el("strong", {}, title), el("p", {}, description)), icon("chevron"));
 }
 async function sessionsPage() {
   const view = sessionQueryState(location.search);
@@ -1369,7 +1407,7 @@ function starterProtectionCard(starter) {
       "An existing rule has a path that cannot be checked. Review your rules before adding the starter set."),
     (!starter.enabled || !connected) && el("p", { class: "starter-note small" }, icon("alert"),
       !starter.enabled ? "File rules are paused. Adding this set does not resume them." :
-        "Connect an agent above first. Then you can enable the starter set."),
+        "Connect an agent in Setup & settings first. Then you can enable the starter set."),
     el("p", { class: "starter-limit small muted" },
       "Project .env files and custom credential locations need their own rules. File hooks do not lock operating-system credential APIs."));
 }
@@ -1384,7 +1422,7 @@ function protectedRuleRow(rule) {
 }
 function connectADR() {
   const detected = state.status.hooks.filter(hook => hook.available || hook.installed);
-  dialog("Connect installed agents", "One ADR plugin. No project folders, key selections, or MCP configuration to copy.", fields => {
+  dialog("Connect installed agents", "Add ADR’s plugin to your supported agents. Review the access you are granting.", fields => {
     fields.append(
       el("p", {}, detected.length ? `Found on this device: ${detected.map(hook => hook.name).join(", ")}.` :
         "ADR will look for Claude Code, Codex, opencode, and GitHub Copilot CLI."),
@@ -1411,18 +1449,21 @@ function connectADR() {
 function agentIntegrationCard() {
   const agents = state.status.hooks;
   const ready = agents.filter(hook => hook.vault_connected && !hook.needs_update);
-  return card("One ADR plugin", "Conversation search, saved credentials, and file-protection hooks in each supported agent.",
+  return card("Agent connections", "Let agents search your captured history, use saved credentials, and check tool requests against your rules. Local capture works without a connection.",
     el("div", { class: "integration-heading" },
       el("p", { class: "small muted" }, ready.length ?
         `${ready.map(hook => hook.name).join(", ")} configured. New credentials are available without reconnecting.` :
         "Connect once for all installed agents. No separate vault setup."),
       button(ready.length ? "Update installed agents" : "Connect installed agents", connectADR,
-        { variant: ready.length ? "secondary" : "primary", symbol: "shield" })),
+        { id: "agent-connect", variant: ready.length ? "secondary" : "primary", symbol: "shield" })),
     el("ul", { class: "integration-list", "aria-label": "ADR agent integrations" }, ...agents.map(hook =>
       el("li", {}, el("div", {}, el("strong", {}, hook.name),
         el("p", { class: "small muted" }, hook.vault_connected ? "History, credentials, and protection" :
           hook.installed ? "Update to include the credential vault" :
-            hook.available ? "Ready to connect" : "CLI not found on this device")),
+            hook.available ? "Ready to connect" : "CLI not found on this device"),
+        hook.installed && el("p", { class: "small muted" }, hook.last_event ?
+          ["Last hook activity: ", el("span", { "data-hook-report": hook.harness }, ago(hook.last_event.timestamp))] :
+          "No hook activity received yet. Restart this agent after setup.")),
       tag(hook.vault_connected && !hook.needs_update ? "Configured" : hook.installed ? "Update needed" :
         hook.available ? "Not connected" : "Not installed", hook.vault_connected && !hook.needs_update ? "green" : "neutral"),
       hook.installed && button("", () => confirmDialog(`Disconnect ADR from ${hook.name}?`,
@@ -1430,7 +1471,21 @@ function agentIntegrationCard() {
           await api(`/integrations/${hook.harness}/disconnect`, { method: "POST", timeout: 180000 });
           notice("ADR disconnected");
         }, "Disconnect"), { variant: "icon-button", symbol: "close", "aria-label": `Disconnect ${hook.name}` })))),
-    el("p", { class: "small muted" }, "Restart agents after setup and review their native trust prompts. A configured plugin is not proof that every hook is loaded."));
+    el("p", { class: "small muted" }, "Restart agents after setup and review their trust prompts. “Configured” means setup is saved; hook activity confirms that an agent has contacted ADR."));
+}
+function agentConnectionSummary({ vault = false } = {}) {
+  const connected = state.status.hooks.filter(hook => vault ? hook.vault_connected : hook.installed);
+  const reported = connected.filter(hook => hook.last_event).length;
+  const updates = connected.filter(hook => hook.needs_update).length;
+  return el("section", { class: "connection-summary", "aria-label": "Agent connection status" },
+    icon("shield"), el("div", {}, el("strong", {},
+      connected.length ? `${connected.length} agent${connected.length === 1 ? "" : "s"} configured` : "Connect an agent to use this feature"),
+    el("p", { class: "small muted" }, connected.length ?
+      (vault ? "Saved variables are available to these connections. " : "") +
+      (updates ? `${updates} connection${updates === 1 ? " needs" : "s need"} an update. ` : "") +
+      (reported ? `Hook activity received from ${reported}.` : "No hook activity yet. Restart your agent after setup.") :
+      "Manage connections once in Setup & settings. Your saved rules and credentials stay here.")),
+    el("a", { id: "manage-agent-connections", href: "/settings", class: "button", onClick: routeClick }, "Manage agent connections"));
 }
 async function protectionPage() {
   const [policy, events, starter] = await Promise.all([
@@ -1468,10 +1523,10 @@ async function protectionPage() {
       button("Protect a path", ruleDialog, { variant: "primary", symbol: "plus" })),
     el("div", { class: `banner ${connected.length && policy.enabled && seen ? "secure" : "warning"}` },
       icon("shield"), el("div", {}, el("strong", {}, statusText), el("p", {},
-        !connected.length ? `${policy.rules.length ? "Your saved rules are not active yet. " : ""}Connect an agent below. Rules do not protect agents without an ADR hook.` :
+        !connected.length ? `${policy.rules.length ? "Your saved rules are not active yet. " : ""}Connect an agent in Setup & settings. Rules do not protect agents without an ADR hook.` :
           !policy.enabled ? "Your rules are saved, but file protection is paused." :
             "Restart an agent after connecting or updating its hook. Its first tool request confirms the connection."))),
-    agentIntegrationCard(),
+    agentConnectionSummary(),
     starterProtectionCard(starter),
     card("Your file rules", connected.length ? "Block takes priority when rules overlap." : "Saved only. Connect an agent to enforce these rules.",
       el("div", { class: "card-controls" }, tag(!connected.length ? "Not active · no connection" :
@@ -2231,7 +2286,7 @@ async function credentialsPage() {
       "The save was not confirmed. Finish any open save window, then refresh storage. Existing copies are kept.";
     if (stored?.state === "available") return !item.env_name ?
       "Encrypted local copy ready. Existing service permissions still apply." :
-      vaultAgents.length ? "Available to connected agents" : "Connect the ADR plugin below to use this variable";
+      vaultAgents.length ? "Available to connected agents" : "Connect an agent in Setup & settings to use this variable";
     if (stored?.state === "missing") return "No local copy yet. Move an older Keychain entry or save the value again.";
     return ({
       local_vault_key_missing: "The local vault key is missing. Restore the complete vault backup; do not create a replacement key.",
@@ -2328,7 +2383,7 @@ async function credentialsPage() {
           }, "Remove credential"), { variant: "icon-button", symbol: "trash", "aria-label": `Remove ${item.name}` })))) :
         empty("Keep the value out of the conversation", "Save a credential once. Agents connected through ADR can use its variable name.",
           button("Add your first credential", credentialDialog, { symbol: "plus", disabled: !environment.available }))),
-    agentIntegrationCard(),
+    agentConnectionSummary({ vault: true }),
     environment.recent_runs?.length > 0 && card("Recent credential use",
       "Open a session to see the conversation behind a credential use. Links appear once the session is captured.",
       ...environment.recent_runs.map(item => el("div", { class: "activity-row credential-use-row" }, icon("terminal"),
@@ -2438,9 +2493,15 @@ async function approvalsPage() {
         muted(ago(item.created_at))))) : el("div", { class: "small-empty" }, "No credential requests yet.")),
   ];
 }
+function settingsDisclosure(key, title, description, ...content) {
+  return el("details", { class: "settings-disclosure", "data-view-key": key },
+    el("summary", { id: `settings-${key}-summary` }, el("strong", {}, title), el("span", {}, description)),
+    el("div", { class: "settings-disclosure-body" }, ...content));
+}
 async function settingsPage() {
   const [audit, access] = await Promise.all([api("/audit"), api("/access")]);
   const settings = state.status.settings;
+  const collector = state.status.collector;
   const interval = el("select", { "aria-label": "Capture interval", onChange: async event => {
     const select = event.currentTarget;
     select.disabled = true;
@@ -2452,34 +2513,63 @@ async function settingsPage() {
     el("option", { value }, `Every ${value / 60} minutes`)));
   interval.value = settings.interval_seconds;
   const days = el("select", { "aria-label": "Capture history window", onChange: async event => {
-    await perform(() => api("/settings", { method: "PATCH", body: { history_days: Number(event.target.value) } }), "History window updated");
+    const select = event.currentTarget;
+    select.disabled = true;
+    try {
+      await perform(() => api("/settings", { method: "PATCH", body: { history_days: Number(select.value) } }), "History window updated");
+    } catch { select.value = state.status.settings.history_days; }
+    finally { select.disabled = false; }
   } }, ...[1, 7, 14, 30].map(value => el("option", { value }, `Last ${value} ${value === 1 ? "day" : "days"}`)));
   days.value = settings.history_days;
   let login = { available: false };
   try { login = await api("/native/login"); } catch {}
   return [
-    pageHeading("PREFERENCES", "Your device. Your settings.", "Nothing here requires a cloud account."),
-    deviceAccessCard(access),
-    card("Local capture", "ADR reuses the existing Sensor collectors. Captured content is not additionally redacted.",
-      el("div", { class: "setting-row" }, el("div", {}, el("strong", {}, "Capture interval"), el("p", { class: "small muted" }, "Runs the Sensor over local agent logs, then waits this long before the next pass. Start capture runs the first pass immediately.")), selectControl(interval)),
-      el("div", { class: "setting-row" }, el("div", {}, el("strong", {}, "History to look for"), el("p", { class: "small muted" }, "Changing this does not delete history already captured.")), selectControl(days)),
-      el("div", { class: "setting-row" }, el("div", {}, el("strong", {}, "Last completed capture"), el("p", { class: "small muted" }, time(state.status.collector.last_success))), tag(state.status.collector.phase))),
-    card("Menu-bar app", null,
+    pageHeading("", "Setup & settings", "Start with local history. Add connections and protections when you need them."),
+    card("Local capture", "Read supported agents’ saved conversations so you can browse and search them together. No agent connection or model key is needed.",
+      el("div", { class: "setup-status-row" },
+        el("div", {}, tag(collector.recording ? "Capture is on" : "Capture is paused", collector.recording ? "green" : "neutral"),
+          el("p", { class: "small muted" }, collector.last_success ? `Last completed capture: ${time(collector.last_success)}` : "No capture completed yet.")),
+        button(collector.recording ? "Pause local capture" : "Start local capture", toggleCapture,
+          { id: "setup-capture-toggle", variant: collector.recording ? "secondary" : "primary", symbol: collector.recording ? "pause" : "play",
+            "data-capture-toggle": "local", disabled: state.capturePending })),
+      collector.error && el("p", { class: "setup-error small", role: "status" }, collector.error),
+      settingsDisclosure("capture-preferences", "Capture preferences", "Collection interval and history window",
+        el("div", { class: "setting-row" }, el("div", {}, el("strong", {}, "Capture interval"), el("p", { class: "small muted" }, "Runs the Sensor over local agent logs, then waits this long before the next pass. Start capture runs the first pass immediately.")), selectControl(interval)),
+        el("div", { class: "setting-row" }, el("div", {}, el("strong", {}, "History to look for"), el("p", { class: "small muted" }, "Changing this does not delete history already captured.")), selectControl(days)),
+        el("p", { class: "small muted" }, "Capture preserves the original content without additional redaction. Messages and tool results can contain sensitive information."))),
+    agentIntegrationCard(),
+    card("Optional features", "Choose what is useful to you. Opening a feature does not enable it.",
+      el("div", { class: "capability-list" },
+        capabilityLink("File protection", "/protection", "shield", "Choose files to block or ask about. Requires agent hooks."),
+        capabilityLink("Malicious artifacts", "/threats", "packageBlock", "Check known-bad skills, packages, and MCP servers. Blocking requires agent hooks."),
+        capabilityLink("Credential vault", "/credentials", "key", "Save values locally; connected agents use variable names."),
+        capabilityLink("Security reviews", "/reviews", "activity", "Ask a local agent CLI to review captured activity. Separate consent and usage limits apply."))),
+    settingsDisclosure("device-access", "Optional device access", "Review permissions if a capture or inventory scan reports unreadable locations",
+      deviceAccessCard(access)),
+    settingsDisclosure("app-storage", "App & local data", "Start at login, storage, and collected history",
       el("div", { class: "setting-row" }, el("div", {}, el("strong", {}, "Start at login"),
         el("p", { class: "small muted" }, login.requires_approval ? "macOS needs approval in Login Items." : "Keep ADR available when you sign in.")),
       button(login.enabled ? "Disable" : "Enable", async () => {
         await perform(() => api("/native/login", { method: "POST", body: { allow: !login.enabled } })); render();
-      }, { disabled: !state.status.vault_available })),
-      el("div", { class: "setting-row" }, el("div", {}, el("strong", {}, "Version"), muted(`ADR Desktop ${state.status.version} · local preview`)), tag("Local storage", "green"))),
-    card("Your data", "Session content can contain sensitive prompts and tool results. ADR sends no telemetry to a backend.",
+      }, { id: "login-toggle", disabled: !login.available })),
+      el("div", { class: "setting-row" }, el("div", {}, el("strong", {}, "Version"), muted(`ADR Desktop ${state.status.version} · local preview`)), tag("Local storage", "green")),
       el("div", { class: "setting-row" }, el("div", {}, el("strong", {}, "Storage location"), el("code", { class: "path" }, state.status.state_dir)),
         tag(`${(state.status.storage_bytes / 1024 / 1024).toFixed(1)} MiB`)),
+      el("div", { class: "setting-row" }, el("div", {}, el("strong", {}, "Overview introduction"),
+        el("p", { class: "small muted" }, "Revisit the introduction without changing your setup.")),
+      button("Show introduction", async () => {
+        try {
+          await perform(() => api("/settings", { method: "PATCH", body: { onboarding_complete: false } }));
+          navigate("/");
+        } catch { /* The setting remains unchanged on a failed request. */ }
+      }, { id: "show-introduction" })),
       el("div", { class: "setting-row" }, el("div", {}, el("strong", {}, "Delete collected history"),
-        el("p", { class: "small muted" }, "Pauses collection and removes ADR’s session copies. Original agent logs, rules, and Keychain items are not deleted.")),
+        el("p", { class: "small muted" }, "Pauses collection and removes ADR’s session copies. Original agent logs, rules, and saved credentials are not deleted.")),
       button("Delete history", () => confirmDialog("Delete collected session history?", "This removes ADR’s local session history, not your agents’ original files. Collection will remain paused.", async () => {
         await api("/history/delete", { method: "POST" }); notice("Collected history deleted");
-      }, "Delete local history"), { variant: "danger", symbol: "trash" }))),
-    card("App activity", "Local administrative actions. No credential values are recorded.",
+      }, "Delete local history"), { id: "delete-history", variant: "danger", symbol: "trash" })),
+      el("p", { class: "small muted" }, "ADR sends no telemetry to a backend. Optional security reviews share only the evidence you approve through your agent.")),
+    settingsDisclosure("app-activity", "App activity", "Local setup and administrative actions; no credential values",
       audit.items.length ? el("div", {}, ...audit.items.slice(0, 20).map(item => el("div", { class: "activity-row" },
         icon("activity"), el("div", {}, el("strong", {}, item.summary), muted(item.kind.replaceAll("_", " "))),
         muted(ago(item.timestamp))))) : el("div", { class: "small-empty" }, "No administrative actions yet.")),
@@ -2555,7 +2645,7 @@ async function render() {
     else content = await settingsPage();
     if (sequence !== renderSequence) return;
     const scroll = { x: window.scrollX, y: window.scrollY }, focus = focusedControl(page);
-    const disclosures = !pendingView && (route.startsWith("/sessions") || ["/threats", "/reviews"].includes(route)) ?
+    const disclosures = !pendingView ?
       [...page.querySelectorAll("details[data-view-key][open]")].map(node => node.dataset.viewKey) : null;
     page.replaceChildren(...content.filter(Boolean)); document.title = `${page.querySelector("h1")?.textContent || "Insights"} · ADR`;
     await restoreDisclosures(page, sequence, disclosures);
@@ -2598,16 +2688,18 @@ async function boot() {
       try {
         const old = state.status;
         await loadStatus();
-        if (["/", "/approvals", "/credentials", "/protection", "/inventory", "/threats", "/reviews"].includes(state.route) &&
-          !document.querySelector("dialog[open]") && !state.threatsPending && !state.reviewPending && (
+        if (["/", "/approvals", "/credentials", "/protection", "/inventory", "/threats", "/reviews", "/settings"].includes(state.route) &&
+          !document.querySelector("dialog[open]") && !state.threatsPending && !state.reviewPending && !state.capturePending && (
           old.pending !== state.status.pending ||
           old.prompt_blocks !== state.status.prompt_blocks ||
+          old.collector.recording !== state.status.collector.recording ||
           old.collector.phase !== state.status.collector.phase ||
           old.collector.inventory_phase !== state.status.collector.inventory_phase ||
           hookConnectionState(old.hooks) !== hookConnectionState(state.status.hooks) ||
           old.protection.latest_intervention_id !== state.status.protection.latest_intervention_id ||
           JSON.stringify(old.threats) !== JSON.stringify(state.status.threats)
           || (state.route === "/reviews" && JSON.stringify(old.reviews) !== JSON.stringify(state.status.reviews))
+          || (["/", "/settings"].includes(state.route) && JSON.stringify(old.settings) !== JSON.stringify(state.status.settings))
         )) await render();
       } catch { document.querySelector("#collection-label").textContent = "App connection lost"; }
     }, 4000);
