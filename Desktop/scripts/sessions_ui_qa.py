@@ -203,7 +203,7 @@ def check_browse_and_state(page, ids, base):
     # Refresh retains reading position and expanded source details.
     page.evaluate("window.scrollTo(0, 850)")
     page.wait_for_timeout(150)
-    page.get_by_role("button", name="Refresh", exact=True).evaluate("node => node.click()")
+    page.reload()
     ready(page)
     assert abs(page.evaluate("window.scrollY") - 850) < 5
     expect(page.locator(".setup-bundle")).to_have_attribute("open", "")

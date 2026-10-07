@@ -18,7 +18,7 @@ Hooks reread/recheck the policy in the calling agent's context after positive
 native approval, so a changed feed cannot be overridden by a stale approval.
 
 Installing or updating the app does not install or trust any agent integration.
-Use **Setup & settings → Connect installed agents** or the [agent integration command](AGENT_INTEGRATION.md),
+Use **Setup & settings → Protection → Connect installed agents** or the [agent integration command](AGENT_INTEGRATION.md),
 then restart the agent. Native plugins contain both the hooks below and
 ADR Context and vault commands through one MCP connection. A
 configuration file alone is not proof that a running session loaded the hook:

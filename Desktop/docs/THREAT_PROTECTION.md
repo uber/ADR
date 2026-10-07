@@ -115,8 +115,10 @@ display labels or negative results.
 
 ## Add your own reviewed intelligence
 
-Choose **Import local list**, select a JSON file, review the preview, and
-confirm. The import replaces only the previous custom list; bundled
+In **Setup & settings → Protection → Custom artifact list**, choose
+**Import local list**, select a JSON file, review the preview, and confirm.
+The Malicious artifacts page keeps intelligence details expandable and focuses
+on matches and actual blocked activity. The import replaces only the previous custom list; bundled
 intelligence is retained. The file is sent only to the authenticated local
 ADR process, not to a cloud service.
 

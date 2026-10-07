@@ -38,7 +38,8 @@ def check_environment_vault(page, runtime, screenshots):
     expect(examples).to_contain_text("adr_run_command")
     examples.get_by_role("button", name="Done", exact=True).click()
     expect(row.get_by_role("button", name="Allow agent use", exact=True)).to_have_count(0)
-    expect(row).to_contain_text("Available to connected agents")
+    expect(row).to_contain_text("Encrypted local copy ready.")
+    expect(page.get_by_role("button", name="Refresh storage", exact=True)).to_be_hidden()
     grants = runtime.store.rows("SELECT * FROM grants WHERE kind='agent' AND revoked=0")
     assert len(grants) == 4
     assert not runtime.store.rows("SELECT * FROM grants WHERE kind='execution'")
@@ -57,8 +58,8 @@ def check_environment_vault(page, runtime, screenshots):
     )
     assert response.status == 200 and response.json()["blocked"]
     assert "synthetic-browser-password-123" not in response.text()
-    page.get_by_role("button", name="Refresh", exact=True).click()
-    page.get_by_role("heading", name="Prompts stopped", exact=True).wait_for()
+    # Hook activity updates automatically; there is no global refresh control.
+    expect(page.get_by_role("heading", name="Prompts stopped", exact=True)).to_be_visible(timeout=10000)
     expect(page.locator("#page")).to_contain_text("Use $MY_PASSWORD instead.")
     assert "synthetic-browser-password-123" not in page.locator("#page").inner_text()
     page.screenshot(path=str(screenshots / "synthetic-environment-vault.png"), full_page=True)
@@ -68,3 +69,37 @@ def check_environment_vault(page, runtime, screenshots):
     page.screenshot(path=str(screenshots / "synthetic-environment-vault-dark.png"), full_page=True)
     page.set_viewport_size({"width": 1440, "height": 1040})
     page.emulate_media(color_scheme="light")
+
+    # An interrupted native save can finish after the original request.
+    # Keep the recovery-only storage recheck available without showing it
+    # as an everyday action for healthy entries.
+    entry = runtime.store.one("SELECT id FROM environment_credentials WHERE env_name='MY_PASSWORD'")
+    runtime.store.execute(
+        "UPDATE environment_credentials SET state='unconfirmed' WHERE id=?", (entry["id"],)
+    )
+    runtime.native.local_ids.discard(entry["id"])
+    page.reload()
+    expect(row).to_contain_text("The save was not confirmed")
+    expect(page.get_by_role("button", name="Refresh storage", exact=True)).to_be_visible()
+    runtime.native.local_ids.add(entry["id"])
+    page.get_by_role("button", name="Refresh storage", exact=True).click()
+    recover = row.get_by_role("button", name="Recover saved entry", exact=True)
+    expect(recover).to_be_visible()
+    recover.click()
+    confirmation = page.get_by_role("dialog", name="Recover this saved credential?", exact=True)
+    expect(confirmation).to_be_visible()
+    assert runtime.store.one(
+        "SELECT state FROM environment_credentials WHERE id=?", (entry["id"],)
+    )["state"] == "unconfirmed"
+    confirmation.get_by_role("button", name="Cancel", exact=True).click()
+    recover.click()
+    with page.expect_response("**/api/vault/recover") as recovered:
+        confirmation.get_by_role("button", name="Recover saved entry", exact=True).click()
+    assert recovered.value.status == 200
+    assert recovered.value.request.post_data_json == {"ids": [entry["id"]], "confirm": True}
+    expect(confirmation).to_have_count(0)
+    expect(row).to_contain_text("Encrypted local copy ready.")
+    assert runtime.store.one(
+        "SELECT state FROM environment_credentials WHERE id=?", (entry["id"],)
+    )["state"] == "active"
+    expect(page.locator(".connection-summary")).to_have_count(0)

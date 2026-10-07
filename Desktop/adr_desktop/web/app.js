@@ -82,9 +82,14 @@ function sourceName(value) {
   const names = state.status?.sources || {};
   return Object.hasOwn(names, value) ? names[value] : (typeof value === "string" && value ? value : "Agent");
 }
+const sourceMarks = {
+  claude: "Cl", codex: "Cx", cursor: "Cu", copilot: "Co", dsh: "Ds",
+  opencode: "Oc", gemini: "Ge", cline: "Cn", warp: "Wa", claude_desktop: "Cd",
+};
+function sourceClass(source) { return `source-${Object.hasOwn(sourceMarks, source) ? source : "unknown"}`; }
 function sourceMark(source) {
-  return el("span", { class: `source-mark source-${Object.hasOwn(state.status?.sources || {}, source) ? source : "unknown"}` },
-    sourceName(source).slice(0, 1).toUpperCase());
+  return el("span", { class: `source-mark ${sourceClass(source)}`, "aria-hidden": "true", translate: "no" },
+    Object.hasOwn(sourceMarks, source) ? sourceMarks[source] : sourceName(source).slice(0, 2).toUpperCase());
 }
 function notice(message, error = false) {
   const item = el("div", { class: `toast ${error ? "error" : ""}`, role: error ? "alert" : "status" },
@@ -120,7 +125,7 @@ async function perform(action, success) {
   catch (error) { notice(error.message, true); throw error; }
 }
 async function loadStatus() {
-  state.status = await api("/status"); updateChrome(); return state.status;
+  state.status = await api("/status"); state.connected = true; updateChrome(); return state.status;
 }
 let pendingView = null, scrollSaveQueued = false;
 if ("scrollRestoration" in history) history.scrollRestoration = "manual";
@@ -208,18 +213,23 @@ function shell() {
       el("a", { href: "/settings", "data-route": "/settings", class: "nav-item",
         title: "Setup & settings", onClick: routeClick }, icon("settings"), "Setup & settings"),
       el("div", { class: "local-note" }, icon("lock"), el("div", {},
-        el("strong", {}, "Stored on this device."), el("span", {}, "Agent reviews share only what you approve."))))),
+        el("strong", {}, "Your device. Your control."), el("span", {}, "No ADR account. No product telemetry."))))),
     topbar = el("header", { class: "topbar" },
       el("div", { class: "running-status" }, el("span", { class: "status-dot" }),
-        el("strong", {}, "ADR is running"), el("span", { id: "collection-label", class: "muted" }),
+        el("strong", { id: "app-status-label" }, "ADR is running"),
         el("span", { id: "view-status", class: "view-status", role: "status", "aria-live": "polite" })),
-      el("div", { class: "topbar-actions" },
-        button("Refresh", () => render(), { variant: "quiet", symbol: "refresh", title: "Refresh this view" }),
-        button("Start capture", toggleCapture, { id: "capture-toggle", "data-capture-toggle": "header", symbol: "play" })));
+      el("a", { id: "configured-agents", class: "configured-agents", href: "/settings", onClick: routeClick,
+        "aria-label": "Manage agent hooks", title: "Manage configured hooks in Setup & settings" }));
   root.replaceChildren(el("a", { href: "#page", class: "skip-link", onClick: event => {
     event.preventDefault(); document.querySelector("#page").focus({ preventScroll: true });
   } }, "Skip to content"), sidebar, el("div", { class: "workspace" }, topbar,
     el("main", { id: "page", tabindex: "-1" })));
+  // Agent names can wrap in narrow windows. Keep anchored/focused content
+  // clear of the sticky header without reading layout during render.
+  new ResizeObserver(([entry]) => {
+    const height = entry.borderBoxSize?.[0]?.blockSize;
+    if (height) document.documentElement.style.setProperty("--topbar-height", `${height}px`);
+  }).observe(topbar);
   updateChrome();
 }
 function updateChrome() {
@@ -229,9 +239,26 @@ function updateChrome() {
     node.classList.toggle("active", href === "/" ? state.route === "/" : state.route.startsWith(href));
     node.setAttribute("aria-current", node.classList.contains("active") ? "page" : "false");
   });
-  const label = document.querySelector("#collection-label");
-  if (label) label.textContent = state.status.collector.recording ?
-    (state.status.collector.phase === "collecting" ? "Collecting local activity…" : "Local capture on") : "Capture paused";
+  const online = state.connected !== false;
+  const label = document.querySelector("#app-status-label");
+  if (label) label.textContent = online ? "ADR is running" : "App connection lost";
+  document.querySelector(".status-dot")?.classList.toggle("offline", !online);
+  const configured = state.status.hooks.filter(hook => hook.installed);
+  const agents = document.querySelector("#configured-agents");
+  if (agents) {
+    agents.hidden = !online;
+    const signature = JSON.stringify(configured.map(hook => [hook.harness, hook.name]));
+    if (agents.dataset.agents !== signature) {
+      agents.dataset.agents = signature;
+      agents.setAttribute("aria-label", configured.length ?
+        `Manage agent hooks for ${configured.map(hook => hook.name).join(", ")}` : "Set up agent hooks");
+      agents.replaceChildren(
+        el("span", { class: "configured-label" }, configured.length ? "Agent hooks" : "Set up agent hooks"),
+        ...configured.map(hook => el("span", { class: `hook-chip ${sourceClass(hook.harness)}`, translate: "no" },
+          el("span", { class: "hook-chip-dot", "aria-hidden": "true" }), hook.name)),
+        ...(configured.length ? [] : [icon("chevron")]));
+    }
+  }
   document.querySelectorAll("[data-capture-toggle]").forEach(toggle => {
     const local = toggle.dataset.captureToggle === "local" ? "local capture" : "capture";
     toggle.replaceChildren(icon(state.status.collector.recording ? "pause" : "play"),
@@ -352,7 +379,7 @@ function sessionRow(item, { query = "" } = {}) {
       el("div", { class: "session-row-context" },
         el("span", { class: "session-project", title: item.project || "", translate: "no" },
           icon("folder"), sessionProjectName(item.project)),
-        el("span", { class: "session-agent" }, sourceName(item.source))),
+        el("span", { class: `session-agent ${sourceClass(item.source)}`, translate: "no" }, sourceName(item.source))),
       el("div", { class: "session-row-title" }, el("strong", {}, markedSessionText(item.title || "Untitled session", query)),
         item.kind === "subagent" && tag("Sub-agent"),
         (item.kind === "fork" || item.forked_from) && tag("Fork")),
@@ -840,7 +867,8 @@ async function sessionPage(identifier) {
       return el("article", { class: `message ${message.role === "user" ? "user-message" : ""}`,
         id: `message-${block.index}`, tabindex: "-1" },
       el("header", {}, el("span", { class: "message-avatar", "aria-hidden": "true" }, message.role === "user" ? "You" : "AI"),
-        el("strong", {}, message.role === "user" ? "You" : assistant ? sourceName(item.source) : message.role || "Message"),
+        el("strong", { class: assistant ? `message-agent ${sourceClass(item.source)}` : "" },
+          message.role === "user" ? "You" : assistant ? sourceName(item.source) : message.role || "Message"),
         assistant && button("Copy answer", async () => {
           try { await navigator.clipboard.writeText(String(message.content)); notice("Answer copied"); }
           catch { notice("Couldn’t copy. Select the answer text and copy it manually.", true); }
@@ -883,7 +911,7 @@ async function sessionPage(identifier) {
       item.project && link(`More in ${sessionProjectName(item.project)}`,
         sessionsURL({ ...sessionQueryState(""), project: item.project }), "back-link")),
     el("header", { class: "session-detail-heading" },
-      el("div", { class: "session-detail-agent" }, sourceMark(item.source), sourceName(item.source),
+      el("div", { class: `session-detail-agent ${sourceClass(item.source)}` }, sourceMark(item.source), sourceName(item.source),
         item.kind === "subagent" && tag("Sub-agent"), (item.kind === "fork" || item.forked_from) && tag("Fork")),
       el("h1", {}, item.title || "Untitled session"),
       el("p", { class: "session-detail-project", translate: "no" }, icon("folder"), item.project || "Project path not reported"),
@@ -1340,6 +1368,15 @@ function field(label, input, help) {
     input.tagName === "SELECT" ? selectControl(input) : input,
     help && el("small", { id: `${identifier}-help` }, help));
 }
+function checkboxField(label, input, help) {
+  const identifier = `adr-field-${++nextFieldId}`;
+  input.id = identifier;
+  input.setAttribute("aria-labelledby", `${identifier}-label`);
+  if (help) input.setAttribute("aria-describedby", `${identifier}-help`);
+  return el("label", { class: "checkbox-field", for: identifier }, input,
+    el("span", { class: "checkbox-copy" }, el("span", { id: `${identifier}-label` }, label),
+      help && el("small", { id: `${identifier}-help` }, help)));
+}
 function selectControl(input) {
   // Keep native keyboard, touch-picker, form and screen-reader behavior.
   return el("span", { class: "select-control" }, input, icon("chevron", "select-chevron"));
@@ -1449,7 +1486,7 @@ function connectADR() {
 function agentIntegrationCard() {
   const agents = state.status.hooks;
   const ready = agents.filter(hook => hook.vault_connected && !hook.needs_update);
-  return card("Agent connections", "Let agents search your captured history, use saved credentials, and check tool requests against your rules. Local capture works without a connection.",
+  return card("Protection", "Configure ADR in your agents. Hooks, conversation search, and saved credentials use one integration.",
     el("div", { class: "integration-heading" },
       el("p", { class: "small muted" }, ready.length ?
         `${ready.map(hook => hook.name).join(", ")} configured. New credentials are available without reconnecting.` :
@@ -1471,21 +1508,13 @@ function agentIntegrationCard() {
           await api(`/integrations/${hook.harness}/disconnect`, { method: "POST", timeout: 180000 });
           notice("ADR disconnected");
         }, "Disconnect"), { variant: "icon-button", symbol: "close", "aria-label": `Disconnect ${hook.name}` })))),
-    el("p", { class: "small muted" }, "Restart agents after setup and review their trust prompts. “Configured” means setup is saved; hook activity confirms that an agent has contacted ADR."));
-}
-function agentConnectionSummary({ vault = false } = {}) {
-  const connected = state.status.hooks.filter(hook => vault ? hook.vault_connected : hook.installed);
-  const reported = connected.filter(hook => hook.last_event).length;
-  const updates = connected.filter(hook => hook.needs_update).length;
-  return el("section", { class: "connection-summary", "aria-label": "Agent connection status" },
-    icon("shield"), el("div", {}, el("strong", {},
-      connected.length ? `${connected.length} agent${connected.length === 1 ? "" : "s"} configured` : "Connect an agent to use this feature"),
-    el("p", { class: "small muted" }, connected.length ?
-      (vault ? "Saved variables are available to these connections. " : "") +
-      (updates ? `${updates} connection${updates === 1 ? " needs" : "s need"} an update. ` : "") +
-      (reported ? `Hook activity received from ${reported}.` : "No hook activity yet. Restart your agent after setup.") :
-      "Manage connections once in Setup & settings. Your saved rules and credentials stay here.")),
-    el("a", { id: "manage-agent-connections", href: "/settings", class: "button", onClick: routeClick }, "Manage agent connections"));
+    el("p", { class: "small muted" }, "Restart agents after setup and review their trust prompts. “Configured” means setup is saved; hook activity confirms that an agent has contacted ADR."),
+    settingsDisclosure("prompt-protection", "Prompt protection", "Which agents can stop pasted credentials",
+      el("p", { class: "small muted" },
+        "Updated, trusted Claude Code and Codex hooks can stop recognized credentials before submission. Save the value in Credential vault and use its variable name instead."),
+      el("p", { class: "small muted" },
+        "Other agents can use ADR vault commands, but their prompt-submission paths are not protected by ADR yet.")),
+    artifactListSettings());
 }
 async function protectionPage() {
   const [policy, events, starter] = await Promise.all([
@@ -1496,9 +1525,6 @@ async function protectionPage() {
   const customRules = policy.rules.filter(rule => rule.preset !== starter.id);
   const starterRules = policy.rules.filter(rule => rule.preset === starter.id);
   const connected = state.status.hooks.filter(hook => hook.installed);
-  const seen = connected.some(hook => hook.last_event);
-  const statusText = !connected.length ? "Not connected" : !policy.enabled ? "Protection paused" :
-    seen ? "Hooks reporting" : "Setup saved · restart your agent";
   const currentReview = policy.strict_execution ? policy.opaque_tools : "off";
   const executionReview = el("select", {
     "aria-label": "Command and unknown-tool review",
@@ -1519,18 +1545,13 @@ async function protectionPage() {
   el("option", { value: "block" }, "Block"));
   executionReview.value = currentReview;
   return [
-    pageHeading("PROTECTION", "File protection", "Connect your agent, then choose which files it must leave alone.",
+    pageHeading("PROTECTION", "File protection", "Choose which files an agent should ask about or leave alone.",
       button("Protect a path", ruleDialog, { variant: "primary", symbol: "plus" })),
-    el("div", { class: `banner ${connected.length && policy.enabled && seen ? "secure" : "warning"}` },
-      icon("shield"), el("div", {}, el("strong", {}, statusText), el("p", {},
-        !connected.length ? `${policy.rules.length ? "Your saved rules are not active yet. " : ""}Connect an agent in Setup & settings. Rules do not protect agents without an ADR hook.` :
-          !policy.enabled ? "Your rules are saved, but file protection is paused." :
-            "Restart an agent after connecting or updating its hook. Its first tool request confirms the connection."))),
-    agentConnectionSummary(),
     starterProtectionCard(starter),
-    card("Your file rules", connected.length ? "Block takes priority when rules overlap." : "Saved only. Connect an agent to enforce these rules.",
-      el("div", { class: "card-controls" }, tag(!connected.length ? "Not active · no connection" :
-        policy.enabled ? "Rules ready" : "File rules paused", connected.length && policy.enabled ? "green" : "amber"),
+    card("Your file rules", policy.enabled ? "Block takes priority when rules overlap." :
+      "Your rules are saved, but file protection is paused.",
+      el("div", { class: "card-controls" }, tag(policy.enabled ? "Rules enabled" : "File rules paused",
+        policy.enabled ? "neutral" : "amber"),
         button(policy.enabled ? "Pause file rules" : "Enable file rules", async () => {
           await perform(() => api("/protection", { method: "PATCH", body: { enabled: !policy.enabled } })); render();
         }, { variant: "quiet" })),
@@ -1556,9 +1577,7 @@ async function protectionPage() {
           item.credential_kinds?.length > 0 && link("Set up safe use in Credential vault", "/credentials")),
         tag(item.decision === "deny" ? "Blocked" : item.decision === "ask" ? "Approval requested" : "Allowed after approval",
           item.decision === "deny" ? "red" : item.decision === "ask" ? "amber" : "green"),
-        muted(ago(item.timestamp))))) : el("div", { class: "small-empty" },
-          connected.length > 0 ? "No blocks or approval requests yet." :
-            "Connect an agent to see blocks and approval requests here.")),
+        muted(ago(item.timestamp))))) : el("div", { class: "small-empty" }, "No blocks or approval requests yet.")),
   ];
 }
 const threatKindLabels = {
@@ -1659,12 +1678,47 @@ function threatImportDialog(document, preview) {
       notice("Threat list imported");
     });
 }
+function artifactListSettings() {
+  const errors = el("p", { class: "error-text threat-action-error", role: "alert", hidden: "", tabindex: "-1" });
+  const busy = el("span", { class: "small muted", role: "status" });
+  const fileInput = el("input", { type: "file", name: "threat-list", autocomplete: "off", accept: ".json,application/json",
+    "aria-label": "Choose a local threat list", hidden: "" });
+  const choose = button("Import local list", () => fileInput.click(), { id: "import-artifact-list", symbol: "file" });
+  let pending = false;
+  fileInput.addEventListener("change", async () => {
+    const file = fileInput.files?.[0];
+    fileInput.value = "";
+    if (!file || pending) return;
+    pending = true; state.threatsPending = true;
+    choose.disabled = true; fileInput.disabled = true; errors.hidden = true;
+    busy.textContent = "Reviewing the local list…";
+    try {
+      if (file.size > 512 * 1024) throw new Error("Choose a JSON threat list no larger than 512 KiB.");
+      const document = await file.text(), current = await api("/threats");
+      const preview = await api("/threats/import/preview", { method: "POST", body: {
+        document, expected_revision: current.revision,
+      } });
+      if (state.route === "/settings") threatImportDialog(document, preview);
+    } catch (error) {
+      if (errors.isConnected) {
+        errors.textContent = error.message; errors.hidden = false; errors.focus();
+      } else notice(error.message, true);
+    } finally {
+      pending = false; state.threatsPending = false;
+      choose.disabled = false; fileInput.disabled = false; busy.textContent = "";
+    }
+  });
+  return settingsDisclosure("artifact-lists", "Custom artifact list", "Optional intelligence alongside ADR’s bundled list",
+    el("p", { class: "small muted" },
+      "Choose a reviewed JSON list of malicious artifact identities. Preview changes before applying them. The file stays on this device."),
+    el("div", { class: "threat-import-actions" }, choose, fileInput,
+      el("span", { class: "small muted" }, "JSON · up to 512 KiB")),
+    busy, errors);
+}
 async function threatsPage() {
   const data = await api("/threats");
   const feed = data.feed || {}, scan = data.scan || {};
   const findings = scan.findings || [], blocks = data.blocks || [];
-  const hooks = (state.status.hooks || []).filter(hook => hook.installed);
-  const reported = hooks.filter(hook => hook.last_event);
   const errors = el("p", { class: "error-text threat-action-error", role: "alert", hidden: "", tabindex: "-1" });
   const busy = el("span", { class: "small muted", role: "status", "aria-live": "polite" });
   let pending = false;
@@ -1689,7 +1743,7 @@ async function threatsPage() {
     }
   };
   const refresh = async () => { await loadStatus(); if (state.route === "/threats") await render(); };
-  const toggle = button(data.enabled ? "On" : "Off", () => run(async () => {
+  const toggle = button(data.enabled ? "Blocking on" : "Blocking off", () => run(async () => {
     await api("/threats", { method: "PATCH", body: {
       enabled: !data.enabled, expected_revision: data.revision,
     } });
@@ -1705,23 +1759,7 @@ async function threatsPage() {
     notice("Installed-item check finished");
     await refresh();
   }, "Checking local items…"), { symbol: "refresh" });
-  const fileInput = el("input", { type: "file", name: "threat-list", autocomplete: "off", accept: ".json,application/json",
-    "aria-label": "Choose a local threat list", hidden: "" });
-  fileInput.addEventListener("change", () => {
-    const file = fileInput.files?.[0];
-    fileInput.value = "";
-    if (!file) return;
-    run(async () => {
-      if (file.size > 512 * 1024) throw new Error("Choose a JSON threat list no larger than 512 KiB.");
-      const document = await file.text();
-      const preview = await api("/threats/import/preview", { method: "POST", body: {
-        document, expected_revision: data.revision,
-      } });
-      if (state.route === "/threats") threatImportDialog(document, preview);
-    }, "Reviewing the local list…");
-  });
-  const importButton = button("Import local list", () => fileInput.click(), { symbol: "file" });
-  controls.push(toggle, check, importButton);
+  controls.push(toggle, check);
   const stateLabel = feed.state === "ready" ? "Feed loaded" :
     feed.state === "empty" ? "No active indicators" : "Feed needs attention";
   const checked = scan.state && scan.state !== "not_run";
@@ -1743,21 +1781,25 @@ async function threatsPage() {
       `Custom list imported ${time(feed.imported_at)}.` : "No custom list imported."),
     feed.generation && el("p", { class: "small muted" }, "Active generation: ",
       el("code", { class: "path" }, feed.generation)));
-  const feedCard = card("Your local threat feed", "Exact identities from the bundled feed and your optional custom list.",
+  const feedCard = el("details", { class: "card threat-feed-card", "data-view-key": "threat-intelligence" },
+    el("summary", {}, el("strong", {}, "Threat intelligence"),
+      el("span", { class: "small muted" }, `${number(feed.counts?.total)} active indicators`)),
     el("div", { class: "threat-feed-heading" },
       tag(stateLabel, feed.state === "ready" ? "neutral" : "amber"),
       el("span", { class: "small muted" },
         `${number(feed.counts?.total)} active indicators · ${number(feed.counts?.package_versions)} specific package releases`)),
     threatCounts(feed.counts),
-    feed.error && el("p", { class: "error-text", role: "alert" }, feed.error),
-    feed.state === "empty" && el("p", { class: "small muted" },
-      "This feed has no active identities to match. An enabled switch alone cannot produce threat matches."),
     el("p", { class: "small muted threat-feed-note" },
       "A zero count means this feed has no indicators of that type. Items not on the list can still be harmful."),
     feedDetails,
-    el("div", { class: "threat-import-actions" }, importButton, fileInput,
-      el("span", { class: "small muted" }, "JSON · up to 512 KiB · reviewed before import")));
-  const scanCard = card("Matches on this device", "Items that match your list. Attempts stopped by ADR appear in Blocked activity below.",
+    el("details", { class: "threat-details threat-coverage", "data-view-key": "threat-coverage" },
+      el("summary", {}, "What these checks cover"),
+      el("p", { class: "small muted" },
+        "Checks cover supported tool requests, literal package commands, direct file reads, and resolvable MCP calls. They are not an operating-system sandbox."),
+      el("p", { class: "small muted" },
+        "Automatic skill loading, MCP server startup, arbitrary scripts, and transitive dependencies are not fully covered. Blocking a call cannot undo a server’s startup activity.")),
+    link("Manage custom intelligence in Setup & settings", "/settings", "threat-inventory-link"));
+  const scanCard = card("Matches on this device", "Check installed skills, packages, and MCP servers against known-malicious identities.",
     el("div", { class: "threat-check-actions" }, check,
       el("span", { class: "small muted" }, "A bounded local check. No installs, uploads, or file changes.")),
     scanSummary,
@@ -1781,28 +1823,18 @@ async function threatsPage() {
   const blocksCard = card("Blocked activity", "Agent operations stopped because they matched a known-malicious artifact.",
     blocks.length ? threatPages(blocks, threatBlock, "blocks") :
       el("div", { class: "small-empty" }, "No artifact blocks recorded. This does not mean every operation was checked."));
+  const heading = pageHeading("PROTECTION", "Malicious artifacts",
+    "Check and block known-malicious artifacts in supported agent operations.", toggle);
+  heading.querySelector("p").id = "threat-toggle-help";
   return [
-    pageHeading("PROTECTION", "Malicious artifacts", "Block known-malicious skills, MCP servers, packages, and files in supported agent operations."),
-    el("section", { class: "card threat-control", "aria-label": "Artifact blocking preference" },
-      el("div", { class: "threat-control-row" },
-        el("div", {}, el("h2", {}, "Block known-malicious artifacts"),
-          el("p", { id: "threat-toggle-help", class: "small muted" }, data.enabled ?
-            "On for supported operations. File protection and credential checks keep their own settings." :
-            "Artifact blocking is off. File protection and credential checks keep their own settings.")),
-        toggle),
-      el("div", { class: "threat-connection-note" }, icon(hooks.length ? "activity" : "alert"),
-        el("p", { class: "small muted" }, !hooks.length ?
-          ["No agent hook is connected. ", link("Connect an agent", "/protection"), " to check supported operations."] :
-          reported.length ? `${number(reported.length)} of ${number(hooks.length)} configured agent hooks have reported. A report is not proof that every operation is covered.` :
-            "Hook configuration is saved. Restart your agent; no hook has reported yet.")),
-      el("details", { class: "threat-details threat-coverage", "data-view-key": "threat-coverage" },
-        el("summary", {}, "What these checks cover"),
-        el("p", { class: "small muted" },
-          "Checks cover supported tool requests, literal package commands, direct file reads, and resolvable MCP calls. They are not an operating-system sandbox."),
-        el("p", { class: "small muted" },
-          "Automatic skill loading, MCP server startup, arbitrary scripts, and transitive dependencies are not fully covered. Blocking a call cannot undo a server’s startup activity."))),
+    heading,
     el("div", { class: "threat-action-status" }, busy, errors),
-    feedCard, scanCard, blocksCard,
+    feed.state !== "ready" && el("div", { class: "banner warning", role: "status" }, icon("alert"),
+      el("div", {}, el("strong", {}, stateLabel),
+        el("p", {}, feed.error || (feed.state === "empty" ?
+          "This list has no active indicators. An enabled switch alone cannot produce matches." :
+          "The local intelligence needs attention. Review its details below.")))),
+    scanCard, blocksCard, feedCard,
     el("p", { class: "threat-privacy small muted" }, icon("lock"),
       "Matching stays on this device. ADR does not upload files, hashes, inventory, or reports. This feed has no automatic network updater."),
   ];
@@ -1849,16 +1881,16 @@ async function reviewSettingsDialog(data) {
     const idleOptions = el("div", { class: "review-idle-options" },
       field("Idle minutes before starting", numeric("idle_minutes", saved.idle_minutes, 5, 120)),
       el("fieldset", { class: "review-projects" }, el("legend", {}, "Projects for idle reviews"),
-        ...(filters.projects || []).slice(0, 30).map(item => field(shortPath(item.project),
+        ...(filters.projects || []).slice(0, 30).map(item => checkboxField(shortPath(item.project),
           el("input", { type: "checkbox", name: "projects", value: item.project,
             checked: saved.projects.includes(item.project) }), item.project)),
         !(filters.projects || []).length && el("p", { class: "small muted" }, "Capture sessions to choose their projects.")));
     const showIdle = () => { idleOptions.hidden = !background.checked; };
     background.addEventListener("change", showIdle); showIdle();
     fields.append(spare,
-      field("Review while idle", background, "Wait for device inactivity and pause when you return."),
+      checkboxField("Review while idle", background, "Wait for device inactivity and pause when you return."),
       idleOptions,
-      field("Allow configured API or managed access", el("input", {
+      checkboxField("Allow configured API or managed access", el("input", {
         type: "checkbox", name: "allow_paid", checked: saved.allow_paid,
       }), "This permits API/managed sign-ins. Your CLI’s billing and extra-usage settings still apply, including on subscriptions. ADR never buys credits or switches authentication."),
     );
@@ -1868,7 +1900,7 @@ async function reviewSettingsDialog(data) {
     advancedBody.append(dollars, el("p", { class: "small muted" },
       "Claude receives --max-budget-usd. Its reported model cost may differ from a subscription bill, and an in-flight response can overshoot. Codex uses token and time limits; no dollar cap is claimed."));
     fields.append(advanced,
-      field("I approve sending selected session evidence through this agent", el("input", {
+      checkboxField("I approve sending selected session evidence through this agent", el("input", {
         type: "checkbox", name: "confirm_data_share", required: "",
       }), "The configured model provider receives the evidence, including history captured from other agents. Reviews cannot change repositories or use the ADR vault."),
     );
@@ -2272,21 +2304,26 @@ async function credentialsPage() {
   const usedBy = id => access.filter(item => !item.revoked && item.credentials.includes(id));
   const recent = requests.items.filter(item => item.state !== "pending").slice(0, 8);
   const executionAccess = agents.items.filter(item => item.kind === "execution");
-  const vaultAgents = state.status.hooks.filter(hook => hook.vault_connected);
-  const promptAgents = state.status.hooks.filter(hook => hook.prompt_check).map(hook => hook.name);
   const storageById = new Map((storage.entries || []).map(item => [item.id, item]));
   const missing = [...environment.items, ...credentials.items].filter(item =>
     item.state === "active" && storageById.get(item.id)?.state === "missing");
   const interrupted = item => ["preparing", "unconfirmed", "error"].includes(item.state);
   const storageReady = item => item.state === "active" && storageById.get(item.id)?.state === "available";
+  const storageNeedsAttention = credentials.available && (!storage.available ||
+    [...environment.items, ...credentials.items].some(item => item.state !== "revoked" &&
+      (!storageReady(item) || interrupted(item))));
+  const storageControls = el("details", { class: "vault-storage-controls", "data-view-key": "vault-storage", open: storageNeedsAttention },
+    el("summary", {}, "Storage & recovery"),
+    el("p", { class: "small muted" },
+      "Entries update after you save, remove, or recover a credential. Recheck storage after an interrupted save or restoring local files."),
+    button("Refresh storage", () => render(), { id: "refresh-vault-storage", variant: "quiet", symbol: "refresh" }));
   const storageExplanation = item => {
     const stored = storageById.get(item.id);
     if (interrupted(item) && (!stored || ["available", "missing"].includes(stored.state))) return stored?.state === "available" ?
       "A valid local copy was found. Recover this entry without deleting or replacing it." :
       "The save was not confirmed. Finish any open save window, then refresh storage. Existing copies are kept.";
     if (stored?.state === "available") return !item.env_name ?
-      "Encrypted local copy ready. Existing service permissions still apply." :
-      vaultAgents.length ? "Available to connected agents" : "Connect an agent in Setup & settings to use this variable";
+      "Encrypted local copy ready. Existing service permissions still apply." : "Encrypted local copy ready.";
     if (stored?.state === "missing") return "No local copy yet. Move an older Keychain entry or save the value again.";
     return ({
       local_vault_key_missing: "The local vault key is missing. Restore the complete vault backup; do not create a replacement key.",
@@ -2365,7 +2402,6 @@ async function credentialsPage() {
       icon("alert"), el("div", {}, el("strong", {}, "Vault storage could not be checked"),
         el("p", {}, "Your entries are still listed below. Refresh after any pending vault operation finishes."))),
     card("Saved environment variables", "For passwords, tokens, keys, and code that reads credentials from its environment.",
-      button("Refresh storage", () => render(), { variant: "quiet", symbol: "refresh" }),
       environment.items.length ? el("div", {}, ...environment.items.map(item =>
         el("div", { class: "credential-row environment-row" }, el("span", { class: "credential-icon" }, icon("key")),
           el("div", { class: "rule-main" }, el("strong", {}, item.name),
@@ -2382,8 +2418,8 @@ async function credentialsPage() {
             await api(`/environment-credentials/${item.id}`, { method: "DELETE" }); notice("Credential removed");
           }, "Remove credential"), { variant: "icon-button", symbol: "trash", "aria-label": `Remove ${item.name}` })))) :
         empty("Keep the value out of the conversation", "Save a credential once. Agents connected through ADR can use its variable name.",
-          button("Add your first credential", credentialDialog, { symbol: "plus", disabled: !environment.available }))),
-    agentConnectionSummary({ vault: true }),
+          button("Add your first credential", credentialDialog, { symbol: "plus", disabled: !environment.available })),
+      storageControls),
     environment.recent_runs?.length > 0 && card("Recent credential use",
       "Open a session to see the conversation behind a credential use. Links appear once the session is captured.",
       ...environment.recent_runs.map(item => el("div", { class: "activity-row credential-use-row" }, icon("terminal"),
@@ -2406,10 +2442,6 @@ async function credentialsPage() {
       el("summary", {}, "Older manual connections"),
       el("p", { class: "small muted" }, "These keep their original permissions. The ADR plugin does not need them."),
       ...executionAccess.map(connectionRow)),
-    el("div", { class: "banner info" }, icon("shield"), el("div", {},
-      el("strong", {}, promptAgents.length ? `Prompt checks configured for ${promptAgents.join(", ")}` : "Connect prompt protection"),
-      el("p", {}, "Updated Claude Code and Codex integrations can stop recognized credentials before submission. Save the value here, replace it with $VARIABLE, then submit again."),
-      el("p", { class: "small muted" }, "Other connected agents can use vault commands, but their prompt-submission paths are not protected by ADR yet."))),
     environment.prompt_blocks.length > 0 && card("Prompts stopped", "Submitted text and credential values are not stored in this activity list.",
       ...environment.prompt_blocks.slice(0, 5).map(item => el("div", { class: "activity-row" }, icon("shield"),
         el("div", {}, el("strong", {}, `${item.harness === "vault" ? "Vault command" : sourceName(item.harness)} · ${JSON.parse(item.kinds).join(", ")}`),
@@ -2449,7 +2481,7 @@ async function credentialsPage() {
           "Multiline values work as environment text. Code can read and parse them. ADR does not yet create credential files or provide an SSH signing agent; a tool that needs a file or socket still needs an adapter."),
         el("p", {}, el("strong", {}, "Do I need hooks? "),
           "The same ADR plugin includes vault commands and hooks. Command output is filtered inside ADR. Blocking pasted prompts requires the plugin’s trusted Claude Code or Codex hook. Other agents can use vault commands without prompt blocking.",
-          !connected && " ", !connected && link("Set up file protection", "/protection")),
+          !connected && " ", !connected && link("Set up agent protection", "/settings")),
         el("p", {}, el("strong", {}, "What if I paste a secret into a chat? "),
           "Supported prompt hooks check saved values, common key formats, and explicit password assignments. On a match, submission stops and asks you to save the value here. ADR does not automatically import it or resubmit the prompt. Unlabeled, unfamiliar passwords cannot always be recognized."),
         el("p", {}, el("strong", {}, "Can a program read the actual value? "),
@@ -2683,6 +2715,11 @@ async function boot() {
       const result = await api("/auth/bootstrap", { method: "POST", body: { ticket: decodeURIComponent(match[1]) } });
       state.csrf = result.csrf;
     } else state.csrf = (await api("/auth/session")).csrf;
+    if (!match && history.state?.adrView?.route === state.route) {
+      const saved = history.state.adrView;
+      pendingView = { route: state.route, x: saved.x || 0, y: saved.y || 0,
+        disclosures: saved.disclosures || [], restore: true, focus: saved.sessionFocus?.selector || "" };
+    }
     await loadStatus(); shell(); await render();
     setInterval(async () => {
       try {
@@ -2701,7 +2738,7 @@ async function boot() {
           || (state.route === "/reviews" && JSON.stringify(old.reviews) !== JSON.stringify(state.status.reviews))
           || (["/", "/settings"].includes(state.route) && JSON.stringify(old.settings) !== JSON.stringify(state.status.settings))
         )) await render();
-      } catch { document.querySelector("#collection-label").textContent = "App connection lost"; }
+      } catch { state.connected = false; updateChrome(); }
     }, 4000);
   } catch (error) { disconnected(error.message); }
 }

@@ -26,9 +26,11 @@ collection or search implementation.
 
 ## Connect
 
-Keep ADR running and choose **Setup & settings → Connect installed agents**.
-File protection and Credential vault link to this shared setup page. Local
-capture is independent and does not need an agent connection. The equivalent CLI is:
+Keep ADR running and choose **Setup & settings → Protection → Connect installed agents**.
+The top bar lists agents with configured hooks and links to this shared setup;
+it does not claim that all hooks are loaded or every operation is protected.
+Detailed connection status stays in setup, not on individual protection pages.
+Local capture is independent and does not need an agent connection. The equivalent CLI is:
 
 ```sh
 adr-desktop connect all --allow-agent-access

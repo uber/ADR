@@ -122,9 +122,16 @@ def seed_threats(runtime):
 def _open(page):
     page.locator('a[data-route="/threats"]').click()
     page.get_by_role("heading", name="Malicious artifacts", exact=True).wait_for()
+    expect(page.locator("#page")).to_have_attribute("aria-busy", "false")
 
 
 def _upload(page, document):
+    page.locator('a[data-route="/settings"]').click()
+    page.get_by_role("heading", name="Setup & settings", exact=True).wait_for()
+    expect(page.locator("#page")).to_have_attribute("aria-busy", "false")
+    lists = page.locator('details[data-view-key="artifact-lists"]')
+    if lists.get_attribute("open") is None:
+        lists.locator("summary").click()
     with page.expect_file_chooser() as chosen:
         page.get_by_role("button", name="Import local list", exact=True).click()
     chosen.value.set_files({
@@ -134,9 +141,7 @@ def _upload(page, document):
 
 
 def _refresh(page):
-    page.get_by_role("button", name="Refresh", exact=True).click()
-    expect(page.locator("#page")).to_have_attribute("aria-busy", "false")
-    page.get_by_role("heading", name="Malicious artifacts", exact=True).wait_for()
+    _open(page)
 
 
 def _fits(page):
@@ -167,6 +172,11 @@ def check_threats(page, runtime, screenshots):
     expect(page.locator(".threat-block")).to_have_count(1)
     expect(page.locator(".threat-finding").get_by_text("Blocked", exact=True)).to_have_count(0)
     expect(page.locator(".threat-block a")).to_have_count(0)
+    expect(page.get_by_role("button", name="Import local list", exact=True)).to_have_count(0)
+    expect(page.locator(".threat-connection-note")).to_have_count(0)
+    expect(page.locator(".topbar button")).to_have_count(0)
+    expect(page.get_by_text("A zero count means", exact=False)).to_be_hidden()
+    page.locator(".threat-feed-card > summary").click()
     expect(page.get_by_text("A zero count means", exact=False)).to_be_visible()
     switch.focus()
     switch.press("Space")
@@ -211,6 +221,7 @@ def check_threats(page, runtime, screenshots):
     _upload(page, imported)
     modal.get_by_role("button", name="Import list", exact=True).click()
     expect(modal).to_have_count(0)
+    _open(page)
     expect(page.get_by_text("These results need a new check", exact=True)).to_be_visible()
     assert runtime.threats.status()["feed"]["generation"] != generation
     pending_checks = []
@@ -224,7 +235,7 @@ def check_threats(page, runtime, screenshots):
         check_button.click()
         expect(check_button).to_be_disabled()
         expect(switch).to_be_disabled()
-        expect(page.get_by_role("button", name="Import local list", exact=True)).to_be_disabled()
+        expect(page.get_by_role("button", name="Import local list", exact=True)).to_have_count(0)
         assert len(pending_checks) == 1
         pending_checks.pop().continue_()
         expect(check_button).to_be_enabled()
@@ -310,11 +321,12 @@ def check_threat_display_states(page, runtime, screenshots):
 
         fixture["feed"].update(state="empty", counts={key: 0 for key in status["feed"]["counts"]})
         _refresh(page)
-        expect(page.get_by_text("No active indicators", exact=True)).to_be_visible()
+        expect(page.locator(".banner").get_by_text("No active indicators", exact=True)).to_be_visible()
+        page.locator(".threat-feed-card > summary").click()
         expect(page.locator(".threat-counts dd")).to_have_text(["0"] * 5)
         fixture["feed"].update(state="degraded", error="Synthetic local feed could not be read.")
         _refresh(page)
-        expect(page.get_by_text("Feed needs attention", exact=True)).to_be_visible()
+        expect(page.locator(".banner").get_by_text("Feed needs attention", exact=True)).to_be_visible()
         expect(page.get_by_text("Synthetic local feed could not be read.", exact=True)).to_be_visible()
 
         fixture = copy.deepcopy(status)

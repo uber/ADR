@@ -75,7 +75,10 @@ def check_passive_setup(page, runtime, writes, shots):
     page.screenshot(path=str(shots / "first-run-overview.png"), full_page=True)
     page.get_by_role("link", name="Set up ADR", exact=True).click()
     page.get_by_role("heading", name="Setup & settings", exact=True).wait_for()
-    expect(page.get_by_role("heading", name="Agent connections", exact=True)).to_be_visible()
+    expect(page.get_by_role("heading", name="Protection", exact=True)).to_be_visible()
+    expect(page.locator(".topbar button")).to_have_count(0)
+    expect(page.locator("#configured-agents")).to_have_text("Set up agent hooks")
+    expect(page.locator(".local-note")).not_to_contain_text("Agent reviews")
     expect(page.get_by_label("Capture interval", exact=True)).to_be_hidden()
     expect(page.get_by_role("button", name="Open Full Disk Access", exact=True)).to_be_hidden()
     expect(page.get_by_role("button", name="Delete history", exact=True)).to_be_hidden()
@@ -92,7 +95,9 @@ def check_passive_setup(page, runtime, writes, shots):
         expect(page.locator("#page")).to_have_attribute("aria-busy", "false")
         if route in ("/protection", "/credentials"):
             expect(page.get_by_role("button", name="Connect installed agents", exact=True)).to_have_count(0)
-            page.get_by_role("link", name="Manage agent connections", exact=True).click()
+            expect(page.locator(".connection-summary")).to_have_count(0)
+            expect(page.locator("#page")).not_to_contain_text("Hook activity")
+            page.locator("#configured-agents").click()
             page.get_by_role("heading", name="Setup & settings", exact=True).wait_for()
             expect(page.locator("h1")).to_be_focused()
             page.go_back()
@@ -116,7 +121,7 @@ def check_passive_setup(page, runtime, writes, shots):
     page.reload()
     page.get_by_role("heading", name="Your agents, at a glance", exact=True).wait_for()
     expect(page.locator(".welcome")).to_have_count(0)
-    expect(page.get_by_role("button", name="Start capture", exact=True)).to_be_visible()
+    expect(page.locator(".topbar button")).to_have_count(0)
 
 
 def check_capture(page, runtime):
@@ -130,7 +135,7 @@ def check_capture(page, runtime):
         page.get_by_role("button", name="Start local capture", exact=True).click()
         expect(page.get_by_role("alert")).to_contain_text("Synthetic capture failure")
         expect(page.get_by_role("button", name="Start local capture", exact=True)).to_be_enabled()
-        expect(page.get_by_role("button", name="Start capture", exact=True)).to_be_enabled()
+        expect(page.locator(".topbar button")).to_have_count(0)
         assert runtime.store.settings()["recording"] is False
     finally:
         page.unroute("**/api/collector/start", reject)
@@ -140,15 +145,13 @@ def check_capture(page, runtime):
     try:
         page.get_by_role("button", name="Start local capture", exact=True).click()
         expect(page.get_by_role("button", name="Start local capture", exact=True)).to_be_disabled()
-        header = page.get_by_role("button", name="Start capture", exact=True)
-        expect(header).to_be_disabled()
-        header.dispatch_event("click")
-        assert len(held) == 1, "Both controls must share the in-flight capture action"
+        page.get_by_role("button", name="Start local capture", exact=True).dispatch_event("click")
+        assert len(held) == 1, "A pending capture action must not be submitted twice"
         with page.expect_response("**/api/collector/start"):
             held[0].continue_()
         expect(page.get_by_role("button", name="Pause local capture", exact=True)).to_be_enabled()
         expect(page.get_by_role("button", name="Pause local capture", exact=True)).to_be_focused()
-        expect(page.get_by_role("button", name="Pause capture", exact=True)).to_be_enabled()
+        expect(page.locator(".topbar button")).to_have_count(0)
         expect(page.get_by_text("Capture is on", exact=True)).to_be_visible()
         assert runtime.store.settings()["recording"] is True
     finally:
@@ -187,6 +190,7 @@ def check_connections(page, runtime, writes, shots):
     claude = rows.filter(has=page.get_by_text("Claude Code", exact=True))
     expect(claude).to_contain_text("Configured")
     expect(claude).to_contain_text("No hook activity received yet")
+    expect(page.locator("#configured-agents .hook-chip")).to_have_text(["Claude Code"])
     assert len(runtime.store.rows("SELECT id FROM grants WHERE revoked=0")) == 1
     saved_grant = read_receipt(runtime.state_dir, "claude")["grant_id"]
     page.screenshot(path=str(shots / "setup-partial-connections.png"), full_page=True)
@@ -197,6 +201,7 @@ def check_connections(page, runtime, writes, shots):
         consent.get_by_role("button", name="Connect installed agents", exact=True).click()
     expect(consent).to_have_count(0)
     expect(rows.filter(has=page.get_by_text("Codex", exact=True))).to_contain_text("Configured")
+    expect(page.locator("#configured-agents .hook-chip")).to_have_text(["Claude Code", "Codex"])
     assert read_receipt(runtime.state_dir, "claude")["grant_id"] == saved_grant
     assert len(runtime.store.rows("SELECT id FROM grants WHERE revoked=0")) == 2
     assert runtime.store.settings()["recording"] is False
@@ -269,13 +274,19 @@ def check_vault_without_capture(page, runtime):
     page.route("**/api/status", old_hook)
     try:
         page.reload()
-        summary = page.get_by_role("region", name="Agent connection status", exact=True)
-        expect(summary).to_contain_text("2 agents configured")
-        expect(summary).to_contain_text("1 connection needs an update")
-        expect(summary).not_to_contain_text("Connect an agent to use this feature")
+        page.get_by_role("heading", name="Credential vault", exact=True).wait_for()
+        expect(page.locator("#configured-agents .hook-chip")).to_have_text(["Claude Code", "Codex"])
+        expect(page.locator(".connection-summary")).to_have_count(0)
+        expect(page.locator("#page")).not_to_contain_text("agents configured")
+        page.locator("#configured-agents").click()
+        page.get_by_role("heading", name="Setup & settings", exact=True).wait_for()
+        row = page.locator(".integration-list > li").filter(
+            has=page.get_by_text("Claude Code", exact=True)
+        )
+        expect(row).to_contain_text("Update needed")
     finally:
         page.unroute("**/api/status", old_hook)
-    page.reload()
+    page.locator('a[data-route="/credentials"]').click()
     page.get_by_role("heading", name="Credential vault", exact=True).wait_for()
     open_setup(page)
 
@@ -286,7 +297,25 @@ def check_layout(page, shots):
         page.set_viewport_size({"width": width, "height": 900})
         page.emulate_media(color_scheme=scheme, reduced_motion="reduce")
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+        expect(page.locator(".topbar button")).to_have_count(0)
+        expect(page.locator("#configured-agents .hook-chip")).to_have_text(["Claude Code", "Codex"])
+        expect(page.locator(".topbar")).not_to_contain_text("false")
         page.screenshot(path=str(shots / f"setup-{width}-{scheme}.png"), full_page=True)
+
+
+def check_offline_header(page):
+    def offline(route):
+        route.fulfill(status=503, json={"detail": "Synthetic service interruption"})
+
+    page.route("**/api/status", offline)
+    try:
+        expect(page.locator("#app-status-label")).to_have_text("App connection lost", timeout=10000)
+        expect(page.locator("#configured-agents")).to_be_hidden()
+    finally:
+        page.unroute("**/api/status", offline)
+    expect(page.locator("#app-status-label")).to_have_text("ADR is running", timeout=10000)
+    expect(page.locator("#configured-agents")).to_be_visible()
+    expect(page.locator(".topbar button")).to_have_count(0)
 
 
 def main():
@@ -341,6 +370,7 @@ def main():
                     check_connections(page, runtime, writes, shots)
                     check_vault_without_capture(page, runtime)
                     check_layout(page, shots)
+                    check_offline_header(page)
                     assert errors == [], errors
                     assert outside == [], outside
                 print(json.dumps({"setup_ui_qa": "passed", "data": "empty synthetic profile only"}))

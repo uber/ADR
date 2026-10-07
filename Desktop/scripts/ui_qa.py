@@ -220,44 +220,55 @@ def check_capture_controls(page, context, runtime):
             refreshes.append(response.status)
 
     page.on("response", response_seen)
-    page.get_by_role("button", name="Start capture", exact=True).click()
-    page.get_by_role("button", name="Pause capture", exact=True).wait_for()
+    page.locator('a[data-route="/settings"]').click()
+    page.get_by_role("heading", name="Setup & settings", exact=True).wait_for()
+    page.get_by_role("button", name="Start local capture", exact=True).click()
+    page.get_by_role("button", name="Pause local capture", exact=True).wait_for()
     other = context.new_page()
     try:
         other.goto(f"http://127.0.0.1:{runtime.port}/#ticket={runtime.new_ticket()}")
         other.get_by_role("heading", name="Your agents, at a glance").wait_for()
-        page.get_by_role("button", name="Pause capture", exact=True).click()
-        page.get_by_role("button", name="Start capture", exact=True).wait_for()
+        page.get_by_role("button", name="Pause local capture", exact=True).click()
+        page.get_by_role("button", name="Start local capture", exact=True).wait_for()
         assert pauses == [200], "Opening another tab must not invalidate the first"
         assert refreshes == []
         assert runtime.store.settings()["recording"] is False
     finally:
         other.close()
 
-    page.get_by_role("button", name="Start capture", exact=True).click()
-    page.get_by_role("button", name="Pause capture", exact=True).wait_for()
+    page.get_by_role("button", name="Start local capture", exact=True).click()
+    page.get_by_role("button", name="Pause local capture", exact=True).wait_for()
     # Simulate a concurrent session change in this synthetic server, not in the
     # user's browser. The old tab should recover once without repeating a write.
     with runtime.auth_lock:
         runtime.sessions = {key: (token(), expiry) for key, (_, expiry) in runtime.sessions.items()}
     before = len(runtime.store.rows("SELECT id FROM audit WHERE kind='collection_changed'"))
     pauses.clear()
-    page.get_by_role("button", name="Pause capture", exact=True).click()
-    page.get_by_role("button", name="Start capture", exact=True).wait_for()
+    page.get_by_role("button", name="Pause local capture", exact=True).click()
+    page.get_by_role("button", name="Start local capture", exact=True).wait_for()
     assert pauses == [403, 200]
     assert refreshes == [200]
     assert runtime.store.settings()["recording"] is False
     assert len(runtime.store.rows("SELECT id FROM audit WHERE kind='collection_changed'")) == before + 1
     assert page.get_by_role("alert").count() == 0
     page.remove_listener("response", response_seen)
+    page.locator('a[data-route="/"]').click()
+    page.get_by_role("heading", name="Your agents, at a glance", exact=True).wait_for()
+
+
+def open_capture_preferences(page):
+    expect(page.locator("#page")).to_have_attribute("aria-busy", "false")
+    panel = page.locator('details[data-view-key="capture-preferences"]')
+    if panel.get_attribute("open") is None:
+        panel.locator("summary").click()
+    expect(page.get_by_label("Capture interval", exact=True)).to_be_visible()
 
 
 def check_csrf_retry_boundaries(page):
     """Only an explicit, pre-execution CSRF rejection permits one retry."""
     page.locator('a[data-route="/settings"]').click()
     page.get_by_role("heading", name="Setup & settings", exact=True).wait_for()
-    expect(page.locator("#page")).to_have_attribute("aria-busy", "false")
-    page.locator('details[data-view-key="capture-preferences"] > summary').click()
+    open_capture_preferences(page)
     interval = page.get_by_label("Capture interval", exact=True)
     stale = {"code": "csrf_mismatch", "message": "Synthetic stale token"}
     for status, detail, expected_attempts, expired in [
@@ -324,8 +335,7 @@ def check_capture_intervals(page, runtime):
     page.get_by_role("heading", name="Setup & settings", exact=True).wait_for()
     # This can be a same-route navigation: the previous heading remains
     # visible while the replacement is loading. Do not open the old panel.
-    expect(page.locator("#page")).to_have_attribute("aria-busy", "false")
-    page.locator('details[data-view-key="capture-preferences"] > summary').click()
+    open_capture_preferences(page)
     interval = page.get_by_label("Capture interval", exact=True)
     assert interval.locator("option").all_text_contents() == [
         "Every 5 minutes",
@@ -344,8 +354,7 @@ def check_capture_intervals(page, runtime):
         assert runtime.store.settings()["recording"] is False
         page.reload()
         page.get_by_role("heading", name="Setup & settings", exact=True).wait_for()
-        expect(page.locator("#page")).to_have_attribute("aria-busy", "false")
-        page.locator('details[data-view-key="capture-preferences"] > summary').click()
+        open_capture_preferences(page)
         assert interval.input_value() == str(seconds)
     assert page.get_by_role("alert").count() == 0
 
@@ -370,7 +379,7 @@ def check_starter_protection(page, runtime, screenshots):
     try:
         protection_tab.goto(f"http://127.0.0.1:{runtime.port}/protection")
         protection_tab.get_by_role("heading", name="File protection", exact=True).wait_for()
-        page.get_by_role("link", name="Manage agent connections", exact=True).click()
+        page.locator("#configured-agents").click()
         page.get_by_role("heading", name="Setup & settings", exact=True).wait_for()
         page.get_by_role("button", name="Connect installed agents", exact=True).click()
         modal = page.locator("dialog[open]")
@@ -699,6 +708,32 @@ def check_dropdowns_and_protection_activity(page, runtime, screenshots):
     page.screenshot(path=str(screenshots / "synthetic-protection-interventions.png"), full_page=True)
 
 
+def check_agent_colors(page, screenshots):
+    """Agent names remain readable, distinct, and meaningful without color."""
+    for scheme in ("light", "dark"):
+        page.emulate_media(color_scheme=scheme)
+        badges = page.locator(".session-agent").evaluate_all("""nodes => nodes.map(node => ({
+            label: node.textContent,
+            color: getComputedStyle(node).color,
+            background: getComputedStyle(node).backgroundColor
+        }))""")
+        by_agent = {item["label"]: item for item in badges}
+        assert len(by_agent) >= 3
+        assert len({item["color"] for item in by_agent.values()}) == len(by_agent)
+
+        def luminance(rgb):
+            channels = [float(value.strip()) / 255 for value in rgb[4:-1].split(",")]
+            linear = [value / 12.92 if value <= .04045 else ((value + .055) / 1.055) ** 2.4
+                      for value in channels]
+            return sum(value * weight for value, weight in zip(linear, (.2126, .7152, .0722)))
+
+        for badge in by_agent.values():
+            values = sorted((luminance(badge["color"]), luminance(badge["background"])))
+            assert (values[1] + .05) / (values[0] + .05) >= 4.5, badge["label"]
+        page.screenshot(path=str(screenshots / f"synthetic-agent-colors-{scheme}.png"), full_page=True)
+    page.emulate_media(color_scheme="light")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path)
@@ -761,6 +796,8 @@ def main():
                         page.locator(f'nav a[href="{route}"], .sidebar-bottom a[href="{route}"]').click()
                         page.get_by_role("heading", name=title, exact=True).wait_for()
                         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+                        if route == "/sessions":
+                            check_agent_colors(page, screenshots)
                         page.screenshot(path=str(screenshots / f"synthetic-{route[1:]}.png"), full_page=True)
 
                     check_capture_intervals(page, runtime)

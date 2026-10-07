@@ -23,6 +23,43 @@ from adr_desktop.runtime import Runtime
 FIXTURE = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "review_cli.py"
 
 
+def check_settings_layout(page, modal, shots):
+    idle = modal.get_by_role("checkbox", name="Review while idle", exact=True)
+    expect(idle).not_to_be_checked()
+    modal.get_by_text("Review while idle", exact=True).click()
+    expect(idle).to_be_checked()
+    project = modal.locator('input[name="projects"]').first
+    project.check()
+    consent = modal.get_by_role(
+        "checkbox", name="I approve sending selected session evidence", exact=False,
+    )
+    for width, scheme in ((1440, "light"), (390, "light"), (390, "dark")):
+        page.set_viewport_size({"width": width, "height": 1040})
+        page.emulate_media(color_scheme=scheme)
+        geometry = modal.locator(".checkbox-field").evaluate_all("""rows => rows.map(row => {
+            const input = row.querySelector('input').getBoundingClientRect();
+            const text = row.querySelector('.checkbox-copy > span').getBoundingClientRect();
+            return {inputX: input.x, inputY: input.y, width: input.width,
+                textX: text.x, textY: text.y, rowWidth: row.clientWidth,
+                rowScroll: row.scrollWidth};
+        })""")
+        assert len(geometry) >= 4
+        assert all(row["width"] <= 20 and row["inputX"] < row["textX"]
+                   and abs(row["inputY"] - row["textY"]) <= 3
+                   and row["rowScroll"] <= row["rowWidth"] for row in geometry)
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+        assert modal.evaluate("node => node.scrollWidth <= node.clientWidth")
+        idle.scroll_into_view_if_needed()
+        page.screenshot(path=str(shots / f"review-settings-{width}-{scheme}.png"), full_page=True)
+        expect(consent).not_to_be_checked()
+        consent.scroll_into_view_if_needed()
+        page.screenshot(path=str(shots / f"review-consent-{width}-{scheme}.png"), full_page=True)
+    project.uncheck()
+    idle.uncheck()
+    page.set_viewport_size({"width": 1440, "height": 1040})
+    page.emulate_media(color_scheme="light")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path)
@@ -86,6 +123,7 @@ def main():
                     page.get_by_role("button", name="Review now", exact=True).click()
                     modal = page.get_by_role("dialog", name="Security review settings", exact=True)
                     expect(modal).to_be_visible()
+                    check_settings_layout(page, modal, shots)
                     modal.get_by_label("Tokens per review", exact=True).fill("1000")
                     modal.get_by_label("Review tokens per 24 hours", exact=True).fill("5000")
                     consent = modal.get_by_role(

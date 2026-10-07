@@ -83,15 +83,12 @@ def check_routes(page, parent_id, child_id):
     assert abs(page.evaluate("window.scrollY") - old_scroll) <= 2
     expect(page.locator(f'a.session-row[href="/sessions/{child_id}"]')).to_be_visible()
 
-    # An ordinary refresh must not reset the reader's position.
+    # The browser's own reload preserves reading position without a toolbar button.
     page.evaluate("window.scrollTo(0, 800)")
-    # Use the rendered sticky-header location. Locator.click() otherwise asks
-    # Chromium to scroll this already-visible sticky button into view.
-    refresh_box = page.get_by_role("button", name="Refresh", exact=True).bounding_box()
-    page.mouse.click(
-        refresh_box["x"] + refresh_box["width"] / 2,
-        refresh_box["y"] + refresh_box["height"] / 2,
-    )
+    # Finish the scroll/paint frame before issuing a browser-chrome action.
+    page.evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
+    page.reload()
+    expect(page.locator(".conversation > .message")).to_have_count(40)
     wait_for_view(page)
     after_refresh = page.evaluate("window.scrollY")
     assert abs(after_refresh - 800) <= 2, f"Refresh moved the transcript to {after_refresh}"

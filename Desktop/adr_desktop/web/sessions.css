@@ -55,7 +55,7 @@
 .session-row-context { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 8px; font-size: 11px; line-height: 1.5; color: var(--muted); }
 .session-project { display: inline-flex; align-items: center; gap: 5px; min-width: 0; color: var(--accent); font-weight: 580; overflow-wrap: anywhere; }
 .session-project .icon { width: 13px; height: 13px; }
-.session-agent { flex-shrink: 0; }
+.session-agent { display: inline-flex; flex-shrink: 0; padding: 2px 7px; border: 1px solid var(--agent-line); border-radius: 5px; background: var(--agent-bg); color: var(--agent-ink); font-size: 10px; font-weight: 600; }
 .session-row-title { flex-wrap: wrap; gap: 7px; margin-bottom: 7px; }
 .session-row .session-main strong { font-size: 14px; font-weight: 620; line-height: 1.55; white-space: normal; overflow-wrap: anywhere; overflow: visible; }
 .session-main .search-snippet { display: block; margin-top: 6px; font-size: 12px; line-height: 1.75; max-width: 90ch; color: var(--muted); overflow-wrap: anywhere; }
@@ -84,7 +84,7 @@
 .session-detail-nav { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px 18px; margin-bottom: 20px; }
 .session-detail-nav .back-link { font-size: 12px; margin: 0; overflow-wrap: anywhere; }
 .session-detail-heading { margin-bottom: 25px; }
-.session-detail-agent { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--muted); margin-bottom: 15px; }
+.session-detail-agent { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--agent-ink); margin-bottom: 15px; }
 .session-detail-agent .source-mark { width: 28px; height: 28px; border-radius: 8px; font-size: 12px; }
 .session-detail-heading h1 { max-width: 38ch; font-size: 27px; line-height: 1.35; overflow-wrap: anywhere; }
 .session-detail-project { display: flex; align-items: flex-start; gap: 7px; margin-top: 13px; color: var(--muted); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
@@ -102,24 +102,24 @@
 .transcript-find-line input[type="search"] { min-height: 42px; font-size: 13px; padding: 10px; }
 .transcript-find-actions { display: flex; flex-shrink: 0; gap: 2px; }
 .transcript-match-status { display: block; margin-top: 10px; color: var(--muted); font-size: 11px; line-height: 1.7; }
-.session-detail .message { padding: 21px 24px; scroll-margin-top: 96px; content-visibility: auto; contain-intrinsic-size: auto 180px; }
+.session-detail .message { padding: 21px 24px; scroll-margin-top: calc(var(--topbar-height) + 26px); content-visibility: auto; contain-intrinsic-size: auto 180px; }
 .session-detail .message > header { margin-bottom: 13px; min-height: 30px; }
 .session-detail .message-text { font-size: 13px; line-height: 1.85; max-width: 100%; }
 .session-detail .message-text:focus-visible { outline-offset: 4px; }
 .session-detail .message-avatar { font-size: 10px; }
 .session-detail .message.user-message { background: var(--surface-soft); }
 .session-detail .transcript-copy { margin-left: auto; font-size: 10px; min-height: 30px; padding: 6px 9px; }
-.session-detail .current-passage { outline: 2px solid var(--accent); outline-offset: 3px; scroll-margin-top: 100px; }
+.session-detail .current-passage { outline: 2px solid var(--accent); outline-offset: 3px; scroll-margin-top: calc(var(--topbar-height) + 30px); }
 .session-detail .tool-bundle { margin-left: 20px; margin-bottom: 0; content-visibility: auto; contain-intrinsic-size: auto 70px; }
 .session-detail .tool-bundle-body { padding-bottom: 12px; }
-.session-detail .tool-call { scroll-margin-top: 100px; }
+.session-detail .tool-call { scroll-margin-top: calc(var(--topbar-height) + 30px); }
 .session-detail .tool-call > summary { flex-wrap: wrap; overflow-wrap: anywhere; font-size: 11px; }
 .session-detail .tool-call > summary strong { min-width: 0; overflow-wrap: anywhere; }
 .session-detail .tool-body h3 { font-size: 11px; margin: 16px 0 8px; color: var(--muted); font-weight: 600; }
 .session-detail .tool-body .message-text { font-size: 12px; }
 .session-detail .expandable > summary { font-size: 13px; }
 .session-detail .expandable > summary > span { font-size: 11px; }
-.session-detail .setup-bundle { scroll-margin-top: 100px; }
+.session-detail .setup-bundle { scroll-margin-top: calc(var(--topbar-height) + 30px); }
 .session-detail .setup-bundle > summary { font-size: 12px; }
 .session-capture-details { margin-top: 30px; border-top: 1px solid var(--line); padding: 17px 0; color: var(--muted); font-size: 12px; line-height: 1.8; }
 .session-capture-details > summary { cursor: pointer; width: fit-content; color: var(--accent); font-weight: 580; padding: 4px 0; }

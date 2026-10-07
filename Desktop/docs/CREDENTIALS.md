@@ -56,8 +56,8 @@ retained Keychain originals and historical filesystem backups.
 
 ## One plugin for your installed agents
 
-Choose **Setup & settings → Connect installed agents**. The vault's
-**Manage agent connections** link opens this shared setup page.
+Choose **Setup & settings → Protection → Connect installed agents**.
+The configured-agent names in the top bar open this shared setup page.
 ADR detects the supported local CLIs and installs the same ADR integration for
 Claude Code, Codex, opencode, and GitHub Copilot CLI in one action. Missing or
 failed installations are reported separately; they are not shown as protected.
@@ -168,7 +168,7 @@ does not prevent every form of exfiltration or same-user process inspection.
 ## Pasting a credential into a prompt
 
 Updated Claude Code and Codex integrations install a **UserPromptSubmit** check.
-Update the integration from **File protection**, restart the agent, and complete
+Update the integration from **Setup & settings → Protection**, restart the agent, and complete
 its hook-trust review. Merely rebuilding ADR does not install or trust new hooks.
 
 The check looks for saved values, recognizable key formats, and explicit

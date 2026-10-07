@@ -28,8 +28,10 @@ the distinction between a development artifact and a public release.
 **Setup & settings** is the home for capture and agent connections:
 
 - **Local capture** builds searchable history without installing an agent plugin.
-- **Agent connections** installs the combined history, credential, and protection
-  integration after you approve its access. Feature pages link back here to manage it.
+- **Protection → Connect installed agents** installs the combined history,
+  credential, and protection integration after you approve its access. The top
+  bar lists configured agents and opens this shared setup; detailed hook
+  diagnostics do not repeat on feature pages.
 - **AI inventory** runs only when you request a scan. **Security reviews** has
   separate data-sharing consent and usage limits.
 
@@ -44,7 +46,7 @@ the existing core; separating code does not add a daemon for each feature.
 
 ### ADR Insights
 
-- Start/pause collection from the menu bar or local UI.
+- Start/pause collection from the menu bar or **Setup & settings → Local capture**.
 - Reuses the existing ADR Sensor parsers for Claude Code, Cursor, Codex, Copilot
   CLI, DeepSeek Harness, Antigravity CLI, opencode, Gemini CLI, Cline, Warp, and Claude Desktop,
   subject to each collector's OS/format support.
@@ -61,6 +63,9 @@ the existing core; separating code does not add a daemon for each feature.
 - “Updated” uses captured activity, including resumed conversations, rather
   than collection time. Related work, latest-answer navigation and copy actions
   keep useful context close without changing original captures.
+- Agent-specific name badges and colors distinguish sessions in light and dark
+  mode. Browser reload preserves reading position and expanded transcript details;
+  there is no separate global refresh control.
 - **ADR Context**, an agent-facing capability for opt-in search across captured
   agents and projects on the device. The same ADR plugin includes vault commands
   and protection hooks. A separate Context UI is P2.
@@ -159,6 +164,9 @@ to refresh older inventory names and coverage.
 See [Malicious artifact protection](docs/THREAT_PROTECTION.md) for feed format, tested
 operations, and limits. Hooks do not universally intercept automatic skill
 loading, MCP startup, arbitrary scripts, or dependency resolution.
+The page focuses on installed matches and blocked activity. Feed details are
+expandable; optional custom-list imports live under **Setup & settings →
+Protection → Custom artifact list**.
 
 ### File protection
 
@@ -211,6 +219,9 @@ is not silently labeled protected. See [the security model](docs/SECURITY.md).
   Keychain entries can be explicitly copied once into the local vault; their
   originals remain intact. Interrupted saves can be recovered without deleting
   a verified copy.
+- Entries refresh after saving, removing, or recovering a credential. **Storage
+  & recovery** retains a manual recheck for interrupted saves or restored files,
+  rather than showing it as an everyday action for healthy entries.
 - **Connect installed agents** installs one ADR plugin for all detected,
   supported CLIs. It includes `adr_list_environment`, `adr_run_command`, history
   search, and hooks. There is no per-project, per-key, or separate vault setup.
@@ -283,8 +294,8 @@ Insights**. Its private, one-time link authenticates the local browser; there is
 no operator-token copy/paste step.
 
 1. Open **Setup & settings → Start local capture** to opt into reading supported
-   agents' existing logs. You can also start/pause capture from the menu bar or top bar.
-2. Choose **Setup & settings → Connect installed agents**, or run
+   agents' existing logs. You can also start/pause capture from the menu bar.
+2. Choose **Setup & settings → Protection → Connect installed agents**, or run
    `adr-desktop connect all --allow-agent-access`. This installs protection,
    Context, and vault command tools together. Restart/trust the integration, then add starter
    protections or custom rules in **File protection**. A saved hook

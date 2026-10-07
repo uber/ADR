@@ -5,6 +5,36 @@ Python 3.11.16. This is a developer-preview validation record, not a claim of
 production certification or cross-platform native testing. Earlier runs are
 retained below.
 
+## Focused protection pages and shared setup — October 7, 2026
+
+- **934 Desktop tests** and all **seven synthetic browser suites** passed.
+  Agent connections and diagnostics now live in **Setup & settings → Protection**.
+  The top bar lists configured agent names without claiming observed enforcement,
+  and no longer contains capture or refresh buttons.
+- Capture remains available in setup and the native menu. Cross-tab CSRF
+  recovery, duplicate-click prevention, error recovery, and explicit capture
+  consent remain covered. Browser reload preserves transcript position and
+  expanded details after the scroll has settled.
+- Custom artifact-list imports moved to an advanced setup disclosure. Invalid
+  JSON, size limits, preview cancellation, confirmation, stale revisions, and
+  independent blocking settings remain tested. Feed problems remain visible
+  even when routine intelligence details are collapsed.
+- Vault entries update after successful changes. The manual storage recheck
+  remains under **Storage & recovery** for interrupted saves and external file
+  restoration. Tests cover a late native save, rechecking, cancelled recovery,
+  and confirmed recovery of the same entry without changing its grants.
+- Session agent badges use distinct colors and text labels. The seeded agent
+  labels meet a 4.5:1 text contrast threshold in light and dark mode. Review
+  checkboxes keep their labels beside the control at wide and narrow widths;
+  layout changes do not preselect data-sharing consent or change review limits.
+- Light/dark and 390px screenshots were inspected. A stray boolean in the
+  configured-agent strip was caught visually and regression-tested. Header
+  disconnection/recovery is covered without relying on the removed capture label.
+
+This pass uses disposable profiles and simulated native/plugin drivers, not
+real credentials or model requests. It changes presentation and navigation,
+not permission scopes, capture contents, enforcement decisions, or storage formats.
+
 ## Component boundary and simpler setup — October 7, 2026
 
 - **934 Desktop**, **586 Sensor**, **359 Discovery**, and **26 Protection**
