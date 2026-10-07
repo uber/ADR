@@ -17,7 +17,7 @@ No task below authorizes a profile migration, wider agent permissions, automatic
 | API-01 | Complete | Publish the artifact engine's v1 contract | The public import path, JSON shapes, matching semantics, errors, ordering, and digest behavior are documented and protected by golden/compatibility tests. |
 | UX-01 | Complete | Make Setup & settings the setup home | Capture controls and agent connections are in one place; feature pages link there without duplicating the complete connection UI. All old feature routes continue to work. |
 | UX-02 | Complete | Explain capabilities and simplify first use | A new user can distinguish local activity capture, inventory, connected-agent protections, credentials, and optional model reviews without enabling any of them. Advanced settings use disclosures. |
-| QA-01 | Local checks passed; branch CI pending | Validate independent packaging and complete user flows | The Protection wheel works outside the checkout without Desktop installed; component tests, old Desktop tests, fresh-profile browser checks, and both frozen macOS builds pass. |
+| QA-01 | Complete | Validate independent packaging and complete user flows | The Protection wheel works outside the checkout without Desktop installed; component tests, old Desktop tests, fresh-profile browser checks, and both frozen macOS builds pass. |
 | ARCH-03 | Planned | Extract file-policy evaluation and normalized protection contracts | Policy evaluation consumes normalized inputs; harness decoding, trusted-MCP authorization, approval, and audit remain host adapters. Deny/Ask semantics and offline guardian behavior stay compatible. |
 | ARCH-04 | Planned | Extract the review service behind narrow ports | Evidence/report validation, budgets, and scheduling no longer accept the entire Desktop Runtime. Storage, credential checking, clock, and CLI execution are explicit dependencies. Errors/partial results cannot become clean verdicts. |
 | ARCH-05 | Planned | Separate credential coordination from native implementation | Metadata/grants and execution policies have narrow interfaces. Native code retains secret values, encryption, dialogs, execution, and output filtering; no raw-secret API is introduced. |
@@ -39,7 +39,12 @@ UX-01 and UX-02 reuse `/settings` and the existing owner APIs. Capture does not 
 - [x] Verify fresh setup, cancel/error states, slow installation, existing profiles, keyboard navigation, narrow layouts, and dark mode using synthetic data.
 - [x] Run the complete Desktop, Sensor, Discovery, and Protection test suites.
 - [x] Verify frozen modules, native self-tests, and packaged guardian/MCP behavior on local Apple Silicon.
-- [ ] Confirm `desktop-dev` CI is green without creating a release or replacing the running app.
+- [x] Confirm `desktop-dev` CI is green without creating a release or replacing the running app.
+
+Verified by [all 12 branch CI jobs](https://github.com/uber/ADR/actions/runs/37613019678),
+including Apple Silicon and Intel preview builds. See the
+[validation record](VALIDATION.md#component-boundary-and-simpler-setup--october-7-2026)
+for the local and synthetic-browser checks.
 
 ## Follow-up decisions
 

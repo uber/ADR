@@ -32,7 +32,14 @@ retained below.
   trust validation or change the native acceptance limitations recorded below.
 - Ruff, JavaScript syntax, actionlint, and whitespace checks passed. The branch
   CI adds independent Protection tests and wheel installation, plus first-run
-  browser coverage. Linux/Intel execution for this revision is pending branch CI.
+  browser coverage. [All 12 branch CI jobs passed](https://github.com/uber/ADR/actions/runs/37613019678):
+  Linux on Python 3.11/3.13, macOS core tests, both browser groups, standalone
+  components, and both Apple Silicon/Intel preview builds.
+- CI exposed a lint package-root assumption and a same-route browser-test race.
+  Package classification is now explicit, and settings tests await completed
+  renders before opening disclosures. The recorded browser trace confirmed
+  that the failed test clicked the old view while it was still busy; timeouts
+  were not increased and assertions were not removed.
 
 No extra long-lived process, new database, permission migration, automatic
 model request, or public release was introduced.

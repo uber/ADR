@@ -4,7 +4,7 @@ ADR Desktop is a local command center for people using agents. It should explain
 
 ## Code modules are not services
 
-The native menu-bar host starts one long-lived Python core. The local web UI calls that core over authenticated loopback HTTP. Feature libraries are imported into that process; they do not each start a server or collector.
+The native menu-bar host starts one long-lived Python core. The local web UI calls that core over authenticated loopback HTTP. [Runtime](../adr_desktop/runtime.py) composes the features; [API routes](../adr_desktop/api.py) expose them to authorized callers. Feature libraries are imported into that process; they do not each start a server or collector.
 
 Existing short-lived processes have specific purposes: a Sensor pass collects supported agents together, a Discovery scan is explicitly requested, hooks/MCP helpers serve harness invocations, and opted-in reviews supervise a local agent CLI. These isolation boundaries remain; this refactor does not add another daemon, database, port, or background scan.
 
@@ -21,15 +21,15 @@ flowchart LR
 
 | Area | Reusable component / contract | Desktop or native responsibility |
 | --- | --- | --- |
-| Activity capture | `Sensor/`: normalized agent events | Schedule one Sensor pass, retain original snapshots, provide scoped search and presentation. |
-| AI inventory | `Discovery/`: snapshot and coverage records | Request a bounded scan, persist results, paginate them, explain access limits. Inventory is not prevention. |
-| Artifact intelligence | `Protection/`: offline artifact API v1 | Supply the reviewed baseline/custom feed, establish artifact identity, authorize imports, publish policy, enforce decisions, and display findings. |
-| File protection | File-policy extraction is tracked separately | Harness adapters, trust resolution, approvals, guarded execution, and closed deny reasons stay host responsibilities. |
-| Security reviews | Review-service extraction is tracked separately | Explicit provider/data-sharing consent, budgets, storage, credential checks, CLI isolation, and user-visible findings. These reviews are not the full `Detection/` benchmark pipeline. |
-| Credentials | Native operation boundary plus a future metadata/coordinator interface | Swift owns secret entry, encrypted values, credential-backed operations, and output filtering. Python handles metadata, grants, policy, and audit—not a raw-value retrieval API. |
-| History and projections | Sensor/Discovery artifacts and future query-service interfaces | One shared profile/database, stable IDs, immutable captures, derived indexes, retention, and authorization. |
+| Activity capture | [Sensor](../../Sensor/): normalized agent events | The [collector](../adr_desktop/collector.py) schedules one Sensor pass; the host retains original snapshots and provides scoped search and presentation. |
+| AI inventory | [Discovery](../../Discovery/): snapshot and coverage records | Request a bounded scan, persist results, paginate them, [explain access limits](../adr_desktop/access_status.py). Inventory is not prevention. |
+| Artifact intelligence | [Protection](../../Protection/): offline artifact API v1 | [Artifact coordination](../adr_desktop/threat_protection.py) supplies the reviewed baseline/custom feed, authorizes imports, publishes policy, and stores findings. The host establishes identity and enforces decisions. |
+| File protection | File-policy extraction is tracked separately | [Policy](../adr_desktop/policy.py) and [operation evaluation](../adr_desktop/protection.py) currently live in Desktop. Harness adapters, trust resolution, approvals, guarded execution, and closed deny reasons stay host responsibilities. |
+| Security reviews | Review-service extraction is tracked separately | The [review coordinator](../adr_desktop/security_reviews.py) and [CLI driver](../adr_desktop/review_process.py) manage consent, budgets, storage, credential checks, isolation, and findings. These reviews are not the full `Detection/` benchmark pipeline. |
+| Credentials | Native operation boundary plus a future metadata/coordinator interface | [Native vault code](../native/) owns secret entry, encryption, operations, and output filtering. Python [environment](../adr_desktop/environment_vault.py) and [API-only](../adr_desktop/broker.py) coordinators handle metadata, grants, policy, and audit—not a raw-value retrieval API. |
+| History and projections | Sensor/Discovery artifacts and future query-service interfaces | The [store](../adr_desktop/store.py) owns the shared database, stable IDs, immutable captures, derived indexes, and retention. The host authorizes access. |
 
-The first extracted implementation is the artifact engine. Other rows explicitly describe current ownership or planned work; they are not claims that every feature has already been separated.
+The first extracted implementation is the artifact engine. Other rows explicitly describe current ownership or planned work; they are not claims that every feature has already been separated. Host module links identify where to work today, not new stable library APIs.
 
 ## Contributor-facing contract
 
