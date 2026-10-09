@@ -45,7 +45,17 @@ class WarpParser(BaseParser):
     ]
 
     def __init__(self, max_age_days: int = MAX_CONVERSATION_AGE_DAYS):
-        self.db_path = next((p for p in self.DB_PATHS if p.exists()), self.DB_PATHS[0])
+        self.db_path = self.DB_PATHS[0]
+        for candidate in self.DB_PATHS:
+            try:
+                if candidate.exists():
+                    self.db_path = candidate
+                    break
+            except OSError:
+                # A sandboxed/restricted candidate (e.g. the macOS Group
+                # Container path) can raise on exists(); keep probing the
+                # rest rather than letting construction fail outright.
+                continue
         self.base_path = self.db_path.parent
         self.max_age_days = max_age_days
 
@@ -55,7 +65,14 @@ class WarpParser(BaseParser):
 
         db_path = Path(self.db_path) if isinstance(self.db_path, str) else self.db_path
 
-        if not db_path.exists():
+        try:
+            db_exists = db_path.exists()
+        except OSError as e:
+            self.record_diagnostic("file_read_error")
+            logger.warning("[WARP] Error checking database path %s: %s", db_path, e)
+            return entries
+
+        if not db_exists:
             self.record_diagnostic("input_missing")
             logger.info("[WARP] No logs found at %s", db_path)
             return entries
