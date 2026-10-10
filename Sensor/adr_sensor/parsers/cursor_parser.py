@@ -73,7 +73,13 @@ class CursorParser(BaseParser):
                 composer_metadata = self.get_composer_metadata(cursor)
 
                 cutoff_time = datetime.now(timezone.utc) - timedelta(days=self.max_age_days)
-                recent_conv_ids = set()
+                # Only conversations we can POSITIVELY confirm are too old get
+                # skipped. A conv_id with no composerData entry at all (missing,
+                # failed to decode, or lacking both timestamp fields) must NOT
+                # be treated as old by default -- it should pass through, same
+                # as a conversation whose metadata exists but has no parsable
+                # timestamp.
+                old_conv_ids = set()
                 skipped_count = 0
 
                 for conv_id, metadata in composer_metadata.items():
@@ -91,9 +97,8 @@ class CursorParser(BaseParser):
                             self.record_diagnostic("invalid_timestamp")
                             pass
 
-                    if conv_timestamp is None or conv_timestamp >= cutoff_time:
-                        recent_conv_ids.add(conv_id)
-                    else:
+                    if conv_timestamp is not None and conv_timestamp < cutoff_time:
+                        old_conv_ids.add(conv_id)
                         skipped_count += 1
 
                 if skipped_count > 0:
@@ -111,7 +116,7 @@ class CursorParser(BaseParser):
                         if len(parts) >= 3:
                             conv_id = parts[1]
 
-                            if conv_id not in recent_conv_ids:
+                            if conv_id in old_conv_ids:
                                 continue
 
                             if conv_id not in conversations:
