@@ -50,6 +50,11 @@ apply: top-level tool argument strings and tool results are truncated at 1,000
 characters; non-text content blocks and separately spilled tool-output files are
 not imported. Contract tests use synthetic transcripts and do not launch Claude.
 
+Tools are classified by execution type: `Bash` shell commands emit
+`tool_type: "terminal_command"`, while MCP tools namespaced as `mcp__<server>__<tool>`
+record `tool_type: "mcp_tool"` with `server_name` populated. Failed and blocked
+tool calls (`is_error: true`) set `status: "error"` and retain the error output.
+
 ### Claude Desktop Agent Mode
 
 The `claude_desktop` source covers Claude Desktop's local agent mode (released as
