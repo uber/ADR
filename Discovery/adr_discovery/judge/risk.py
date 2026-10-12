@@ -47,6 +47,12 @@ CONTAINER_RUNNERS = frozenset({"docker", "podman"})
 _NPM_PINNED = re.compile(r"^(@[^/]+/)?[^@/]+@[^@]+$")
 _DIGEST = re.compile(r"@sha256:[0-9a-f]{8,}$")
 _TAGGED = re.compile(r":[^/:]+$")
+#: A VCS install (``pip install git+https://...@<ref>``) is only pinned when
+#: ``<ref>`` is an immutable commit SHA. A branch or tag name -- "main",
+#: "master", a release tag -- is not: it moves, so treating its mere
+#: presence after an "@" as pinning is the exact mistake this module exists
+#: to avoid ("look for an @" rather than read the specification).
+_VCS_COMMIT_PIN = re.compile(r"@[0-9a-f]{7,40}$", re.IGNORECASE)
 
 
 def operand_of(command: str | None, args: tuple[str, ...]) -> tuple[str | None, str]:
@@ -88,7 +94,7 @@ def pinning(command: str | None, args: tuple[str, ...]) -> tuple[bool | None, tu
         return False, ("unpinned_supply_chain",)
 
     if runner in EPHEMERAL_RUNNERS:
-        if _NPM_PINNED.match(operand) or "==" in operand or operand.count("@") >= 1 and not operand.startswith("@"):
+        if _NPM_PINNED.match(operand) or "==" in operand or _VCS_COMMIT_PIN.search(operand):
             return True, ()
         return False, ("unpinned_supply_chain",)
 
