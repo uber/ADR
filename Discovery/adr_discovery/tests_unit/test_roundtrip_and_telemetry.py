@@ -37,6 +37,19 @@ def test_a_snapshot_survives_the_round_trip(world, catalog):
     assert restored.coverage.out_of_scope == original.coverage.out_of_scope
 
 
+def test_the_round_trip_is_lossless_including_finding_and_review_evidence(world, catalog):
+    endpoint(world)
+    world.surface("processes", [{"pid": 3, "exe": "/opt/agent/agent", "user": "alice"}])
+    world.surface("sockets", [{"proto": "tcp", "state": "ESTABLISHED", "local_port": 50000,
+                               "remote_host": "api.openai.com", "remote_port": 443, "pid": 3}])
+    original = discover(world.gate(), catalog, hostname="host-a")
+    assert original.findings and original.review_queue
+    assert all(f.evidence for f in original.findings)
+    assert all(r.evidence for r in original.review_queue)
+
+    assert from_dict(json.loads(to_json(original))) == original
+
+
 def test_a_round_tripped_snapshot_diffs_cleanly_against_itself(world, catalog):
     """Two scans of an unchanged machine must produce no delta, which is a
     statement about `asset_id` holding still through serialization."""

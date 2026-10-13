@@ -13,10 +13,10 @@ try:
 except ImportError:
     pwd = None  # type: ignore
 
-from .base import Application, LanguagePackages, NullProviders, Package, Process, Socket
+from .base import Application, HostResolver, LanguagePackages, NullProviders, Package, Process, Socket
 
 
-class DarwinProviders(NullProviders):
+class DarwinProviders(HostResolver, NullProviders):
     reason = "not readable on this host"
 
     #: `/home` is autofs here and blocks indefinitely when automountd is

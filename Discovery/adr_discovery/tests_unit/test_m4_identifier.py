@@ -149,13 +149,7 @@ def test_u4_05_an_unknown_compiled_build_is_not_executed(world, catalog):
     os.chmod(world.root + "/opt/built/gemini", 0o755)
     gate = world.gate()
 
-    from adr_discovery.identifier import binary_format
-
-    assert binary_format(gate, "/opt/built/gemini") == "elf"
-    assert binary_format(gate, "/opt/shipped/gemini") is None  # not written yet
-
-    world.exe("/opt/shipped/gemini", "0.55.1")
-    verdict = identify(gate, candidate("/opt/shipped/gemini"), catalog)
+    verdict = identify(gate, candidate("/opt/built/gemini"), catalog)
 
     assert verdict.catalog_id is None
     assert not verdict.is_concluded

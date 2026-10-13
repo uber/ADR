@@ -16,39 +16,14 @@ signals come from already-observed process and network state, not probes.
 from __future__ import annotations
 
 import hashlib
+import re
+from fnmatch import fnmatchcase
 
 from ..contracts.evidence import Channel, Evidence, Rung
 from ..contracts.records import Candidate, Kind, Verdict
 from .openworld import score, signals_for
 
 MAX_HASH_BYTES = 8 * 1024 * 1024
-
-#: Executable formats, by magic. This is descriptive metadata only; format
-#: is not evidence that a file belongs to a particular catalog entry.
-_MAGIC: tuple[tuple[bytes, str], ...] = (
-    (b"\x7fELF", "elf"),
-    (b"\xcf\xfa\xed\xfe", "mach-o"),
-    (b"\xce\xfa\xed\xfe", "mach-o"),
-    (b"\xca\xfe\xba\xbe", "mach-o-universal"),
-    (b"MZ", "pe"),
-    (b"#!", "script"),
-)
-
-
-def binary_format(gate, path: str) -> str | None:
-    """What kind of executable this is, from its first bytes.
-
-    Format is metadata, not identity: any attacker can create a file with
-    the right magic bytes.
-    """
-    raw = gate.read_bytes(path, limit=64)
-    if not raw.ok or not raw.value:
-        return None
-    for magic, name in _MAGIC:
-        if raw.value.startswith(magic):
-            return name
-    return None
-
 
 def content_hash(gate, path: str, limit: int = MAX_HASH_BYTES) -> str | None:
     """One size-capped read. Returns None when the target is not a file we
@@ -77,14 +52,14 @@ def identify(gate, candidate: Candidate, catalog) -> Verdict:
             )
 
     # ---------------------------------------------------------- rung 1
-    entry, evidence, pkg_version = _by_provenance(gate, candidate, catalog)
+    entry, evidence, pkg_version, install_root = _by_provenance(gate, candidate, catalog)
     if entry is not None:
         # Before accepting it, ask whether any other channel names something
         # else. A silent preference is how an inventory becomes confidently
         # wrong; a recorded conflict is something a reviewer can settle.
         conflict = _conflicting(catalog, candidate, name, entry)
         return _catalogued(entry, candidate, Rung.PROVENANCE, evidence,
-                           version=pkg_version, conflict=conflict)
+                           version=pkg_version, conflict=conflict, install_root=install_root)
 
     # ---------------------------------------------------------- rung 2
     entry, evidence = _by_content(gate, candidate, catalog)
@@ -126,7 +101,7 @@ def _by_provenance(gate, candidate: Candidate, catalog):
             return entry, (
                 Evidence("identifier", Channel.PACKAGE, candidate.path,
                          f"{manager} owns {pkg_name}", 0.95, Rung.PROVENANCE),
-            ), candidate.detail.get("version")
+            ), candidate.detail.get("version"), None
 
     # An OS application registry and an editor/browser extension registry are
     # installed-artifact records, not filename conventions. Their stable IDs
@@ -138,7 +113,7 @@ def _by_provenance(gate, candidate: Candidate, catalog):
             return entry, (
                 Evidence("identifier", Channel.REGISTRY, candidate.path,
                          f"application registry id {ident}", 0.9, Rung.PROVENANCE),
-            ), candidate.detail.get("version")
+            ), candidate.detail.get("version"), None
     if candidate.kind == "extension":
         ident = str(candidate.detail.get("extension_id", ""))
         entry = catalog.match("extension_ids", ident)
@@ -146,7 +121,13 @@ def _by_provenance(gate, candidate: Candidate, catalog):
             return entry, (
                 Evidence("identifier", Channel.REGISTRY, candidate.path,
                          f"extension registry id {ident}", 0.9, Rung.PROVENANCE),
-            ), candidate.detail.get("version")
+            ), candidate.detail.get("version"), None
+
+    # A vendor installer's own directory. Checked before package ownership
+    # because it costs one stat, not a subprocess.
+    found = _by_layout(gate, candidate, catalog)
+    if found is not None:
+        return found
 
     # Package ownership is a subprocess on Linux. Running it for every entry
     # in /usr/bin turns one scan into thousands of sequential dpkg queries.
@@ -157,10 +138,11 @@ def _by_provenance(gate, candidate: Candidate, catalog):
     basename = candidate.path.rstrip("/").rsplit("/", 1)[-1]
     ownership_relevant = (
         candidate.kind in ("process", "exec_event")
+        or (candidate.kind in SOCKET_KINDS and candidate.path.startswith("/"))
         or catalog.match("binaries", basename) is not None
     )
     if not ownership_relevant:
-        return None, (), None
+        return None, (), None, None
 
     owner = gate.package_owner(candidate.path)
     if owner.ok:
@@ -170,8 +152,57 @@ def _by_provenance(gate, candidate: Candidate, catalog):
             return entry, (
                 Evidence("identifier", Channel.PACKAGE, candidate.path,
                          f"{pkg.manager} -S resolved to {pkg.name}", 0.95, Rung.PROVENANCE),
-            ), pkg.version
-    return None, (), None
+            ), pkg.version, None
+    return None, (), None, None
+
+
+#: Socket candidates. Their path is the owning process's executable when
+#: the process is known, and a host or port otherwise.
+SOCKET_KINDS = frozenset({"network_peer", "model_port"})
+#: Candidates that are an executable on disk, or a process running one.
+LAYOUT_KINDS = frozenset({"binary", "process", "exec_event"}) | SOCKET_KINDS
+
+
+def _by_layout(gate, candidate: Candidate, catalog):
+    """An executable inside a directory a vendor's installer manages.
+
+    The native installers keep no package record: Claude Code's puts each
+    release at `~/.local/share/claude/versions/<version>` and links a
+    launcher to the current one. The launcher is followed to its target,
+    so the link, the release and a process running it are one install.
+    The layout is catalog data; nothing is executed.
+    """
+    if not catalog.layouts or candidate.kind not in LAYOUT_KINDS:
+        return None
+    real = candidate.path
+    if candidate.kind == "binary":
+        stat = gate.stat(candidate.path)
+        if not stat.ok:
+            return None
+        real = stat.value.real_path
+    parent, _, name = real.rpartition("/")
+    forms = {parent, _home_relative(parent)}
+    for layout in catalog.layouts:
+        if layout.parent in forms and fnmatchcase(name, layout.pattern):
+            entry = catalog.by_id[layout.entry_id]
+            return entry, (
+                Evidence("identifier", Channel.FILESYSTEM, candidate.path,
+                         f"installer-managed layout {layout.target}", 0.9, Rung.PROVENANCE),
+            ), _layout_version(entry, layout, real), parent
+    return None
+
+
+def _layout_version(entry, layout, real: str) -> str | None:
+    """The version a layout encodes in the path, if it has the catalog's shape."""
+    parts = real.rstrip("/").split("/")
+    if layout.version_from == "basename":
+        value = parts[-1]
+    elif layout.version_from == "parent" and len(parts) > 1:
+        value = parts[-2]
+    else:
+        return None
+    shape = entry.version_shape
+    return value if shape is None or re.match(shape, value) else None
 
 
 def _by_content(gate, candidate: Candidate, catalog):
@@ -212,6 +243,9 @@ def _suspected(catalog, candidate: Candidate, name: str):
 
 def _home_relative(path: str) -> str:
     """`~/.claude` in the catalog must match /Users/alice/.claude on disk."""
+    for base in ("/root/", "/var/root/"):
+        if path.startswith(base):
+            return "~/" + path[len(base):]
     for base in ("/Users/", "/home/"):
         if path.startswith(base):
             tail = path[len(base):]
@@ -229,7 +263,8 @@ def _conflicting(catalog, candidate: Candidate, name: str, chosen) -> str | None
 
 
 def _catalogued(entry, candidate: Candidate, rung: Rung, evidence,
-                version: object = None, conflict: str | None = None) -> Verdict:
+                version: object = None, conflict: str | None = None,
+                install_root: str | None = None) -> Verdict:
     """Identity is settled without executing the discovered artifact."""
     version = version or candidate.detail.get("version")
     extra: tuple[Evidence, ...] = ()
@@ -239,7 +274,7 @@ def _catalogued(entry, candidate: Candidate, rung: Rung, evidence,
     return Verdict(
         catalog_id=entry.id, kind=_kind(entry), name=entry.name, vendor=entry.vendor,
         version=str(version) if version else None, rung=rung,
-        evidence=tuple(evidence) + extra, conflict=conflict,
+        evidence=tuple(evidence) + extra, conflict=conflict, install_root=install_root,
     )
 
 

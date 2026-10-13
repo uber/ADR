@@ -22,12 +22,9 @@ class Channel(str, Enum):
     FILESYSTEM = "filesystem"
     PACKAGE = "package"
     REGISTRY = "registry"
-    SIGNATURE = "signature"
     CONFIG = "config"
     RUNTIME = "runtime"
     NETWORK = "network"
-    EXEC_JOURNAL = "exec_journal"
-    TELEMETRY = "telemetry"
 
 
 class Rung(str, Enum):
@@ -39,12 +36,11 @@ class Rung(str, Enum):
 
     PROVENANCE = "provenance"
     CONTENT = "content"
-    BEHAVIOUR = "behaviour"
     CONVENTION = "convention"
 
 
 #: The rungs that may, on their own, establish an identity.
-CONCLUSIVE_RUNGS = frozenset({Rung.PROVENANCE, Rung.CONTENT, Rung.BEHAVIOUR})
+CONCLUSIVE_RUNGS = frozenset({Rung.PROVENANCE, Rung.CONTENT})
 
 
 @dataclass(frozen=True, slots=True)

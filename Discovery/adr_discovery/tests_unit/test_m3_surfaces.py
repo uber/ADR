@@ -83,9 +83,21 @@ def test_one_broken_skill_does_not_remove_its_siblings(world):
 
     result = read(world, "/Users/a/.claude/skills")
 
-    assert result.declared == 3
+    assert result.declared == 2
     assert len(result.declarations) == 1
-    assert len(result.errors) == 2
+    assert len(result.errors) == 1
+
+
+def test_a_directory_without_its_manifest_is_not_a_member(world):
+    """`plugins/` also holds the host's bookkeeping. That is not a failed read."""
+    world.file("/Users/a/.claude/plugins/p/.claude-plugin/plugin.json", '{"name": "p"}')
+    for bookkeeping in ("cache", "data", "marketplaces"):
+        world.dir(f"/Users/a/.claude/plugins/{bookkeeping}/x")
+
+    result = read(world, "/Users/a/.claude/plugins")
+
+    assert [d.name for d in result.declarations] == ["p"]
+    assert result.declared == 1 and result.errors == ()
 
 
 def test_a_file_without_frontmatter_still_counts(world):

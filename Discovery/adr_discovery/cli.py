@@ -8,11 +8,9 @@ program without going through a command line.
 from __future__ import annotations
 
 import argparse
-import getpass
 import json
 import os
 import platform
-import socket
 import sys
 import unicodedata
 from datetime import datetime, timezone
@@ -25,6 +23,7 @@ from .pipeline import discover
 from .redact import rules as redact
 from .reporter import diff, from_dict, stats, to_json
 from .reporter.delta import DifferentEndpoints
+from .world import host_identity
 from .world.budget import Budget
 from .world.gate import Gate
 from .world.platform import for_host
@@ -40,13 +39,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--dry-run", action="store_true", help="scan and print, write nothing")
     p.add_argument("--explain", action="store_true", help="print exactly what would leave the machine")
     p.add_argument("--output-dir", default="./output", help="where the snapshot lands")
-    p.add_argument("--policy", help="tenant policy JSON: approved, forbidden, tenant_domains")
+    p.add_argument("--policy", help="tenant policy JSON: approved, forbidden, tenant_domains, approved_indicators, forbidden_indicators")
     p.add_argument("--telemetry", help="JSON mapping catalog id to last-used timestamp")
     p.add_argument("--diff", metavar="SNAPSHOT",
                    help="compare this scan against a previous snapshot and print the delta")
     p.add_argument("--allow-cross-endpoint", action="store_true",
                    help="permit a diff between two different hosts")
+    p.add_argument("--resolve", action="store_true",
+                   help="look up model-provider hostnames to match connections by address "
+                        "(sends DNS queries; off by default)")
     p.add_argument("--max-entries", type=int, default=200_000, help="shared sweep ceiling")
+    p.add_argument("--max-children", type=int, default=5_000,
+                   help="largest directory whose subdirectories are still walked")
     return p
 
 
@@ -88,15 +92,18 @@ def main(argv: list[str] | None = None) -> int:
     gate = Gate(
         root=args.root,
         ledger=Ledger(),
-        budget=Budget(max_entries=args.max_entries),
+        budget=Budget(max_entries=args.max_entries, max_children=args.max_children),
         providers=for_host() if args.root == "/" else None,
         env=dict(os.environ),
+        resolve_names=args.resolve,
     )
 
     snapshot = discover(
         gate, catalog, policy, telemetry,
-        hostname=socket.gethostname(),
-        username=getpass.getuser(),
+        # From the operating system, not USER/LOGNAME, and the same value
+        # the Sensor reports for this host (Common/adr_common).
+        hostname=host_identity.hostname(),
+        username=host_identity.username(),
         platform_name=platform.system().lower(),
         timestamp=datetime.now(timezone.utc).isoformat(timespec="seconds"),
     )

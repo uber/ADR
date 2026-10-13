@@ -5,10 +5,10 @@ from __future__ import annotations
 import json
 import shlex
 
-from .base import Application, NullProviders, Package, Process, Socket
+from .base import Application, HostResolver, NullProviders, Package, Process, Socket
 
 
-class WindowsProviders(NullProviders):
+class WindowsProviders(HostResolver, NullProviders):
     reason = "Windows management surface unavailable"
     HOME_ROOTS = ("/Users",)
     DIRECT_HOMES: tuple[str, ...] = ()

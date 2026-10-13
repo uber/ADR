@@ -30,7 +30,7 @@ def score(candidate: Candidate, signals: set[str]) -> tuple[float, tuple[str, ..
     return round(sum(WEIGHTS[s] for s in fired), 3), fired
 
 
-def signals_for(candidate: Candidate, credential_kinds: tuple[str, ...] = ()) -> set[str]:
+def signals_for(candidate: Candidate) -> set[str]:
     found: set[str] = set()
     detail = candidate.detail
 
@@ -38,8 +38,6 @@ def signals_for(candidate: Candidate, credential_kinds: tuple[str, ...] = ()) ->
         found.add("network_intent")
     if candidate.kind == "model_port":
         found.add("runtime_shape")
-    if credential_kinds:
-        found.add("credential_affinity")
     if candidate.kind in ("marker_file", "state_dir") and "mcp" in candidate.path.lower():
         found.add("mcp_participation")
     if candidate.kind == "state_dir":

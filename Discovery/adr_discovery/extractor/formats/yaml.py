@@ -105,6 +105,14 @@ def _guard(body: str, lineno: int) -> None:
 def _scalar(token: str, lineno: int):
     if token.startswith(REFUSED_PREFIXES) or any(c in token for c in REFUSED_CHARS):
         raise Unrepresentable(f"line {lineno}: scalar outside the supported subset")
+    return typed_scalar(token)
+
+
+def typed_scalar(token: str):
+    """Quote stripping and bool/null/number typing, with no refusals.
+
+    For callers that have already decided which constructs they accept.
+    """
     if len(token) >= 2 and token[0] == token[-1] and token[0] in "\"'":
         return token[1:-1]
     low = token.lower()

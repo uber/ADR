@@ -191,3 +191,16 @@ def test_u5_14_a_second_install_of_one_tool_stays_separate():
 
     assert len(assets) == 2
     assert {a.version for a in assets} == {"0.147.0", "0.147.0-alpha.6.5"}
+
+
+def test_the_same_evidence_from_two_rows_is_listed_once():
+    same = (Evidence("identifier", Channel.FILESYSTEM, "/home/a/.local/bin/x", "layout", 0.9, Rung.PROVENANCE),)
+    observations = tuple(
+        Observation(Kind.CLI_AGENT, "x", path="/home/a/.local/bin/x", catalog_id="x",
+                    real_path="/opt/x/1.0", evidence=same)
+        for _ in range(2)
+    )
+
+    (asset,) = resolve(observations)
+
+    assert asset.evidence == same

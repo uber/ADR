@@ -16,8 +16,7 @@ from __future__ import annotations
 from types import MappingProxyType
 
 from ..contracts.records import Declaration, Kind
-from .formats.frontmatter import NoFrontmatter
-from .formats.frontmatter import parse as parse_frontmatter
+from .formats.frontmatter import NoFrontmatter, parse_with_notes
 from .isolate import per_record
 
 #: marker directory name -> (kind, file suffix, whether the entry is a dir)
@@ -55,12 +54,26 @@ def extract_surface(gate, candidate, scope: str):
         return None
 
     entries = [e for e in listing.value if _is_member(e, suffixes, nested)]
-    return per_record(
+    if nested:
+        # A directory without the manifest is not a member, not a failed
+        # read: `plugins/` also holds `cache/`, `data/`, marketplace clones.
+        entries = [e for e in entries if _manifest_of(gate, e.path, kind)]
+    skipped: list[str] = []
+    result = per_record(
         entries,
-        lambda index, entry: _declaration(gate, entry, kind, scope, nested),
+        lambda index, entry: _declaration(gate, entry, kind, scope, nested, skipped),
         candidate.path,
         cap=ENTRY_CAP,
     )
+    if skipped:
+        # A coverage note, not an error: the record is intact, only keys the
+        # allowlist did not need (and a plain parser cannot read) were passed over.
+        names = ", ".join(sorted(set(skipped))[:8])
+        gate.ledger.probe(
+            "frontmatter", "ran",
+            f"{candidate.path}: {len(skipped)} unreadable key(s) skipped ({names})",
+        )
+    return result
 
 
 def _is_member(entry, suffixes: tuple[str, ...], nested: bool) -> bool:
@@ -82,19 +95,20 @@ MANIFESTS = MappingProxyType({
 })
 
 
-def _declaration(gate, entry, kind: Kind, scope: str, nested: bool) -> Declaration:
+def _declaration(gate, entry, kind: Kind, scope: str, nested: bool, skipped: list[str]) -> Declaration:
     name = entry.path.rsplit("/", 1)[-1]
     body_path = entry.path
 
     if nested:
-        body_path = _manifest_of(gate, entry.path, kind, name)
+        body_path = _manifest_of(gate, entry.path, kind)
 
     metadata: dict[str, object] = {}
     if body_path.endswith(".md"):
         raw = gate.read_text(body_path, limit=64 * 1024)
         if raw.ok:
             try:
-                metadata = parse_frontmatter(raw.value)
+                metadata, notes = parse_with_notes(raw.value)
+                skipped.extend(notes)
             except NoFrontmatter:
                 metadata = {}
 
@@ -116,13 +130,11 @@ def _declaration(gate, entry, kind: Kind, scope: str, nested: bool) -> Declarati
     )
 
 
-def _manifest_of(gate, path: str, kind: Kind, name: str) -> str:
+def _manifest_of(gate, path: str, kind: Kind) -> str | None:
     for suffix in MANIFESTS.get(kind, ()):
         if gate.stat(path + suffix).ok:
             return path + suffix
-    raise FileNotFoundError(
-        f"{name}: no {' or '.join(MANIFESTS.get(kind, ('manifest',)))} -- not a {kind.value}"
-    )
+    return None
 
 
 def _as_tuple(value) -> tuple[str, ...]:

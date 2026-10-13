@@ -140,8 +140,9 @@ def test_uc3_01_an_unreachable_asset_is_explained(world, catalog):
 def test_uc3_02_out_of_scope_is_named_on_a_machine_that_has_none(world, catalog):
     snapshot = discover(world.gate(), catalog)
 
-    assert snapshot.coverage.out_of_scope == OUT_OF_SCOPE
-    assert "instruction_files" in snapshot.coverage.out_of_scope
+    assert snapshot.coverage.out_of_scope == OUT_OF_SCOPE == ("scheduling_mechanisms",)
+    # Collected categories are never also named as uncollected.
+    assert not {"instruction_files", "agent_hooks"} & set(snapshot.coverage.out_of_scope)
 
 
 def test_uc3_03_every_boundary_kind_is_reachable(world):

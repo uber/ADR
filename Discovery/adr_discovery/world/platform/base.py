@@ -8,7 +8,10 @@ fixture world and a live machine interchangeable.
 from __future__ import annotations
 
 import json
+import socket
 import stat
+import threading
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
@@ -66,6 +69,14 @@ class DnsEntry:
 
 
 @dataclass(frozen=True, slots=True)
+class Resolution:
+    """One address a hostname resolved to through the host's resolver."""
+
+    hostname: str
+    address: str
+
+
+@dataclass(frozen=True, slots=True)
 class ExecEvent:
     """What ran between scans. Absent unless a privileged collector supplies
     it -- and its absence is a coverage fact, never an empty set."""
@@ -89,6 +100,7 @@ class Providers(Protocol):
     def dns_cache(self, gate: "Gate") -> "Result": ...
     def exec_journal(self, gate: "Gate") -> "Result": ...
     def package_owner(self, gate: "Gate", path: str) -> "Result": ...
+    def resolve(self, gate: "Gate", hostnames: tuple[str, ...]) -> "Result": ...
 
 
 class NullProviders:
@@ -174,6 +186,50 @@ class NullProviders:
 
     def package_owner(self, gate, path):
         return self._unavailable(gate, "package_owner")
+
+    def resolve(self, gate, hostnames):
+        return self._unavailable(gate, "resolver")
+
+
+class HostResolver:
+    """Forward resolution through the host's own resolver, bounded in time.
+
+    A socket table holds addresses, while the landscape is written in
+    hostnames. Resolving the few provider names once, rather than reverse
+    resolving every peer, keeps the work fixed-size and asks the resolver
+    nothing about where this machine actually connects.
+    """
+
+    RESOLVE_DEADLINE = 3.0
+
+    def resolve(self, gate, hostnames):
+        from ..gate import Ok
+
+        found: dict[str, list[str]] = {}
+
+        def lookup(name: str) -> None:
+            try:
+                infos = socket.getaddrinfo(name, 443, proto=socket.IPPROTO_TCP)
+            except (OSError, UnicodeError):
+                return
+            found[name] = sorted({info[4][0] for info in infos})
+
+        # getaddrinfo cannot be cancelled, so a stalled lookup is abandoned
+        # at the deadline rather than allowed to stall the scan.
+        workers = [threading.Thread(target=lookup, args=(name,), daemon=True) for name in hostnames]
+        for worker in workers:
+            worker.start()
+        stop = time.monotonic() + self.RESOLVE_DEADLINE
+        for worker in workers:
+            worker.join(max(0.0, stop - time.monotonic()))
+        resolved = dict(found)
+        if not resolved:
+            return self._unavailable(gate, "resolver")
+        missing = len(hostnames) - len(resolved)
+        if missing:
+            gate.ledger.probe("resolver", "degraded", f"{missing} of {len(hostnames)} names unresolved")
+        return Ok(tuple(Resolution(name, address)
+                        for name in sorted(resolved) for address in resolved[name]))
 
 
 class LanguagePackages:
@@ -318,6 +374,7 @@ class FixtureProviders(NullProviders):
         "applications": ("applications.json", Application),
         "dns_cache": ("dns.json", DnsEntry),
         "exec_journal": ("execjournal.json", ExecEvent),
+        "resolver": ("resolver.json", Resolution),
     }
 
     def __init__(self, data: dict[str, object] | None = None) -> None:
@@ -367,6 +424,14 @@ class FixtureProviders(NullProviders):
 
     def exec_journal(self, gate):
         return self._load(gate, "exec_journal")
+
+    def resolve(self, gate, hostnames):
+        from ..gate import Ok
+
+        rows = self._load(gate, "resolver")
+        if not rows.ok:
+            return rows
+        return Ok(tuple(r for r in rows.value if r.hostname in hostnames))
 
     def package_owner(self, gate, path):
         from ..gate import Ok, Refused

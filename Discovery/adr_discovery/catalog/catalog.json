@@ -1,10 +1,12 @@
 {
-  "version": "2026.08.22",
+  "version": "2026.10.12",
   "entries": [
     {
       "id": "claude-code", "name": "Claude Code", "vendor": "Anthropic", "kind": "cli_agent",
       "fingerprints": {"binaries": ["claude"], "packages": ["npm:@anthropic-ai/claude-code"],
-                       "state_dirs": ["~/.claude"]},
+                       "state_dirs": ["~/.claude"],
+                       "install_layouts": [{"target": "~/.local/share/claude/versions/*",
+                                            "version_from": "basename"}]},
       "proofs": {"provenance": ["npm:@anthropic-ai/claude-code", "brew:claude"],
                  "version_probe": ["--version"], "version_shape": "^\\d+\\.\\d+\\.\\d+"},
       "risk_factors": ["executes_shell"]

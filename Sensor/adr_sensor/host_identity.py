@@ -1,9 +1,11 @@
-"""Identity of the host the sensor runs on, resolved once per process.
+# Generated from Common/adr_common/host_identity.py by Common/sync.py. Do not edit.
+"""Identity of the host this process runs on, resolved once per process.
 
-Every component (session events, system configuration, OTLP resources and
-runtime logs) takes identity from here so a run reports one consistent value.
-Identity comes from the operating system, never from environment variables
-such as ``USER``, which callers and deployment tooling can set to anything.
+Every package that reports identity (the Sensor's events, system
+configuration, OTLP resources and logs; Discovery's snapshot) takes it from
+here, so one host reports one consistent value. Identity comes from the
+operating system, never from environment variables such as ``USER``, which
+callers and deployment tooling can set to anything.
 """
 
 import functools
@@ -19,7 +21,7 @@ UNKNOWN_HOSTNAME = "unknown_hostname"
 
 @functools.lru_cache(maxsize=None)
 def username() -> str:
-    """Return the account the sensor process runs as."""
+    """Return the account the current process runs as."""
     try:
         if sys.platform == "win32":
             # GetUserNameW: the account of the current process token.

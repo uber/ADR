@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import os
 
 try:
@@ -9,10 +10,10 @@ try:
 except ImportError:
     pwd = None  # type: ignore
 
-from .base import Application, LanguagePackages, NullProviders, Package, Process, Socket
+from .base import Application, HostResolver, LanguagePackages, NullProviders, Package, Process, Socket
 
 
-class LinuxProviders(NullProviders):
+class LinuxProviders(HostResolver, NullProviders):
     reason = "not readable on this host"
 
     HOME_ROOTS = ("/home",)
@@ -215,10 +216,14 @@ class LinuxProviders(NullProviders):
 
 
 def _hex_ip(hex_addr: str) -> str:
-    if len(hex_addr) == 8:
-        octets = [int(hex_addr[i : i + 2], 16) for i in (6, 4, 2, 0)]
-        return ".".join(str(o) for o in octets)
-    return hex_addr
+    """/proc/net/tcp{,6} addresses: 32-bit words in host (little-endian) order."""
+    try:
+        raw = b"".join(bytes.fromhex(hex_addr[i : i + 8])[::-1] for i in range(0, len(hex_addr), 8))
+        address = ipaddress.ip_address(raw)
+    except ValueError:
+        return hex_addr
+    mapped = getattr(address, "ipv4_mapped", None)
+    return str(mapped or address)
 
 
 def _socket_pids(gate) -> dict[str, int]:

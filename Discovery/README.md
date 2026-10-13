@@ -56,6 +56,45 @@ uv run adr-discovery \
 Discovery does not execute binaries that it finds. Machine access is bounded,
 and risky text is redacted at collection time.
 
+Socket tables list peer addresses, not hostnames. By default Discovery sends
+nothing over the network, so a connection is matched to a model provider only
+when its peer is already a name, and the resolver is recorded as unavailable
+in coverage. `--resolve` looks up a short list of provider hostnames once
+through the host's resolver (bounded to a few seconds, and only when a
+connection needs it) and matches peers by address. Only hosts served from a
+small fixed set of addresses are resolved; a match is a review signal, never
+a finding on its own, and it cannot see through a proxy.
+
+### Policy file
+
+A policy sets each asset's `sanction` (`approved`, `forbidden`, `unsanctioned`
+or `unknown`). Catalogued tools are named by catalog id; everything else
+(MCP servers, skills, package-launched servers) by identity indicators that use
+the same kinds as a shared known-bad artifact feed. See
+[`examples/policy.example.json`](examples/policy.example.json).
+
+| Field | Meaning |
+| --- | --- |
+| `approved`, `forbidden` | Catalog ids |
+| `tenant_domains` | Domains you own; other destinations raise `third_party_destination` |
+| `approved_indicators`, `forbidden_indicators` | Lists of indicators, below |
+
+| Indicator | Matches |
+| --- | --- |
+| `{"kind": "skill_sha256", "sha256": ...}` | Skills whose raw `SKILL.md` bytes hash to it (`skill_sha256` on the asset) |
+| `{"kind": "file_sha256", "sha256": ...}` | Assets whose `content_hash` equals it |
+| `{"kind": "mcp_endpoint", "url": ...}` | MCP servers declaring that URL (scheme/host case, query and trailing slash ignored) |
+| `{"kind": "package", "ecosystem": "npm"\|"pypi", "name": ..., "versions": [...] \| "all_versions": true}` | MCP servers launched with `npx`/`bunx`/`pnpm dlx`/`uvx`/`pipx` for that package, and package-manager assets. A launch that pins no version matches only `all_versions` |
+| `{"kind": "name", "asset_kind": ..., "name": ...}` | Assets of that kind with exactly that name |
+
+Rules: `forbidden` beats `approved`. A forbidden match raises a high-severity
+`forbidden_asset` finding. `unsanctioned` is reported only for assets the policy
+addresses: catalogued assets when `approved` is non-empty, and, for
+`approved_indicators`, assets of the kinds those indicators describe (skills for
+`skill_sha256`, MCP servers for `mcp_endpoint` and `package`, the stated
+`asset_kind` for `name`); `file_sha256` addresses no kind. Invalid policy input
+is rejected with an error naming the field and entry.
+
 ## Exit codes
 
 | Code | Meaning |

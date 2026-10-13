@@ -27,7 +27,6 @@ The rewrite exists because the old layout had no boundary a linter could check. 
 - WSL, containers, remote/cloud agents, scheduled agents, account identity and code-signature collection are not implemented.
 - Fleet aggregation, fan-out and trend tracking belong to the central plane and are not part of this endpoint package.
 - The black-box harness is operational for a subset of the manifest. Vendor applications, authenticated sessions, services and model-weight scenarios still need additional install recipes and golden guests.
-- `coverage.out_of_scope` still names instruction files and hooks even though the collector now inventories them. The snapshot vocabulary must be corrected before treating that field as authoritative.
 
 ### Run it
 
@@ -147,7 +146,6 @@ adr_discovery/
 │
 ├── identifier/           M4 · what it really is
 │   ├── ladder.py           provenance → content → convention, stop at proof
-│   ├── verify.py           compatibility refusal for executable probes
 │   └── openworld.py        score the uncatalogued on properties, never on names
 │
 ├── resolver/             M5 · one thing, one asset
@@ -189,7 +187,14 @@ kind          cli_agent · app · ai_browser · model_runtime · model_weights
               extension · mcp_server · mcp_bundle · skill · command
               plugin · output_style · agent_definition · hook · instructions
               ci_agent · cloud_agent · agent_platform
-identity      catalog id, or a content-derived identity for the uncatalogued
+identity      catalog id, or a content-derived identity for the uncatalogued.
+              Declarations are never identified by name alone: file-shaped
+              kinds (instructions, skill, command, agent_definition,
+              output_style, plugin) by their on-disk path, mcp_server by
+              name plus the declaring config file, hooks and CI agents by
+              path plus their own digest. Two CLAUDE.md files, two skills
+              named `index`, or one server name declared in two configs
+              are separate assets.
               name · vendor · version · install_path · install_root · install_method
 owner         a person, or "system" — never whoever ran the scan
 location      local today; the schema reserves wsl:<distro> · container · remote:<host>
@@ -198,10 +203,17 @@ verification  how identity was established: provenance · content
 confidence    derived from channel count, reported as a band
 liveness      running · installed · declared_only
 last_used     from Sensor session telemetry
+modified      latest mtime of the file behind it (a skill's SKILL.md, a declaration's config file), ISO-8601 UTC
 risk          {pinned, factors[], credential_kinds[], env_names[], …}
+skill_sha256  skills only: sha256 of the raw SKILL.md bytes (also content_hash, package_id when known)
+hook_event    hooks only: lifecycle event (hook_matcher: tool matcher); the command is never emitted
 ```
 
+Schema 1.1 changed identity for declarations (see `identity`), so `asset_id` of those kinds differs from 1.0 and the first delta across the upgrade reports them as disappeared and appeared. Catalogued binaries and processes are unaffected.
+
 `evidence` makes every claim checkable, and `verification` says which rung of the ladder established identity — so a reader can tell a package-owned binary from a filename that looked right. Discovered executables are never run. OS inventory helpers use fixed absolute paths through a separate bounded-output interface; they cannot be selected through the scanner's inherited `PATH`.
+
+A native installer leaves no package record, so a catalog entry may declare `install_layouts`: the directory its updater manages (`~/.local/share/claude/versions/*` for Claude Code). An executable there, a launcher symlink resolved into it, or a process running one is concluded at the provenance rung, with the version read from the path when it has the entry's `version_shape`.
 
 ### Coverage travels with it
 

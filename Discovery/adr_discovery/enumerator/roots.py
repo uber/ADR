@@ -10,6 +10,7 @@ from __future__ import annotations
 import stat
 
 from ..contracts.records import Priority
+from .markers import STATE_ROOTS
 
 #: (template, priority). `~` is expanded per discovered home, not per the
 #: user running the scan -- the owner of an asset is a person, never whoever
@@ -105,6 +106,22 @@ def ordered_roots(gate) -> tuple[tuple[str, Priority], ...]:
         out.append((template, priority))
     out.sort(key=lambda pair: pair[1])
     return tuple(out)
+
+
+def state_roots(gate) -> tuple[str, ...]:
+    """Existing agent state directories, expanded per home.
+
+    Data lives in `markers.STATE_ROOTS`; this only asks which exist, with a
+    stat (no entry charged) so absent ones leave no sweep record.
+    """
+    found: list[str] = []
+    for home in homes(gate):
+        for template in STATE_ROOTS:
+            path = home + template[1:]
+            st = gate.stat(path)
+            if path not in found and st.ok and stat.S_ISDIR(st.value.mode):
+                found.append(path)
+    return tuple(found)
 
 
 def in_scope(path: str, include_dependency_caches: bool = False) -> bool:

@@ -82,3 +82,41 @@ jobs:
     steps:
       - name: All Sensor matrix legs must pass
         run: test "${{ needs.test-sensor.result }}" = "success"
+
+  test-discovery:
+    name: Discovery tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Discovery
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync --extra dev --python 3.11
+
+      - name: Run tests
+        run: uv run --python 3.11 pytest -q
+
+      - name: Lint
+        run: uv run --python 3.11 ruff check .
+
+  # The Sensor and Discovery each ship a generated copy of Common/ source
+  # (see Common/README.md). Fail when a copy was edited or not regenerated.
+  shared-source:
+    name: Shared source in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check generated copies
+        run: python3 Common/sync.py --check

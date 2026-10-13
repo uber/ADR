@@ -81,3 +81,39 @@ def test_a_ci_agent_reaches_the_snapshot(world, catalog):
     agents = [a for a in snapshot.assets if a.kind is Kind.CI_AGENT]
     assert len(agents) == 1
     assert "claude-code-action" in agents[0].name
+
+
+def test_a_ci_agent_carries_its_catalog_id_and_is_sanctioned(world, catalog):
+    from adr_discovery.judge import Policy
+
+    world.file("/Users/a/proj/.github/workflows/review.yml", WORKFLOW)
+
+    open_snapshot = discover(world.gate(), catalog)
+    (agent,) = [a for a in open_snapshot.assets if a.kind is Kind.CI_AGENT]
+    assert agent.catalog_id == "claude-code"
+    assert agent.sanction == "unknown"
+    # unattended by construction is not a permission-bypass finding
+    assert [f.rule for f in open_snapshot.findings if f.asset_id == agent.asset_id] == []
+
+    forbidden = discover(world.gate(), catalog, Policy.from_dict({"forbidden": ["claude-code"]}))
+    (agent,) = [a for a in forbidden.assets if a.kind is Kind.CI_AGENT]
+    assert agent.sanction == "forbidden"
+    assert [f.rule for f in forbidden.findings if f.asset_id == agent.asset_id] == ["forbidden_asset"]
+
+    approved = discover(world.gate(), catalog, Policy.from_dict({"approved": ["codex-cli"]}))
+    (agent,) = [a for a in approved.assets if a.kind is Kind.CI_AGENT]
+    assert agent.sanction == "unsanctioned"
+
+
+def test_catalogued_ci_steps_stay_separate_assets_and_take_no_local_telemetry(world, catalog):
+    world.file("/Users/a/proj/.github/workflows/a.yml", WORKFLOW)
+    world.file("/Users/a/proj/.github/workflows/b.yml", WORKFLOW)
+
+    snapshot = discover(
+        world.gate(), catalog, telemetry={"claude-code": "2026-08-21T09:12:00+00:00"}
+    )
+
+    agents = [a for a in snapshot.assets if a.kind is Kind.CI_AGENT]
+    assert len(agents) == 2
+    assert {a.catalog_id for a in agents} == {"claude-code"}
+    assert all(a.last_used is None for a in agents)

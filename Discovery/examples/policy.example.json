@@ -1,0 +1,17 @@
+{
+  "tenant_domains": ["example.com"],
+  "approved": ["claude-code"],
+  "forbidden": [],
+  "approved_indicators": [
+    {"kind": "name", "asset_kind": "mcp_server", "name": "team-docs"},
+    {"kind": "mcp_endpoint", "url": "https://mcp.example.com/docs"}
+  ],
+  "forbidden_indicators": [
+    {"kind": "skill_sha256", "sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+    {"kind": "file_sha256", "sha256": "1111111111111111111111111111111111111111111111111111111111111111"},
+    {"kind": "mcp_endpoint", "url": "https://mcp.untrusted.example/api"},
+    {"kind": "package", "ecosystem": "npm", "name": "example-bad-mcp", "versions": ["1.0.0", "1.0.1"]},
+    {"kind": "package", "ecosystem": "pypi", "name": "example-bad-tool", "all_versions": true},
+    {"kind": "name", "asset_kind": "mcp_server", "name": "scratch-server"}
+  ]
+}

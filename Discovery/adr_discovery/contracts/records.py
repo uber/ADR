@@ -133,6 +133,9 @@ class Verdict:
     signals: tuple[str, ...] = ()
     score: float = 0.0
     conflict: str | None = None
+    #: The directory an installer manages, when that is what proved identity:
+    #: every version in it, and every process running one, is one install.
+    install_root: str | None = None
 
     @property
     def is_concluded(self) -> bool:
@@ -161,7 +164,8 @@ class Observation:
     real_path: str | None = None
     inode: str | None = None
     package_id: str | None = None
-    signature_id: str | None = None
+    #: Last modification of the observed file, ISO-8601 UTC.
+    modified: str | None = None
     liveness: Liveness = Liveness.INSTALLED
     attribute_of: str | None = None
     evidence: tuple[Evidence, ...] = ()
@@ -203,6 +207,23 @@ class Asset:
     risk: Risk = field(default_factory=Risk)
     sanction: str = "unknown"
     flags: tuple[str, ...] = ()
+    #: Hooks only: the lifecycle event and tool matcher. The command stays private.
+    hook_event: str | None = None
+    hook_matcher: str | None = None
+    #: Skills only: sha256 of the raw SKILL.md bytes (not the directory, not
+    #: normalized), the identity a known-bad/approved artifact list uses.
+    skill_sha256: str | None = None
+    #: sha256 of the identified file, when one was read within the size cap.
+    content_hash: str | None = None
+    #: "<manager>:<package>" when a package record owns the asset.
+    package_id: str | None = None
+    #: Latest modification time of any file behind the asset, ISO-8601 UTC.
+    #: For a skill, its SKILL.md; for a declaration, the declaring file.
+    modified: str | None = None
+    #: Versions some process is executing right now. `version` is what the
+    #: install runs next; after an update an older or newer release can
+    #: still be running, and that is worth seeing.
+    running_versions: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

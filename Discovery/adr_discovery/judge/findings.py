@@ -25,18 +25,31 @@ def _may_be_judged(asset: Asset) -> bool:
     if asset.kind is Kind.MCP_SERVER:
         # Declared in a config, or correlated with one. A bare process whose
         # argv merely resembles a server does not reach this branch.
-        return bool(asset.catalog_id) or "declared" in asset.flags or asset.confidence.label != "none"
+        return bool(asset.catalog_id) or asset.confidence.label != "none"
     return bool(asset.catalog_id)
 
 
 def findings_for(asset: Asset, policy: Policy) -> tuple[Finding, ...]:
-    if not _may_be_judged(asset):
-        return ()
-
     out: list[Finding] = []
 
     def ev(proof: str) -> tuple[Evidence, ...]:
         return (Evidence("judge", Channel.CONFIG, asset.install_path or "", proof, 0.9),)
+
+    # The operator named this thing. That is evidence of its own, so it is
+    # raised before (and independent of) the inferred-identity precision gate.
+    if asset.sanction == "forbidden":
+        out.append(
+            Finding(
+                rule="forbidden_asset",
+                severity="high",
+                asset_id=asset.asset_id,
+                summary=f"{asset.name} is forbidden by policy",
+                evidence=ev("matched a forbidden entry in the tenant policy"),
+            )
+        )
+
+    if not _may_be_judged(asset):
+        return tuple(out)
 
     if asset.kind is Kind.MCP_SERVER and asset.risk.pinned is False:
         out.append(
@@ -71,7 +84,8 @@ def findings_for(asset: Asset, policy: Policy) -> tuple[Finding, ...]:
             )
         )
 
-    if asset.risk.unattended:
+    # A CI agent is unattended by construction; it is not a bypass flag.
+    if asset.risk.unattended and asset.kind is not Kind.CI_AGENT:
         out.append(
             Finding(
                 rule="unattended_execution",

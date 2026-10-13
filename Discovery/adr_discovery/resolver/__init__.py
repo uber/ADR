@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from types import MappingProxyType
 
-from ..contracts.records import Asset, Liveness, Observation, Risk
+from ..contracts.records import Asset, Kind, Liveness, Observation, Risk
 from .confidence import band_for
 from .keys import asset_id, identity_of, normalize_root
 from .merge import group
@@ -39,7 +39,9 @@ def resolve(observations: tuple[Observation, ...], telemetry: dict[str, str] | N
         rows = [observations[i] for i in members]
         primary = _primary(rows)
 
-        evidence = tuple(e for row in rows for e in row.evidence)
+        # Two candidates for one fact (a launcher reached from two sources)
+        # yield the same entry twice; it is one observation, listed once.
+        evidence = tuple(dict.fromkeys(e for row in rows for e in row.evidence))
         liveness = max((r.liveness for r in rows), key=_LIVENESS_RANK.__getitem__)
         install_root = next((r.install_root for r in rows if r.install_root), None)
         identity = identity_of(primary)
@@ -47,7 +49,12 @@ def resolve(observations: tuple[Observation, ...], telemetry: dict[str, str] | N
 
         rungs = tuple(sorted({e.rung for e in evidence if e.rung is not None},
                              key=lambda r: r.value))
-        last_used = (telemetry or {}).get(primary.catalog_id or identity)
+        # Session telemetry describes the local install, not a declaration
+        # that merely names the same tool.
+        last_used = (
+            None if primary.detail.get("declared")
+            else (telemetry or {}).get(primary.catalog_id or identity)
+        )
 
         assets.append(
             Asset(
@@ -57,7 +64,8 @@ def resolve(observations: tuple[Observation, ...], telemetry: dict[str, str] | N
                 identity=identity,
                 catalog_id=primary.catalog_id,
                 vendor=primary.detail.get("vendor"),
-                version=next((r.version for r in rows if r.version), None),
+                version=_version(rows),
+                running_versions=_running_versions(rows),
                 install_path=primary.path,
                 install_root=install_root,
                 install_method=primary.detail.get("install_method"),
@@ -70,6 +78,12 @@ def resolve(observations: tuple[Observation, ...], telemetry: dict[str, str] | N
                 evidence=evidence,
                 risk=_runtime_risk(rows),
                 flags=_flags(rows),
+                hook_event=_hook_field(primary, "event"),
+                hook_matcher=_hook_field(primary, "matcher"),
+                skill_sha256=_skill_sha256(primary),
+                content_hash=next((r.content_hash for r in rows if r.content_hash), None),
+                package_id=next((r.package_id for r in rows if r.package_id), None),
+                modified=max((r.modified for r in rows if r.modified), default=None),
             )
         )
     return tuple(assets)
@@ -128,6 +142,40 @@ def _primary(rows: list[Observation]) -> Observation:
     real = [r for r in rows if not r.attribute_of]
     pool = real or rows
     return max(pool, key=lambda r: (bool(r.catalog_id), bool(r.content_hash), bool(r.path)))
+
+
+def _version(rows: list[Observation]) -> str | None:
+    """The installed version, ahead of whichever process happened to be listed.
+
+    A process still running the previous release after an update is common;
+    the install's version is what the next launch runs.
+    """
+    installed = (r.version for r in rows if r.version and r.liveness is not Liveness.RUNNING)
+    return next(installed, None) or next((r.version for r in rows if r.version), None)
+
+
+def _running_versions(rows: list[Observation]) -> tuple[str, ...]:
+    running = {r.version for r in rows if r.version and r.liveness is Liveness.RUNNING}
+    return tuple(sorted(running, key=_version_key))
+
+
+def _version_key(version: str) -> tuple:
+    # Numeric where it can be, so 2.1.10 sorts after 2.1.9.
+    return tuple((0, int(p), "") if p.isdigit() else (1, 0, p) for p in version.split("."))
+
+
+def _hook_field(primary: Observation, key: str) -> str | None:
+    if primary.kind is not Kind.HOOK:
+        return None
+    value = primary.detail.get(key)
+    return value if isinstance(value, str) else None
+
+
+def _skill_sha256(primary: Observation) -> str | None:
+    if primary.kind is not Kind.SKILL:
+        return None
+    value = primary.detail.get("skill_sha256")
+    return value if isinstance(value, str) else None
 
 
 def _flags(rows: list[Observation]) -> tuple[str, ...]:

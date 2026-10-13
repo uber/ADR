@@ -23,7 +23,7 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass
-from typing import Generic, Iterator, TypeVar
+from typing import Callable, Generic, Iterator, TypeVar
 
 from ..coverage.ledger import Ledger
 from ..redact import rules as redact
@@ -31,6 +31,9 @@ from .budget import Budget
 from .platform.base import Providers
 
 T = TypeVar("T")
+#: First line of a valid CACHEDIR.TAG (https://bford.info/cachedir/).
+_CACHEDIR_SIGNATURE = b"Signature: 8a477f597d28d172789f06886806bc55"
+_MAX_RETAINED = 5000
 _HELPER_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
 
 
@@ -93,11 +96,16 @@ class Gate:
         budget: Budget | None = None,
         providers: Providers | None = None,
         env: dict[str, str] | None = None,
+        resolve_names: bool = False,
     ) -> None:
         self._root = os.path.realpath(root)
         self.ledger = ledger if ledger is not None else Ledger()
         self.budget = budget if budget is not None else Budget()
         self.env = dict(env) if env is not None else {}
+        #: Whether provider hostnames may be looked up through the host's
+        #: resolver. Off by default: a scan sends nothing over the network
+        #: unless the operator asks for it.
+        self.resolve_names = resolve_names
         from .platform.base import NullProviders
 
         self.providers = providers if providers is not None else NullProviders()
@@ -108,6 +116,11 @@ class Gate:
         #: validation and before open(), so a case can swap the target and
         #: prove the descriptor check catches it.
         self.on_validated = None
+        #: Complete listings of directories a walk marked worth keeping, so a
+        #: later stage reading the same surface directory is not charged
+        #: twice. Only validated, untruncated listings are stored, and the
+        #: number kept is bounded.
+        self._retained: dict[str, tuple[Entry, ...]] = {}
 
     # ---------------------------------------------------------------- paths
 
@@ -257,7 +270,10 @@ class Gate:
             )
         )
 
-    def list_dir(self, logical: str) -> Result[tuple[Entry, ...]]:
+    def list_dir(self, logical: str, retain: bool = False) -> Result[tuple[Entry, ...]]:
+        kept = self._retained.get(logical)
+        if kept is not None:
+            return Ok(kept)
         validated = self._validate(logical)
         if not validated.ok:
             return validated
@@ -300,45 +316,121 @@ class Gate:
 
         if exhausted:
             self.ledger.boundary(
-                logical, "budget_exhausted", f"cap {self.budget.max_entries}; directory truncated"
+                logical, "budget_exhausted", f"cap {self.budget.entry_cap}; directory truncated"
             )
         entries.sort(key=lambda entry: entry.path)
+        if retain and not exhausted and len(self._retained) < _MAX_RETAINED:
+            self._retained[logical] = tuple(entries)
         return Ok(tuple(entries))
 
-    def walk(self, logical_root: str, max_depth: int | None = None) -> Iterator[Entry]:
+    def walk(
+        self,
+        logical_root: str,
+        max_depth: int | None = None,
+        descend: Callable[[str], bool] | None = None,
+        seen: set[str] | None = None,
+        retain: Callable[[str], bool] | None = None,
+    ) -> Iterator[Entry]:
         """Breadth-first under the shared entry ceiling.
+
+        `descend` is asked before a directory joins the frontier, so a tree
+        the caller does not want is never listed and never charged. The
+        directory's own entry is still yielded: the caller filters results,
+        this decides cost. Routine skips leave no ledger record -- a
+        dependency cache is policy, not a gap in what was seen.
+
+        `seen` holds directories already listed. Pass one set to several
+        walks and a directory reachable from more than one root (`/home` and
+        `/home/alice`, a code root inside a home) is listed, and charged,
+        once; the later walk steps over it and still yields the entry.
+
+        `retain` marks directories whose listing later stages will want
+        again; those listings are kept and re-served without a charge.
 
         Breadth-first on purpose: a budget exhausted late still covered the
         likely places, which is not true of a depth-first walk that spends
-        everything in the first deep subtree it meets.
+        everything in the first deep subtree it meets. Breadth is also taken
+        across the root's children, not only by depth: see the queues below.
         """
         depth_cap = self.budget.max_depth if max_depth is None else max_depth
-        frontier = deque([(logical_root, 0)])
-        seen: set[str] = set()
+        listed = set() if seen is None else seen
+        queued: set[str] = set()
         deepest = 0
         count = 0
+        if logical_root in listed:
+            self.ledger.swept(logical_root, 0, 0)
+            return
 
-        while frontier:
-            path, depth = frontier.popleft()
-            if depth > depth_cap:
-                self.ledger.boundary(path, "depth", f"cap {depth_cap}")
-                continue
-            if self.budget.time_exhausted:
-                self.ledger.boundary(path, "time_exhausted", f"cap {self.budget.max_seconds}s")
-                self.ledger.swept(logical_root, deepest, count)
-                return
-            listing = self.list_dir(path)
-            if not listing.ok:
-                continue
-            deepest = max(deepest, depth)
-            for entry in listing.value:
-                count += 1
-                yield entry
-                if entry.is_dir and not entry.is_symlink and entry.path not in seen:
-                    seen.add(entry.path)
-                    frontier.append((entry.path, depth + 1))
+        # Fair share: one queue per top-level child of the root, served one
+        # directory per turn. A single enormous subtree can then spend only
+        # its own turns, and its siblings keep descending to the depth cap.
+        # Within a queue the order is still breadth-first, and listings are
+        # sorted, so the visit order is the same on every run.
+        queues: list[deque[tuple[str, int]]] = [deque([(logical_root, 0)])]
+
+        while queues:
+            for queue in tuple(queues):
+                if not queue:
+                    continue
+                path, depth = queue.popleft()
+                if depth > depth_cap:
+                    self.ledger.boundary(path, "depth", f"cap {depth_cap}")
+                    continue
+                if self.budget.time_exhausted:
+                    self.ledger.boundary(path, "time_exhausted", f"cap {self.budget.max_seconds}s")
+                    self.ledger.swept(logical_root, deepest, count)
+                    return
+                listing = self.list_dir(path, retain=retain is not None and retain(path))
+                if not listing.ok:
+                    continue
+                # Marked when listed, not when queued: a directory a capped
+                # walk never reached must stay available to the next walk.
+                listed.add(path)
+                deepest = max(deepest, depth)
+                prune = self._prune_reason(path, listing.value)
+                for entry in listing.value:
+                    count += 1
+                    yield entry
+                    if prune:
+                        continue
+                    if (
+                        entry.is_dir
+                        and not entry.is_symlink
+                        and entry.path not in listed
+                        and entry.path not in queued
+                    ):
+                        if descend is not None and not descend(entry.path):
+                            continue
+                        queued.add(entry.path)
+                        if depth == 0:
+                            queues.append(deque([(entry.path, 1)]))
+                        else:
+                            queue.append((entry.path, depth + 1))
+            queues = [q for q in queues if q]
 
         self.ledger.swept(logical_root, deepest, count)
+
+    def _prune_reason(self, path: str, entries: tuple[Entry, ...]) -> str | None:
+        """Why this directory's subtrees should not be walked, recorded.
+
+        Both tests use only the listing already paid for, and name no tool:
+        a tagged cache and a directory with a runaway fan-out look the same
+        whoever made them.
+        """
+        for entry in entries:
+            if entry.path.endswith("/CACHEDIR.TAG") and not entry.is_dir:
+                tag = self.read_bytes(entry.path, limit=len(_CACHEDIR_SIGNATURE))
+                if tag.ok and tag.value == _CACHEDIR_SIGNATURE:
+                    self.ledger.boundary(path, "cache_dir", "CACHEDIR.TAG; subtrees not walked")
+                    return "cache_dir"
+                break
+        if len(entries) > self.budget.max_children:
+            self.ledger.boundary(
+                path, "fan_out",
+                f"{len(entries)} children; cap {self.budget.max_children}; subtrees not walked",
+            )
+            return "fan_out"
+        return None
 
     # ------------------------------------------------------------ processes
 
@@ -359,6 +451,12 @@ class Gate:
 
     def exec_journal(self):
         return self.providers.exec_journal(self)
+
+    def resolve(self, hostnames: tuple[str, ...]):
+        if not self.resolve_names:
+            self.ledger.unavailable("resolver", "name resolution not requested (--resolve)")
+            return Refused("unavailable", "name resolution not requested")
+        return self.providers.resolve(self, hostnames)
 
     def package_owner(self, path: str):
         self.calls["package_owner"] += 1

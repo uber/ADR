@@ -151,7 +151,7 @@ def test_u6_11_an_unreadable_shape_raises_nothing(world):
     """Ambiguity resolves toward the safe verdict, and is recorded."""
     gate = world.gate()
     subject = asset(name="odd")
-    declarations = {subject.asset_id: declaration("some-unknown-runner", ("--weird",), name="odd")}
+    declarations = {subject.asset_id: declaration("npx", ("-y",), name="odd")}
 
     judged, findings = judge((subject,), declarations, Policy(), gate.ledger)
 

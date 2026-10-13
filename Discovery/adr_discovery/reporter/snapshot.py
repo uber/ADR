@@ -62,7 +62,8 @@ def from_dict(document: dict) -> Snapshot:
         findings=tuple(_finding(f) for f in document.get("findings", ())),
         review_queue=tuple(
             ReviewItem(path=r.get("path", ""), score=r.get("score", 0.0),
-                       signals=tuple(r.get("signals", ())))
+                       signals=tuple(r.get("signals", ())),
+                       evidence=_evidence(r))
             for r in document.get("review_queue", ())
         ),
         coverage=_coverage(document.get("coverage") or {}),
@@ -92,12 +93,7 @@ def _asset(row: dict) -> Asset:
         confidence=Band(band.get("label", "none"),
                         tuple(Channel(c) for c in band.get("channels", ()))),
         verification=tuple(Rung(r) for r in row.get("verification", ())),
-        evidence=tuple(
-            Evidence(e.get("stage", ""), Channel(e["channel"]), e.get("path", ""),
-                     e.get("proof", ""), e.get("confidence", 0.0),
-                     Rung(e["rung"]) if e.get("rung") else None)
-            for e in row.get("evidence", ())
-        ),
+        evidence=_evidence(row),
         risk=Risk(
             pinned=risk.get("pinned"),
             factors=tuple(risk.get("factors", ())),
@@ -109,12 +105,29 @@ def _asset(row: dict) -> Asset:
         ),
         sanction=row.get("sanction", "unknown"),
         flags=tuple(row.get("flags", ())),
+        hook_event=row.get("hook_event"),
+        hook_matcher=row.get("hook_matcher"),
+        skill_sha256=row.get("skill_sha256"),
+        content_hash=row.get("content_hash"),
+        package_id=row.get("package_id"),
+        modified=row.get("modified"),
+        running_versions=tuple(row.get("running_versions", ())),
+    )
+
+
+def _evidence(row: dict) -> tuple[Evidence, ...]:
+    return tuple(
+        Evidence(e.get("stage", ""), Channel(e["channel"]), e.get("path", ""),
+                 e.get("proof", ""), e.get("confidence", 0.0),
+                 Rung(e["rung"]) if e.get("rung") else None)
+        for e in row.get("evidence", ())
     )
 
 
 def _finding(row: dict) -> Finding:
     return Finding(rule=row.get("rule", ""), severity=row.get("severity", "medium"),
-                   asset_id=row.get("asset_id", ""), summary=row.get("summary", ""))
+                   asset_id=row.get("asset_id", ""), summary=row.get("summary", ""),
+                   evidence=_evidence(row))
 
 
 def _coverage(row: dict) -> Coverage:
