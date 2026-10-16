@@ -13,7 +13,6 @@ from typing import Any, Dict, Iterable, Mapping, Optional, Sequence
 _HASH_ALGORITHM = "sha256"
 _GIT_TIMEOUT_SECONDS = 2
 
-
 def read_text_with_sha256(
     path: Path, *, encoding: Optional[str] = None
 ) -> tuple[str, Optional[str]]:
@@ -31,7 +30,6 @@ def read_text_with_sha256(
         digest = None
     return text, digest
 
-
 def _sha256_file(path: Path) -> Optional[str]:
     try:
         digest = hashlib.sha256()
@@ -42,7 +40,6 @@ def _sha256_file(path: Path) -> Optional[str]:
     except (OSError, PermissionError):
         return None
 
-
 def _canonical_sha256(value: Any) -> str:
     encoded = json.dumps(
         value,
@@ -51,7 +48,6 @@ def _canonical_sha256(value: Any) -> str:
         separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
-
 
 def _git_output(repo_root: Path, *args: str) -> Optional[str]:
     try:
@@ -67,7 +63,6 @@ def _git_output(repo_root: Path, *args: str) -> Optional[str]:
     except (OSError, subprocess.SubprocessError):
         return None
 
-
 def _git_provenance(repo_root: Path) -> Dict[str, Any]:
     commit = _git_output(repo_root, "rev-parse", "HEAD")
     status = _git_output(repo_root, "status", "--porcelain")
@@ -75,7 +70,6 @@ def _git_provenance(repo_root: Path) -> Dict[str, Any]:
         "commit": commit or None,
         "dirty": None if status is None else bool(status),
     }
-
 
 def collect_source_metadata(detection_root: Path) -> Dict[str, Any]:
     """Capture source and lockfile metadata before detector analysis starts."""
@@ -89,13 +83,11 @@ def collect_source_metadata(detection_root: Path) -> Dict[str, Any]:
         uv_lock = None
     return {"source": source, "uv_lock": uv_lock}
 
-
 def _task_id(task_dir: Path) -> Optional[int]:
     try:
         return int(task_dir.name.removeprefix("task_"))
     except ValueError:
         return None
-
 
 def _conversation_provenance(
     task_dirs: Iterable[Path], conversation_hashes: Mapping[str, Optional[str]]
@@ -121,25 +113,28 @@ def _conversation_provenance(
         "missing_task_ids": missing,
     }
 
-
 def _effective_labels_provenance(
-    selected_task_ids: Sequence[int], effective_labels: Mapping[str, bool]
+    task_dirs: Iterable[Path], effective_labels: Mapping[str, bool]
 ) -> Dict[str, Any]:
     labels = []
     missing = []
-    for task_id in sorted(selected_task_ids):
-        key = f"task_{task_id:03d}"
+    for task_dir in task_dirs:
+        task_id = _task_id(task_dir)
+        if task_id is None:
+            continue
+        key = task_dir.name
         if key not in effective_labels:
             missing.append(task_id)
         else:
             labels.append({"task_id": task_id, "is_malicious": bool(effective_labels[key])})
+    labels.sort(key=lambda item: item["task_id"])
+    missing.sort()
     return {
         "algorithm": _HASH_ALGORITHM,
         "count": len(labels),
         "sha256": _canonical_sha256(labels),
         "missing_task_ids": missing,
     }
-
 
 def collect_run_manifest(
     *,
@@ -166,7 +161,7 @@ def collect_run_manifest(
     except Exception:
         conversations = None
     try:
-        labels = _effective_labels_provenance(selected_task_ids, effective_labels)
+        labels = _effective_labels_provenance(task_dirs, effective_labels)
     except Exception:
         labels = None
     artifacts = {
