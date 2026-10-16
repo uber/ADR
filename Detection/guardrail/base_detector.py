@@ -42,6 +42,10 @@ class DetectionResult:
     # Optional validated Tier-1 audit data; never used as trusted model input.
     structured_triage: Optional[Dict[str, Any]] = None
 
+    # Set when the analysis failed and this result is a safe default rather
+    # than a real verdict. Must not be conflated with a genuine negative.
+    error: Optional[str] = None
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         result = {
@@ -60,6 +64,8 @@ class DetectionResult:
         }
         if self.structured_triage is not None:
             result['structured_triage'] = self.structured_triage
+        if self.error is not None:
+            result['error'] = self.error
         return result
 
 
@@ -115,7 +121,8 @@ class BaseDetector(ABC):
             return result
         except Exception as e:
             logger.error(f"Error analyzing task {task_id}: {e}")
-            # Return safe default result
+            # Return a safe default result, but mark it as an error so it is
+            # never conflated with a genuine negative verdict downstream.
             return DetectionResult(
                 task_id=task_id,
                 is_malicious=False,
@@ -124,7 +131,8 @@ class BaseDetector(ABC):
                 threat_messages=0,
                 detections=[],
                 method=self.name,
-                model_used=None
+                model_used=None,
+                error=str(e)
             )
 
     def get_info(self) -> Dict[str, Any]:
