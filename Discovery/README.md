@@ -67,6 +67,11 @@ uv run adr-discovery \
 Discovery does not execute binaries that it finds. Machine access is bounded,
 and risky text is redacted at collection time.
 
+On Windows, each system inventory helper has a default 10-second limit to
+allow for PowerShell cold startup. The remaining whole-scan time can shorten
+that limit; explicit helper budgets are preserved. Timeouts are reported as
+coverage gaps, without retrying or prewarming helpers.
+
 Socket tables list peer addresses, not hostnames. By default Discovery sends
 nothing over the network, so a connection is matched to a model provider only
 when its peer is already a name, and the resolver is recorded as unavailable

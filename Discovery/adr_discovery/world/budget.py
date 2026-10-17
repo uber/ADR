@@ -7,6 +7,7 @@ cannot be reasoned about and, in aggregate, are not a budget at all.
 
 from __future__ import annotations
 
+import os
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -23,7 +24,9 @@ class Budget:
     #: A directory listing more entries than this is a store, not a place
     #: anyone keeps agents: its own entries are read, its subtrees are not.
     max_children: int = 5000
-    max_subprocess_seconds: float = 5.0
+    #: Windows PowerShell's first launch includes host and JSON JIT startup.
+    #: Explicit caller limits still replace this platform default unchanged.
+    max_subprocess_seconds: float = field(default_factory=lambda: 10.0 if os.name == "nt" else 5.0)
     max_subprocess_output_bytes: int = 4 * 1024 * 1024
     #: The whole scan, wall clock. Plane A promises seconds, and a promise
     #: with no ceiling behind it is a hope.

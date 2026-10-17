@@ -599,6 +599,9 @@ class Gate:
 
     # ------------------------------------------------------------ processes
 
+    def default_owner(self) -> str:
+        return self.providers.default_owner()
+
     def processes(self):
         return self.providers.processes(self)
 
@@ -654,10 +657,21 @@ class Gate:
             target = validated.value
 
         limit = self.budget.max_subprocess_seconds if timeout is None else timeout
-        env = {"PATH": _HELPER_PATH, "LC_ALL": "C", "LANG": "C"}
+        deadline = None
         if os.name == "nt":
-            env.update({"SystemRoot": r"C:\Windows", "WINDIR": r"C:\Windows"})
+            # Cold PowerShell startup needs headroom, but a helper may never
+            # claim more time than remains in the shared scan budget. Keep
+            # startup and pipe drainage inside that same Windows deadline.
+            now = time.monotonic()
+            deadline = min(now + limit, self.budget.started + self.budget.max_seconds)
+            limit = max(0.0, deadline - now)
         try:
+            if os.name == "nt":
+                from .platform.windows_system import helper_environment
+
+                env = helper_environment()
+            else:
+                env = {"PATH": _HELPER_PATH, "LC_ALL": "C", "LANG": "C"}
             proc = subprocess.Popen(
                 [target, *argv[1:]],
                 stdout=subprocess.PIPE,
@@ -674,19 +688,27 @@ class Gate:
         total = [0]
         lock = threading.Lock()
         overflow = threading.Event()
+        read_failed = threading.Event()
 
         def drain(stream, keep: bool) -> None:
-            while True:
-                chunk = stream.read(4096)
-                if not chunk:
-                    return
-                with lock:
-                    total[0] += len(chunk)
-                    if keep and len(stdout) < output_limit:
-                        remaining = output_limit - len(stdout)
-                        stdout.extend(chunk[:remaining])
-                    if total[0] > output_limit:
-                        overflow.set()
+            # Only the reader closes its stream. Closing a buffered pipe from
+            # another thread can block on its read lock if a descendant kept
+            # the write handle open after the helper exited.
+            try:
+                with stream:
+                    while True:
+                        chunk = stream.read(4096)
+                        if not chunk:
+                            return
+                        with lock:
+                            total[0] += len(chunk)
+                            if keep and len(stdout) < output_limit:
+                                remaining = output_limit - len(stdout)
+                                stdout.extend(chunk[:remaining])
+                            if total[0] > output_limit:
+                                overflow.set()
+            except (OSError, ValueError):
+                read_failed.set()
 
         threads = [
             threading.Thread(target=drain, args=(proc.stdout, True), daemon=True),
@@ -695,7 +717,8 @@ class Gate:
         for thread in threads:
             thread.start()
 
-        deadline = time.monotonic() + limit
+        if deadline is None:
+            deadline = time.monotonic() + limit
         reason = None
         while proc.poll() is None:
             if overflow.wait(timeout=min(0.02, max(0.0, deadline - time.monotonic()))):
@@ -709,16 +732,36 @@ class Gate:
             self._terminate(proc)
         else:
             proc.wait()
-        for stream in (proc.stdout, proc.stderr):
-            stream.close()
+        # A successful process exit is not EOF: drain the remaining output
+        # before deciding whether it stayed under the cap. The original
+        # deadline also bounds inherited pipes that never reach EOF.
+        drain_deadline = time.monotonic() + 0.2 if reason is not None else deadline
         for thread in threads:
-            thread.join(timeout=0.2)
+            thread.join(timeout=max(0.0, drain_deadline - time.monotonic()))
+
+        if reason is None:
+            if overflow.is_set():
+                reason = "output_limit"
+            elif read_failed.is_set():
+                reason = "read_failed"
+            elif any(thread.is_alive() for thread in threads):
+                reason = "pipe_timeout"
 
         if reason is not None:
-            detail = f"{output_limit} bytes" if reason == "output_limit" else f"{limit}s"
+            detail = {
+                "output_limit": f"{output_limit} bytes",
+                "timeout": f"{limit}s",
+                "pipe_timeout": "helper output pipes did not close before the deadline",
+                "read_failed": "helper output could not be read completely",
+            }[reason]
             self.ledger.probe(argv[0], "failed", reason)
             return Refused(reason, detail)
-        return Ok(Ran(tuple(argv), proc.returncode, stdout.decode("utf-8", "replace")))
+        try:
+            decoded = stdout.decode("utf-8-sig") if os.name == "nt" else stdout.decode("utf-8", "replace")
+        except UnicodeDecodeError:
+            self.ledger.probe(argv[0], "failed", "helper output is not UTF-8")
+            return Refused("invalid_encoding", "helper output is not UTF-8")
+        return Ok(Ran(tuple(argv), proc.returncode, decoded))
 
     @staticmethod
     def _terminate(proc: subprocess.Popen) -> None:
