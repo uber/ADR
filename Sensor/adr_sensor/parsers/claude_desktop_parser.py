@@ -18,7 +18,6 @@ truncates large tool results, and filters by session age.
 """
 
 import json
-import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -27,8 +26,6 @@ from ..schemas.agent_event_schema import AgentEvent, ChatMessage, ToolUsage
 from ..utils.platform_paths import windows_appdata
 from ..utils.string_utils import truncate_middle
 from .base_parser import BaseParser
-
-logger = logging.getLogger(__name__)
 
 MAX_LOG_AGE_DAYS = 14
 
@@ -67,12 +64,11 @@ class ClaudeDesktopParser(BaseParser):
         entries: List[AgentEvent] = []
 
         if not self.base_path.exists():
-            self.record_diagnostic("input_missing")
-            logger.info("[CLAUDE_DESKTOP] No sessions found at %s", self.base_path)
+            print(f"[CLAUDE_DESKTOP] No sessions found at {self.base_path}")
             return entries
 
         session_dirs = self._discover_sessions()
-        logger.info("[CLAUDE_DESKTOP] Found %s session directories", len(session_dirs))
+        print(f"[CLAUDE_DESKTOP] Found {len(session_dirs)} session directories")
 
         cutoff_time = datetime.now(timezone.utc) - timedelta(days=self.max_age_days)
         skipped_count = 0
@@ -90,11 +86,9 @@ class ClaudeDesktopParser(BaseParser):
                     try:
                         activity_time = datetime.fromtimestamp(last_activity / 1000, tz=timezone.utc)
                         if activity_time < cutoff_time:
-                            self.record_diagnostic("file_age_skipped")
                             skipped_count += 1
                             continue
                     except (ValueError, OSError, OverflowError, TypeError):
-                        self.record_diagnostic("invalid_timestamp")
                         pass  # If we cannot parse it, process the session anyway.
 
                 audit_path = session_dir / "audit.jsonl"
@@ -107,12 +101,11 @@ class ClaudeDesktopParser(BaseParser):
                     processed_count += 1
 
             except Exception as e:
-                self.record_diagnostic("session_build_error")
-                logger.warning("[CLAUDE_DESKTOP] Error parsing session %s: %s", session_dir, e)
+                print(f"[CLAUDE_DESKTOP] Error parsing session {session_dir}: {e}")
 
         if skipped_count > 0:
-            logger.info("[CLAUDE_DESKTOP] Skipped %s sessions older than %s days", skipped_count, self.max_age_days)
-        logger.info("[CLAUDE_DESKTOP] Processed %s sessions", processed_count)
+            print(f"[CLAUDE_DESKTOP] Skipped {skipped_count} sessions older than {self.max_age_days} days")
+        print(f"[CLAUDE_DESKTOP] Processed {processed_count} sessions")
 
         return entries
 
@@ -150,12 +143,12 @@ class ClaudeDesktopParser(BaseParser):
                         sessions.extend(self._collect_sessions(agent_dir, DISPATCH_DIR_PREFIX))
 
         except (PermissionError, OSError) as e:
-            self.record_diagnostic("file_read_error")
-            logger.error("[CLAUDE_DESKTOP] Error scanning base path %s: %s", self.base_path, e)
+            print(f"[CLAUDE_DESKTOP] Error scanning base path {self.base_path}: {e}")
 
         return sessions
 
-    def _collect_sessions(self, parent: Path, prefix: str) -> List[Tuple[Path, Path]]:
+    @staticmethod
+    def _collect_sessions(parent: Path, prefix: str) -> List[Tuple[Path, Path]]:
         """Collect (session_dir, metadata_path) pairs directly under `parent`."""
         found: List[Tuple[Path, Path]] = []
         try:
@@ -166,11 +159,11 @@ class ClaudeDesktopParser(BaseParser):
                     continue
                 found.append((item, parent / f"{item.name}.json"))
         except (PermissionError, OSError) as e:
-            self.record_diagnostic("file_read_error")
-            logger.warning("[CLAUDE_DESKTOP] Error scanning %s: %s", parent, e)
+            print(f"[CLAUDE_DESKTOP] Error scanning {parent}: {e}")
         return found
 
-    def _read_session_metadata(self, metadata_path: Path) -> Optional[Dict[str, Any]]:
+    @staticmethod
+    def _read_session_metadata(metadata_path: Path) -> Optional[Dict[str, Any]]:
         """Read a session metadata JSON file.
 
         Returns an empty dict (rather than None) when the file is missing or
@@ -182,13 +175,8 @@ class ClaudeDesktopParser(BaseParser):
         try:
             with open(metadata_path, encoding="utf-8") as f:
                 data = json.load(f)
-            if not isinstance(data, dict):
-                self.record_diagnostic("record_shape_error")
             return data if isinstance(data, dict) else {}
-        except (json.JSONDecodeError, OSError, PermissionError) as exc:
-            self.record_diagnostic(
-                "record_decode_error" if isinstance(exc, json.JSONDecodeError) else "file_read_error"
-            )
+        except (json.JSONDecodeError, OSError, PermissionError):
             return {}
 
     @staticmethod
@@ -243,13 +231,11 @@ class ClaudeDesktopParser(BaseParser):
             try:
                 return datetime.fromtimestamp(value / 1000, tz=timezone.utc)
             except (ValueError, OSError, OverflowError, TypeError) as e:
-                self.record_diagnostic("invalid_timestamp")
-                logger.warning("[CLAUDE_DESKTOP] Error parsing timestamp from %s=%s: %s", key, value, e)
+                print(f"[CLAUDE_DESKTOP] Error parsing timestamp from {key}={value}: {e}")
 
         try:
             return datetime.fromtimestamp(audit_path.stat().st_mtime, tz=timezone.utc)
         except OSError:
-            self.record_diagnostic("file_stat_error")
             return datetime.now(timezone.utc)
 
     def _build_session_context(
@@ -332,7 +318,6 @@ class ClaudeDesktopParser(BaseParser):
                     try:
                         obj = json.loads(line)
                     except json.JSONDecodeError:
-                        self.record_diagnostic("record_decode_error")
                         continue
 
                     extracted = self._extract_message_data(obj)
@@ -344,8 +329,7 @@ class ClaudeDesktopParser(BaseParser):
                     del obj
 
         except (OSError, PermissionError) as e:
-            self.record_diagnostic("file_read_error")
-            logger.warning("[CLAUDE_DESKTOP] Error reading %s: %s", audit_path, e)
+            print(f"[CLAUDE_DESKTOP] Error reading {audit_path}: {e}")
             return None
 
         if not messages:
@@ -490,21 +474,36 @@ class ClaudeDesktopParser(BaseParser):
 
             tool_results = []
             if isinstance(content, list):
-                for item in content:
-                    if isinstance(item, dict) and item.get("type") == "tool_result":
-                        result_content = item.get("content", "")
+                tool_result_items = [
+                    item for item in content if isinstance(item, dict) and item.get("type") == "tool_result"
+                ]
+                # Only apply the single root-level tool_use_result override when
+                # there's exactly one tool_result block. With more than one (e.g.
+                # parallel tool calls), applying one shared override to every
+                # block would incorrectly overwrite each block's own distinct
+                # content with the same value.
+                tool_use_result = obj.get("tool_use_result")
+                apply_override = isinstance(tool_use_result, dict) and len(tool_result_items) == 1
 
-                        # The root-level tool_use_result carries the richer payload.
-                        if isinstance(obj.get("tool_use_result"), dict):
-                            result_content = obj["tool_use_result"].get("result", result_content)
+                for item in tool_result_items:
+                    result_content = item.get("content", "")
 
-                        result_content = self._normalize_result_content(result_content)
-                        if result_content:
-                            result_content = truncate_middle(result_content, max_length=1000, edge_chars=400)
+                    # The root-level tool_use_result carries the richer payload.
+                    if apply_override:
+                        # Only override with a non-empty result - an explicitly
+                        # falsy tool_use_result["result"] (e.g. "" or None) should
+                        # not discard real content already present on the block.
+                        override = tool_use_result.get("result")
+                        if override:
+                            result_content = override
 
-                        tool_results.append(
-                            {"tool_use_id": item.get("tool_use_id"), "result": result_content}
-                        )
+                    result_content = self._normalize_result_content(result_content)
+                    if result_content:
+                        result_content = truncate_middle(result_content, max_length=1000, edge_chars=400)
+
+                    tool_results.append(
+                        {"tool_use_id": item.get("tool_use_id"), "result": result_content}
+                    )
 
             if tool_results:
                 extracted["tool_results"] = tool_results
