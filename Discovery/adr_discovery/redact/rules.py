@@ -115,11 +115,6 @@ def _public_package_options(argv, runner: str) -> set[int]:
     downstream value. Container flags deliberately have no exception here.
     """
     start = 1
-    if runner in {"npm", "pnpm", "yarn"}:
-        expected = "exec" if runner == "npm" else "dlx"
-        if len(argv) < 2 or argv[1] != expected:
-            return set()
-        start, runner = 2, "npx"
     if runner not in {"npx", "uvx"}:
         return set()
     values = ({"-p", "--package", "-c", "--call", "--node-options", "--registry", "--userconfig"}
