@@ -13,12 +13,14 @@ import json as _json
 import plistlib as _plistlib
 import tomllib as _tomllib
 
+from ...contracts.text import decode_text
 from . import yaml as _yaml
 
 Unrepresentable = _yaml.Unrepresentable
 
 
 def parse(text: str, fmt: str) -> dict:
+    text = text.removeprefix("\ufeff")
     if fmt == "json":
         return _json.loads(text)
     if fmt == "toml":
@@ -31,7 +33,7 @@ def parse(text: str, fmt: str) -> dict:
 def parse_bytes(data: bytes, fmt: str) -> dict:
     if fmt == "plist":
         return _plistlib.loads(data)
-    return parse(data.decode("utf-8", errors="replace"), fmt)
+    return parse(decode_text(data, allow_utf16=fmt == "json"), fmt)
 
 
 def format_for(path: str) -> str | None:

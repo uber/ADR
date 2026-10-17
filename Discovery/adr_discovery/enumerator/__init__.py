@@ -15,6 +15,7 @@ from .sources.binaries import from_binaries
 from .sources.execjournal import from_exec_journal
 from .sources.modelstores import from_model_stores
 from .sources.network import from_network
+from .sources.profiles import from_profiles
 from .sources.registries import from_applications, from_kernel, from_packages
 from .sweep import sweep
 
@@ -37,6 +38,7 @@ def enumerate_candidates(gate, include_dependency_caches: bool = False) -> tuple
     found.extend(from_network(gate, kernel))
     found.extend(from_exec_journal(gate))
     found.extend(from_app_state(gate, homes(gate)))
+    found.extend(from_profiles(gate))
     found.extend(from_binaries(gate, homes(gate)))
     found.extend(from_model_stores(gate, homes(gate)))
 

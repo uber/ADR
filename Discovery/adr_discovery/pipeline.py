@@ -203,7 +203,7 @@ def _dedupe_surfaces(gate, candidates) -> list[Candidate]:
     for candidate in candidates:
         if candidate.kind not in CONFIG_KINDS:
             continue
-        stat = gate.stat(candidate.path)
+        stat = _surface_stat(gate, candidate, candidate.path)
         real = stat.value.real_path if stat.ok else candidate.path
         key = (candidate.kind, real)
         first = kept.get(key)
@@ -233,6 +233,12 @@ def _at_real_path(candidate: Candidate, real: str) -> Candidate:
     if candidate.path == real and not aliases:
         return candidate
     return replace(candidate, path=real, detail={**candidate.detail, "aliases": aliases})
+
+
+def _surface_stat(gate, candidate: Candidate, path: str):
+    if candidate.kind == "shell_profile" and path.casefold().endswith(".ps1"):
+        return gate.stat_profile(path)
+    return gate.stat(path)
 
 
 def _observation_from(gate, candidate: Candidate, verdict) -> Observation:
@@ -307,7 +313,7 @@ def _observation_from_declaration(candidate: Candidate, declaration: Declaration
     changed_file = declaration.path
     if declaration.kind is Kind.SKILL:
         changed_file = f"{declaration.path.rstrip('/')}/SKILL.md"
-    modified = _modified(gate.stat(changed_file)) if gate is not None else None
+    modified = _modified(_surface_stat(gate, candidate, changed_file)) if gate is not None else None
     if declaration.kind is Kind.SKILL and gate is not None:
         # The folder hash of the whole skill directory: a payload in
         # scripts/ changes it as surely as an edit to SKILL.md does. A tree

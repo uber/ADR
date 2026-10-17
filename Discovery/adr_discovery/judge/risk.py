@@ -9,9 +9,9 @@ image; a registry URL is not a package.
 from __future__ import annotations
 
 import re
-import shlex
 from types import MappingProxyType
 
+from ..contracts.commandline import SHELL_WRAPPERS, executable_name, split_command
 from ..redact import rules as redact
 
 #: runner -> flags that consume the next argument. Anything not listed and
@@ -56,7 +56,7 @@ def canonical_launch(command: str | None, args: tuple[str, ...]) -> tuple[str, t
     `pnpm dlx`, `yarn dlx` and `npm exec` behave like `npx`; `bun x` like
     `bunx`; `uv tool run` like `uvx`. Anything else is returned as given.
     """
-    runner = (command or "").rsplit("/", 1)[-1]
+    runner = executable_name(command)
     head = args[:1]
     if (runner in ("pnpm", "yarn") and head == ("dlx",)) or (runner == "npm" and head == ("exec",)):
         return "npx", args[1:]
@@ -92,21 +92,15 @@ def operand_of(command: str | None, args: tuple[str, ...]) -> tuple[str | None, 
     return None, runner
 
 
-def split_line(command: str | None, args: tuple[str, ...]) -> tuple[str | None, tuple[str, ...]]:
-    """A whole command line in `command` is read the way a shell would.
-
-    Raises ValueError for an unterminated quote; an empty line gives (None, ()).
-    """
-    if command and not args and any(ch.isspace() for ch in command.strip()):
-        parts = shlex.split(command)
-        return (parts[0], tuple(parts[1:])) if parts else (None, ())
-    return command, args
+def split_line(command: str | None, args: tuple[str, ...], *, separated: bool = False) -> tuple[str | None, tuple[str, ...]]:
+    """Tokenize a legacy line; already separated config argv is never split."""
+    return split_command(command, args, separated=separated)
 
 
-def pinning(command: str | None, args: tuple[str, ...]) -> tuple[bool | None, tuple[str, ...]]:
+def pinning(command: str | None, args: tuple[str, ...], *, separated: bool = False) -> tuple[bool | None, tuple[str, ...]]:
     """(pinned, factors). `None` means the shape carries no pinning question."""
     try:
-        command, args = split_line(command, args)
+        command, args = split_line(command, args, separated=separated)
     except ValueError:
         return None, ()
     operand, runner = operand_of(command, args)
@@ -128,7 +122,7 @@ def pinning(command: str | None, args: tuple[str, ...]) -> tuple[bool | None, tu
     return None, ()
 
 
-def launch_shape(command: str | None, args: tuple[str, ...]) -> str:
+def launch_shape(command: str | None, args: tuple[str, ...], *, separated: bool = False) -> str:
     """What kind of launch this is, so only a truly unreadable one is degraded.
 
     package_runner  npx / uvx / pipx / bunx / pnpm dlx ... with an operand
@@ -142,12 +136,14 @@ def launch_shape(command: str | None, args: tuple[str, ...]) -> str:
     if command is None or not command.strip():
         return "none"
     try:
-        command, args = split_line(command, args)
+        command, args = split_line(command, args, separated=separated)
     except ValueError:
         return "unknown"
     if command is None:
         return "unknown"
     runner, _ = canonical_launch(command, args)
+    if runner in SHELL_WRAPPERS:
+        return "unknown"
     if runner in EPHEMERAL_RUNNERS or runner in CONTAINER_RUNNERS:
         operand, _ = operand_of(command, args)
         if operand is None:
@@ -177,7 +173,7 @@ def normalize_package_name(ecosystem: str, name: str) -> str:
     return re.sub(r"[-_.]+", "-", name) if ecosystem == "pypi" else name
 
 
-def package_of(command: str | None, args: tuple[str, ...]) -> tuple[str, str, str | None] | None:
+def package_of(command: str | None, args: tuple[str, ...], *, separated: bool = False) -> tuple[str, str, str | None] | None:
     """(ecosystem, name, version) of the package a runner launches, or None.
 
     Reads the same operand `pinning` reads. The version is what the operand
@@ -185,7 +181,7 @@ def package_of(command: str | None, args: tuple[str, ...]) -> tuple[str, str, st
     includes ranges: a range is not a version.
     """
     try:
-        command, args = split_line(command, args)
+        command, args = split_line(command, args, separated=separated)
     except ValueError:
         return None
     runner, canonical_args = canonical_launch(command, args)

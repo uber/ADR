@@ -14,6 +14,8 @@ from __future__ import annotations
 import re
 from urllib.parse import urlsplit, urlunsplit
 
+from ..contracts.commandline import SHELL_WRAPPERS, executable_name
+
 #: Flags whose *operand* is secret. The flag name survives; the value does not.
 #: `--dangerously-skip-permissions` is deliberately absent -- it takes no
 #: operand and its presence is exactly the signal M6 needs.
@@ -112,6 +114,12 @@ def scrub_argv(argv: tuple[str, ...] | list[str]) -> tuple[str, ...]:
     (``--token X``), assignment (``--token=X`` or ``password=X``), and joined
     short-option (``-pX``) forms.
     """
+    # Shell bodies have a different grammar from argv. Retaining an opaque
+    # -Command/-EncodedCommand or /c body can expose secrets inside a script.
+    runner = executable_name(argv[0]) if argv else ""
+    if runner in SHELL_WRAPPERS:
+        return (argv[0], REDACTED) if len(argv) > 1 else (argv[0],)
+    public_p = runner in {"npx", "npm", "pnpm", "yarn", "uvx", "pipx", "docker", "podman"}
     out: list[str] = []
     expect_value = False
     for arg in argv:
@@ -120,7 +128,10 @@ def scrub_argv(argv: tuple[str, ...] | list[str]) -> tuple[str, ...]:
             expect_value = False
             continue
 
-        if arg in CREDENTIAL_FLAGS:
+        if arg == "-p" and public_p:
+            out.append(arg)
+            continue
+        if arg in CREDENTIAL_FLAGS or runner in {"npx", "npm"} and arg in {"-c", "--call"}:
             out.append(arg)
             expect_value = True
             continue
@@ -135,7 +146,7 @@ def scrub_argv(argv: tuple[str, ...] | list[str]) -> tuple[str, ...]:
             (
                 flag
                 for flag in JOINED_SHORT_CREDENTIAL_FLAGS
-                if arg.startswith(flag) and len(arg) > len(flag)
+                if arg.startswith(flag) and len(arg) > len(flag) and not (flag == "-p" and public_p)
             ),
             None,
         )
@@ -169,5 +180,6 @@ def explain() -> tuple[str, ...]:
         f"environment variable names only ({len(CREDENTIAL_ENV_PREFIXES)} prefixes mapped to credential kinds)",
         f"argv with the operands of {len(CREDENTIAL_FLAGS)} credential-bearing flags replaced",
         "URLs with userinfo, query and fragment removed",
-        f"no access at all under {len(PERSONAL_PATH_SEGMENTS)} personal path segments",
+        f"no directory traversal under {len(PERSONAL_PATH_SEGMENTS)} personal path segments",
+        "only exact known PowerShell profile files may be read under Documents; credential names only",
     )
