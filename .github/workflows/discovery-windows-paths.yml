@@ -1,6 +1,7 @@
 name: Discovery Windows path semantics
 
 on:
+  workflow_dispatch:
   push:
     branches: [codex/discovery-windows-paths]
   pull_request:
