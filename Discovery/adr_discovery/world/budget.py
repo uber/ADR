@@ -45,6 +45,9 @@ class Budget:
     max_tree_files: int = 10_000
     max_tree_file_bytes: int = 20 * 1024 * 1024
     max_tree_bytes: int = 100 * 1024 * 1024
+    # Empty directories consume no file/byte budget, but still cost a walk.
+    max_tree_directories: int = 10_000
+    max_tree_depth: int = 64
 
     entries_used: int = field(default=0, init=False)
     hash_bytes_used: int = field(default=0, init=False)
