@@ -326,7 +326,9 @@ class WindowsDirectory:
         import msvcrt
 
         root = self._directory()
-        handle = self.api.relative(root, name, 0x40000000 | _READ_CONTROL | _DELETE, create=True)
+        # Native GENERIC_WRITE does not include the attribute read needed for
+        # the same-handle validation below.
+        handle = self.api.relative(root, name, 0x40000000 | _FILE_READ_ATTRIBUTES | _READ_CONTROL | _DELETE, create=True)
         try:
             self._directory()
             self.api.information(handle)
