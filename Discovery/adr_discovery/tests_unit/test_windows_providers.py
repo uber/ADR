@@ -380,6 +380,7 @@ def test_native_socket_script_serializes_enum_names(tmp_path, monkeypatch):
 def test_native_application_script_keeps_per_source_errors(tmp_path, monkeypatch):
     gate = Gate("/", providers=windows.WindowsProviders())
     original = gate.run_helper
+
     def stub_after_imports(argv):
         script = argv[-1].replace(
             "if(Test-Path -LiteralPath", "function Test-Path { [CmdletBinding()]param([string]$LiteralPath); $false }; if(Test-Path -LiteralPath",
