@@ -542,7 +542,8 @@ class Gate:
         whoever made them.
         """
         for entry in entries:
-            if entry.path.endswith("/CACHEDIR.TAG") and not entry.is_dir:
+            name = os.path.basename(entry.path)
+            if (name.upper() if os.name == "nt" else name) == "CACHEDIR.TAG" and not entry.is_dir:
                 tag = self.read_bytes(entry.path, limit=len(_CACHEDIR_SIGNATURE))
                 if tag.ok and tag.value == _CACHEDIR_SIGNATURE:
                     self.ledger.boundary(path, "cache_dir", "CACHEDIR.TAG; subtrees not walked")

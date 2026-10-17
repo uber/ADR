@@ -142,6 +142,18 @@ def test_reads_and_folder_hash_preserve_raw_bytes(tmp_path):
     assert result.value.bytes == len(payload)
 
 
+def test_cache_tag_spelling_does_not_disable_windows_pruning(tmp_path):
+    (tmp_path / "cachedir.tag").write_bytes(b"Signature: 8a477f597d28d172789f06886806bc55")
+    (tmp_path / "nested").mkdir()
+    (tmp_path / "nested" / "payload").write_bytes(b"x")
+    gate = Gate(str(tmp_path))
+
+    entries = list(gate.walk("/"))
+
+    assert not any(entry.path.endswith("/payload") for entry in entries)
+    assert any(boundary.boundary == "cache_dir" for boundary in gate.ledger.freeze().boundaries_hit)
+
+
 def test_junction_cycle_is_not_followed_by_walk_or_hash(tmp_path):
     skill = tmp_path / "skill"
     skill.mkdir()
