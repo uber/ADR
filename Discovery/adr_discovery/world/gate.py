@@ -148,6 +148,7 @@ class Gate:
         from .platform.base import NullProviders
 
         self.providers = providers if providers is not None else NullProviders()
+        self._scan_token = object()
         #: Call counters, so a test can assert the evidence ladder stopped
         #: early rather than merely reaching the right answer expensively.
         self.calls: dict[str, int] = {"read_bytes": 0, "run": 0, "package_owner": 0}
@@ -160,6 +161,15 @@ class Gate:
         #: twice. Only validated, untruncated listings are stored, and the
         #: number kept is bounded.
         self._retained: dict[str, tuple[Entry, ...]] = {}
+
+    @property
+    def scan_token(self) -> object:
+        """Identity of the scan whose provider snapshots may be reused."""
+        return self._scan_token
+
+    def begin_scan(self) -> None:
+        """Expire provider snapshots when the pipeline starts another scan."""
+        self._scan_token = object()
 
     # ---------------------------------------------------------------- paths
 
