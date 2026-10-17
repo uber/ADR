@@ -76,6 +76,7 @@ def discover(
     """
     catalog = catalog if catalog is not None else EMPTY_CATALOG
     ledger = gate.ledger
+    gate.begin_scan()
 
     # -- M2 ------------------------------------------------------------
     candidates = enumerate_candidates(gate)

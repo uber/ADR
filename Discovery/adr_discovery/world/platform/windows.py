@@ -4,14 +4,36 @@ from __future__ import annotations
 
 import json
 import shlex
+from typing import TYPE_CHECKING, Callable
+from weakref import WeakKeyDictionary
 
 from .base import Application, HostResolver, NullProviders, Package, Process, Socket
+
+if TYPE_CHECKING:
+    from ..gate import Gate, Result
 
 
 class WindowsProviders(HostResolver, NullProviders):
     reason = "Windows management surface unavailable"
     HOME_ROOTS = ("/Users",)
     DIRECT_HOMES: tuple[str, ...] = ()
+
+    def __init__(self) -> None:
+        # A provider can serve more than one Gate. Weak keys keep snapshots
+        # isolated without retaining a completed world's ledger and budget.
+        self._snapshots: WeakKeyDictionary[Gate, tuple[object, dict[str, Result]]] = WeakKeyDictionary()
+
+    def _cached(self, gate: Gate, surface: str, query: Callable[[Gate], Result]) -> Result:
+        snapshot = self._snapshots.get(gate)
+        if snapshot is None or snapshot[0] is not gate.scan_token:
+            snapshot = (gate.scan_token, {})
+            self._snapshots[gate] = snapshot
+        results = snapshot[1]
+        if surface not in results:
+            # Cache Refused and empty Ok results too. The first query writes
+            # its coverage into this Gate's ledger, which every caller shares.
+            results[surface] = query(gate)
+        return results[surface]
 
     def processes(self, gate):
         rows = self._ps_json(gate, "Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,ExecutablePath,CommandLine | ConvertTo-Json -Compress", "processes")
@@ -32,6 +54,9 @@ class WindowsProviders(HostResolver, NullProviders):
         return Ok(tuple(out))
 
     def sockets(self, gate):
+        return self._cached(gate, "sockets", self._sockets)
+
+    def _sockets(self, gate):
         rows = self._ps_json(gate, "Get-NetTCPConnection | Select-Object State,LocalPort,RemoteAddress,RemotePort,OwningProcess | ConvertTo-Json -Compress", "sockets")
         if rows is None:
             return self._unavailable(gate, "sockets")
@@ -43,6 +68,9 @@ class WindowsProviders(HostResolver, NullProviders):
                         for r in rows if str(r.get("State")) in states))
 
     def applications(self, gate):
+        return self._cached(gate, "applications", self._applications)
+
+    def _applications(self, gate):
         script = (
             "$u=@(); $p=@('HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*',"
             "'HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*',"
