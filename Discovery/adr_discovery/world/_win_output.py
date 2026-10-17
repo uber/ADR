@@ -1,8 +1,8 @@
 """Windows-only private output, implemented with the standard-library FFI.
 
-All ancestor directories stay open without FILE_SHARE_DELETE while absolute
-file paths are used. Reparse points are refused. New files receive a protected
-DACL at creation, before any snapshot or skill bytes are written.
+Directory handles stay open without FILE_SHARE_DELETE. Descendants are opened
+relative to those handles, so an in-place junction cannot redirect output.
+New files receive a protected DACL before any payload bytes are written.
 """
 
 from __future__ import annotations
@@ -19,16 +19,38 @@ _WRITE_DAC = 0x00040000
 _WRITE_OWNER = 0x00080000
 _FILE_READ_ATTRIBUTES = 0x80
 _FILE_LIST_DIRECTORY = 0x1
+_FILE_TRAVERSE = 0x20
 _DIRECTORY = 0x10
 _REPARSE_POINT = 0x400
 _OWNER_INFORMATION = 0x1
 _DACL_INFORMATION = 0x4
 _PROTECTED_DACL_INFORMATION = 0x80000000
 _FILE_ALL_ACCESS = 0x001F01FF
+_DELETE = 0x00010000
+_SYNCHRONIZE = 0x00100000
 
 
-class _SecurityAttributes(ctypes.Structure):
-    _fields_ = [("length", wintypes.DWORD), ("descriptor", wintypes.LPVOID), ("inherit", wintypes.BOOL)]
+class _UnicodeString(ctypes.Structure):
+    _fields_ = [("length", wintypes.USHORT), ("maximum", wintypes.USHORT), ("buffer", wintypes.LPWSTR)]
+
+
+class _ObjectAttributes(ctypes.Structure):
+    _fields_ = [("length", wintypes.ULONG), ("root", wintypes.HANDLE),
+                ("name", ctypes.POINTER(_UnicodeString)), ("attributes", wintypes.ULONG),
+                ("security", wintypes.LPVOID), ("quality", wintypes.LPVOID)]
+
+
+class _IoStatusValue(ctypes.Union):
+    _fields_ = [("status", wintypes.LONG), ("pointer", wintypes.LPVOID)]
+
+
+class _IoStatusBlock(ctypes.Structure):
+    _fields_ = [("value", _IoStatusValue), ("information", ctypes.c_size_t)]
+
+
+class _RenameInformation(ctypes.Structure):
+    _fields_ = [("replace", wintypes.DWORD), ("root", wintypes.HANDLE),
+                ("length", wintypes.DWORD), ("name", wintypes.WCHAR * 1)]
 
 
 class _FileInformation(ctypes.Structure):
@@ -52,15 +74,22 @@ class _API:
     def __init__(self) -> None:
         self.kernel = ctypes.WinDLL("kernel32", use_last_error=True)
         self.advapi = ctypes.WinDLL("advapi32", use_last_error=True)
+        self.ntdll = ctypes.WinDLL("ntdll")
         signatures = (
             (self.kernel, "GetCurrentProcess", [], wintypes.HANDLE),
             (self.kernel, "CloseHandle", [wintypes.HANDLE], wintypes.BOOL),
             (self.kernel, "LocalFree", [wintypes.LPVOID], wintypes.LPVOID),
-            (self.kernel, "CreateDirectoryW", [wintypes.LPCWSTR, ctypes.POINTER(_SecurityAttributes)], wintypes.BOOL),
             (self.kernel, "CreateFileW", [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
-                                         ctypes.POINTER(_SecurityAttributes), wintypes.DWORD,
+                                         wintypes.LPVOID, wintypes.DWORD,
                                          wintypes.DWORD, wintypes.HANDLE], wintypes.HANDLE),
             (self.kernel, "GetFileInformationByHandle", [wintypes.HANDLE, ctypes.POINTER(_FileInformation)], wintypes.BOOL),
+            (self.kernel, "SetFileInformationByHandle", [wintypes.HANDLE, ctypes.c_int, wintypes.LPVOID,
+                                                        wintypes.DWORD], wintypes.BOOL),
+            (self.ntdll, "NtCreateFile", [ctypes.POINTER(wintypes.HANDLE), wintypes.DWORD,
+                                         ctypes.POINTER(_ObjectAttributes), ctypes.POINTER(_IoStatusBlock),
+                                         wintypes.LPVOID, wintypes.ULONG, wintypes.ULONG, wintypes.ULONG,
+                                         wintypes.ULONG, wintypes.LPVOID, wintypes.ULONG], wintypes.LONG),
+            (self.ntdll, "RtlNtStatusToDosError", [wintypes.LONG], wintypes.ULONG),
             (self.advapi, "OpenProcessToken", [wintypes.HANDLE, wintypes.DWORD, ctypes.POINTER(wintypes.HANDLE)], wintypes.BOOL),
             (self.advapi, "GetTokenInformation", [wintypes.HANDLE, ctypes.c_int, wintypes.LPVOID,
                                                  wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)], wintypes.BOOL),
@@ -88,8 +117,8 @@ class _API:
         self.sid = self._user_sid()
 
     @staticmethod
-    def error(path: str = "") -> OSError:
-        code = ctypes.get_last_error()
+    def error(path: str = "", code: int | None = None) -> OSError:
+        code = ctypes.get_last_error() if code is None else code
         if code in (80, 183):
             return FileExistsError(errno.EEXIST, "output already exists", path)
         if code in (2, 3):
@@ -127,7 +156,7 @@ class _API:
         sddl = f"O:{self.sid}D:P(A;{flags};FA;;;{self.sid})"
         if not self.advapi.ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl, 1, ctypes.byref(descriptor), None):
             raise self.error()
-        return descriptor, _SecurityAttributes(ctypes.sizeof(_SecurityAttributes), descriptor, False)
+        return descriptor
 
     def information(self, handle) -> _FileInformation:
         info = _FileInformation()
@@ -138,7 +167,7 @@ class _API:
         return info
 
     def protect(self, handle, directory: bool) -> None:
-        descriptor, _ = self.security(directory)
+        descriptor = self.security(directory)
         try:
             owner, acl = wintypes.LPVOID(), wintypes.LPVOID()
             present, defaulted = wintypes.BOOL(), wintypes.BOOL()
@@ -182,17 +211,57 @@ class _API:
         finally:
             self.kernel.LocalFree(descriptor)
 
-    def open(self, path: str, access: int, *, create: bool = False):
-        descriptor, attributes = self.security(False) if create else (None, None)
+    def open(self, path: str, access: int):
+        """Open an existing root anchor. Mutations use relative handles only."""
+        handle = self.kernel.CreateFileW(path, access, 3, None, 3, 0x00200000 | 0x02000000, None)
+        if handle == wintypes.HANDLE(-1).value:
+            raise self.error(path)
+        return handle
+
+    def relative(self, root, name: str, access: int, *, create: bool = False, directory: bool = False):
+        """Open one component beneath a pinned directory, without a pathname retry.
+
+        Win32 CreateFile has no RootDirectory argument. This small NtCreateFile
+        adapter is limited to a plain child name and synchronous, no-follow IO.
+        """
+        plain_name(name)
+        encoded = name.encode("utf-16-le", errors="surrogatepass")
+        if len(encoded) > 65532:
+            raise ValueError("output name is too long")
+        buffer = ctypes.create_string_buffer(encoded + b"\0\0")
+        unicode_name = _UnicodeString(len(encoded), len(encoded) + 2, ctypes.cast(buffer, wintypes.LPWSTR))
+        descriptor = self.security(directory) if create else None
+        attributes = _ObjectAttributes(ctypes.sizeof(_ObjectAttributes), root, ctypes.pointer(unicode_name),
+                                       0x40 | 0x1000, descriptor, None)  # CASE_INSENSITIVE | DONT_REPARSE
+        handle, status = wintypes.HANDLE(), _IoStatusBlock()
         try:
-            handle = self.kernel.CreateFileW(path, access, 3, ctypes.byref(attributes) if attributes else None,
-                                             1 if create else 3, 0x00200000 | 0x02000000, None)
-            if handle == wintypes.HANDLE(-1).value:
-                raise self.error(path)
-            return handle
+            result = self.ntdll.NtCreateFile(
+                ctypes.byref(handle), access | _SYNCHRONIZE, ctypes.byref(attributes), ctypes.byref(status),
+                None, _DIRECTORY if directory else 0x80, 3, 2 if create else 1,
+                0x00200000 | 0x20 | (0x1 if directory else 0x40), None, 0,
+            )  # OPEN_REPARSE_POINT | SYNCHRONOUS_IO_NONALERT | DIRECTORY/NON_DIRECTORY
+            if result < 0:
+                raise self.error(name, self.ntdll.RtlNtStatusToDosError(result))
+            return handle.value
         finally:
             if descriptor:
                 self.kernel.LocalFree(descriptor)
+
+    def delete(self, handle) -> None:
+        remove = ctypes.c_ubyte(1)  # FILE_DISPOSITION_INFO.DeleteFile
+        if not self.kernel.SetFileInformationByHandle(handle, 4, ctypes.byref(remove), ctypes.sizeof(remove)):
+            raise self.error()
+
+    def rename(self, handle, root, name: str, *, replace: bool) -> None:
+        plain_name(name)
+        encoded = name.encode("utf-16-le", errors="surrogatepass")
+        size = _RenameInformation.name.offset + len(encoded)
+        buffer = ctypes.create_string_buffer(max(size + 2, ctypes.sizeof(_RenameInformation)))
+        info = _RenameInformation.from_buffer(buffer)
+        info.replace, info.root, info.length = int(replace), root, len(encoded)
+        ctypes.memmove(ctypes.addressof(buffer) + _RenameInformation.name.offset, encoded, len(encoded))
+        if not self.kernel.SetFileInformationByHandle(handle, 3, buffer, len(buffer)):
+            raise self.error(name)
 
 
 class WindowsDirectory:
@@ -215,21 +284,22 @@ class WindowsDirectory:
                 # Attribute-only handles do not participate in share-access
                 # checks. Directory read access makes the no-delete share
                 # policy effective for the entire pinned ancestor chain.
-                access = _FILE_READ_ATTRIBUTES | _FILE_LIST_DIRECTORY
+                access = _FILE_READ_ATTRIBUTES | _FILE_LIST_DIRECTORY | _FILE_TRAVERSE
                 if path == self.path:
                     access |= _READ_CONTROL | _WRITE_DAC | _WRITE_OWNER
-                try:
+                if not self.handles:
+                    # Only the volume/share anchor is opened by absolute path.
                     handle = self.api.open(path, access)
-                except FileNotFoundError:
-                    descriptor, attributes = self.api.security(True)
+                else:
+                    parent = self._directory()
+                    name = os.path.basename(path)
                     try:
-                        if not self.api.kernel.CreateDirectoryW(path, ctypes.byref(attributes)):
-                            error = self.api.error(path)
-                            if not isinstance(error, FileExistsError):
-                                raise error
-                    finally:
-                        self.api.kernel.LocalFree(descriptor)
-                    handle = self.api.open(path, access)
+                        handle = self.api.relative(parent, name, access, directory=True)
+                    except FileNotFoundError:
+                        try:
+                            handle = self.api.relative(parent, name, access, create=True, directory=True)
+                        except FileExistsError:
+                            handle = self.api.relative(parent, name, access, directory=True)
                 self.handles.append(handle)
                 if not self.api.information(handle).attributes & _DIRECTORY:
                     raise NotADirectoryError(path)
@@ -247,18 +317,26 @@ class WindowsDirectory:
         plain_name(name)
         return os.path.join(self.path, name)
 
+    def _directory(self):
+        for handle in self.handles:
+            self.api.information(handle)
+        return self.handles[-1]
+
     def create(self, name: str) -> int:
         import msvcrt
 
-        path = self._path(name)
-        handle = self.api.open(path, 0x40000000 | _READ_CONTROL, create=True)
+        root = self._directory()
+        handle = self.api.relative(root, name, 0x40000000 | _READ_CONTROL | _DELETE, create=True)
         try:
+            self._directory()
             self.api.information(handle)
             self.api.assert_private(handle, False)
             fd = msvcrt.open_osfhandle(handle, os.O_WRONLY | os.O_BINARY)
         except BaseException:
-            self.api.kernel.CloseHandle(handle)
-            self.unlink(name)
+            try:
+                self.api.delete(handle)
+            finally:
+                self.api.kernel.CloseHandle(handle)
             raise
         return fd  # ownership of the native handle transfers to the CRT fd
 
@@ -266,10 +344,11 @@ class WindowsDirectory:
         import msvcrt
 
         try:
-            handle = self.api.open(self._path(name), 0x80000000 | _READ_CONTROL | _WRITE_DAC | _WRITE_OWNER)
+            handle = self.api.relative(self._directory(), name, 0x80000000 | _READ_CONTROL | _WRITE_DAC | _WRITE_OWNER)
         except FileNotFoundError:
             return None
         try:
+            self._directory()
             if self.api.information(handle).attributes & _DIRECTORY:
                 raise IsADirectoryError(self._path(name))
             self.api.protect(handle, False)
@@ -282,12 +361,24 @@ class WindowsDirectory:
 
     def unlink(self, name: str) -> None:
         try:
-            os.unlink(self._path(name))
+            handle = self.api.relative(self._directory(), name, _DELETE)
         except FileNotFoundError:
-            pass
+            return
+        try:
+            self._directory()
+            self.api.delete(handle)
+        finally:
+            self.api.kernel.CloseHandle(handle)
 
     def publish(self, temporary: str, name: str, *, replace: bool) -> None:
-        # Windows rename fails if the destination exists. Both paths are in
-        # the pinned directory, so publication is atomic and stays on-volume.
-        operation = os.replace if replace else os.rename
-        operation(self._path(temporary), self._path(name))
+        root = self._directory()
+        handle = self.api.relative(root, temporary, _DELETE | _FILE_READ_ATTRIBUTES)
+        try:
+            self._directory()
+            self.api.information(handle)
+            # Both source and destination are anchored to existing handles;
+            # no absolute pathname is re-opened during atomic publication.
+            self.api.rename(handle, root, name, replace=replace)
+            self._directory()
+        finally:
+            self.api.kernel.CloseHandle(handle)

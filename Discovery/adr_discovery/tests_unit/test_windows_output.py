@@ -5,7 +5,9 @@ from __future__ import annotations
 import ctypes
 import os
 import re
+import struct
 import subprocess
+from contextlib import contextmanager
 from ctypes import wintypes
 
 import pytest
@@ -152,6 +154,135 @@ def test_junction_output_and_junction_ancestor_are_refused(tmp_path, link_is_par
         os.rmdir(junction)
 
 
+@contextmanager
+def _in_place_junction(path, target):
+    """Retain a writable handle before output protection, then mutate the object."""
+    from adr_discovery.world._win_output import _API
+
+    api = _API()
+    api.kernel.DeviceIoControl.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.LPVOID, wintypes.DWORD,
+                                           wintypes.LPVOID, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD),
+                                           wintypes.LPVOID]
+    api.kernel.DeviceIoControl.restype = wintypes.BOOL
+    handle = api.open(str(path), 0x40000000)
+    installed = False
+
+    def control(code, data):
+        buffer, returned = ctypes.create_string_buffer(data), wintypes.DWORD()
+        if not api.kernel.DeviceIoControl(handle, code, buffer, len(data), None, 0, ctypes.byref(returned), None):
+            raise ctypes.WinError(ctypes.get_last_error())
+
+    def install():
+        nonlocal installed
+        substitute = ("\\??\\" + str(target)).encode("utf-16-le")
+        display = str(target).encode("utf-16-le")
+        paths = substitute + b"\0\0" + display + b"\0\0"
+        data = struct.pack("<IHHHHHH", 0xA0000003, 8 + len(paths), 0,
+                           0, len(substitute), len(substitute) + 2, len(display)) + paths
+        control(0x900A4, data)  # FSCTL_SET_REPARSE_POINT, mount-point tag
+        installed = True
+
+    try:
+        yield install
+    finally:
+        try:
+            if installed:
+                control(0x900AC, struct.pack("<IHH", 0xA0000003, 0, 0))
+        finally:
+            api.kernel.CloseHandle(handle)
+
+
+@pytest.mark.parametrize("when", ["before_open", "during_open"])
+def test_in_place_junction_cannot_redirect_snapshot_payload(tmp_path, monkeypatch, when):
+    output, outside = tmp_path / "output", tmp_path / "outside"
+    output.mkdir()
+    outside.mkdir()
+    canary = outside / "canary.txt"
+    canary.write_bytes(b"untouched")
+    injected = []
+    with _in_place_junction(output, outside) as install, private_directory(str(output)) as directory:
+        if when == "before_open":
+            install()
+        else:
+            original = directory.api.relative
+
+            def mutate_between_validation_and_open(root, name, access, **options):
+                install()
+                injected.append(True)
+                return original(root, name, access, **options)
+
+            monkeypatch.setattr(directory.api, "relative", mutate_between_validation_and_open)
+        with pytest.raises(OSError):
+            private_output.write_bytes(directory, "snapshot.json", b"private payload")
+        if when == "during_open":
+            assert injected == [True], "the native junction mutation must have succeeded"
+        assert canary.read_bytes() == b"untouched"
+        assert sorted(path.name for path in outside.iterdir()) == ["canary.txt"]
+    assert list(output.iterdir()) == []
+
+
+def test_in_place_junction_cannot_redirect_reads_or_cleanup(tmp_path):
+    output, outside = tmp_path / "output", tmp_path / "outside"
+    output.mkdir()
+    outside.mkdir()
+    canary = outside / "archive.zip"
+    canary.write_bytes(b"untouched")
+    with _in_place_junction(output, outside) as install, private_directory(str(output)) as directory:
+        install()
+        with pytest.raises(OSError):
+            directory.read("archive.zip")
+        # Cleanup also refuses a directory whose object became a junction.
+        try:
+            directory.unlink("archive.zip")
+        except OSError:
+            pass  # Refusal is safe; deleting the outside canary is not.
+        assert canary.read_bytes() == b"untouched"
+
+
+def test_publication_uses_the_directory_handle_after_in_place_junction(tmp_path):
+    from adr_discovery.world._win_output import _API
+
+    output, outside, holding = (tmp_path / name for name in ("output", "outside", "holding"))
+    output.mkdir()
+    outside.mkdir()
+    holding.mkdir()
+    api = _API()
+    with _in_place_junction(output, outside) as install, private_directory(str(output)) as directory:
+        private_output.write_bytes(directory, "temporary", b"private payload")
+        source = api.relative(directory.handles[-1], "temporary", 0x10000)
+        holding_handle = api.open(str(holding), 0xA1)
+        try:
+            # Empty the output directory through the open source handle, so
+            # it can become a junction while that source remains pinned.
+            api.rename(source, holding_handle, "held", replace=False)
+            install()
+            try:
+                api.rename(source, directory.handles[-1], "archive.zip", replace=False)
+            except OSError:
+                pass  # Native refusal is also a valid no-redirect outcome.
+            assert list(outside.iterdir()) == []
+        finally:
+            api.kernel.CloseHandle(holding_handle)
+            api.kernel.CloseHandle(source)
+
+
+def test_file_acl_verification_failure_deletes_the_created_handle(tmp_path, monkeypatch):
+    from adr_discovery.world._win_output import _API
+
+    original = _API.assert_private
+
+    def refuse_file(self, handle, directory):
+        if not directory:
+            raise PermissionError("file ACL verification failed")
+        original(self, handle, directory)
+
+    monkeypatch.setattr(_API, "assert_private", refuse_file)
+    output = tmp_path / "output"
+    with pytest.raises(PermissionError, match="file ACL"):
+        _write_private(str(output), "snapshot.json", "private payload")
+    assert list(output.iterdir()) == []
+
+
 def test_archive_publication_does_not_require_hard_links_and_never_overwrites(tmp_path, monkeypatch):
     def no_hardlinks(*_args, **_kwargs):
         raise OSError("hard links unsupported")
@@ -168,6 +299,16 @@ def test_archive_publication_does_not_require_hard_links_and_never_overwrites(tm
     _assert_private(store.path_of("archive.zip"))
     _assert_private(store.path_of("index.jsonl"))
     assert sorted(path.name for path in (tmp_path / "archives").iterdir()) == ["archive.zip", "index.jsonl"]
+
+
+def test_relative_names_and_publication_preserve_utf16_surrogate_pairs(tmp_path):
+    store = ArchiveStore(str(tmp_path / "输出😀"))
+    assert store.put_once("归档😀.zip", b"archive bytes")
+    assert store.read("归档😀.zip") == b"archive bytes"
+    store.replace("索引😀.jsonl", b"first")
+    store.replace("索引😀.jsonl", b"second")
+    assert store.read("索引😀.jsonl") == b"second"
+    _assert_private(store.path_of("归档😀.zip"))
 
 
 def test_index_held_without_delete_sharing_keeps_old_data_and_cleans_temp(tmp_path):
