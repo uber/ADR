@@ -17,7 +17,8 @@ from adr_discovery.extractor.formats import parse_bytes
 from adr_discovery.judge.risk import launch_shape, package_of, pinning
 from adr_discovery.pipeline import _dedupe_surfaces, _observation_from_declaration
 from adr_discovery.redact.rules import scrub_argv
-from adr_discovery.world.gate import Gate
+from adr_discovery.world.gate import Gate, Ok, Ran
+from adr_discovery.world.platform import windows
 from adr_discovery.world.platform.base import NullProviders
 from adr_discovery.world.platform.windows import WindowsProviders
 
@@ -46,11 +47,14 @@ def test_windows_argv_preserves_single_quotes_and_metacharacters():
 def test_windows_provider_collects_argv_without_posix_quote_characters(tmp_path, monkeypatch):
     provider = WindowsProviders()
     argv = (r"C:\Program Files\Node\NPX.CMD", "-y", "example@1.2.3", "--token", "secret value")
-    monkeypatch.setattr(provider, "_ps_json", lambda *_args: [{
+    payload = json.dumps([{
         "ProcessId": 42, "ParentProcessId": 7, "ExecutablePath": argv[0],
         "CommandLine": subprocess.list2cmdline(argv),
     }])
-    result = provider.processes(Gate(str(tmp_path), providers=provider))
+    gate = Gate(str(tmp_path), providers=provider)
+    monkeypatch.setattr(windows, "powershell_path", lambda: r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe", raising=False)
+    monkeypatch.setattr(gate, "run_helper", lambda command: Ok(Ran(command, 0, payload)))
+    result = provider.processes(gate)
     assert result.ok and result.value[0].argv == argv
     assert "secret value" not in repr(scrub_argv(result.value[0].argv))
 
