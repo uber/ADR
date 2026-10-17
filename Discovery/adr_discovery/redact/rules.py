@@ -119,7 +119,9 @@ def scrub_argv(argv: tuple[str, ...] | list[str]) -> tuple[str, ...]:
     runner = executable_name(argv[0]) if argv else ""
     if runner.casefold() in SHELL_WRAPPERS:
         return (argv[0], REDACTED) if len(argv) > 1 else (argv[0],)
-    public_p = runner in {"npx", "npm", "pnpm", "yarn", "uvx", "pipx", "docker", "podman"}
+    # Container -p is a password for `login` and may belong to the image's
+    # command after `run`: retain the conservative credential rule there.
+    public_p = runner in {"npx", "npm", "pnpm", "yarn", "uvx", "pipx"}
     out: list[str] = []
     expect_value = False
     for arg in argv:

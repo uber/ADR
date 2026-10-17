@@ -89,14 +89,27 @@ def test_shell_wrapper_is_opaque_unknown_and_drops_script_arguments(command):
     assert "SECRET" not in repr(declaration)
 
 
-def test_package_and_port_flags_keep_their_nonsecret_operands():
+def test_package_flag_keeps_its_identity_and_shell_call_bodies_are_redacted():
     declaration = Declaration(Kind.MCP_SERVER, "x", "/config.json", command="NPX.CMD",
                               args=("-p", "@example/server@1.2.3", "server", "--token", "SECRET"))
     assert package_of(declaration.command, declaration.args) == ("npm", "@example/server", "1.2.3")
     assert "SECRET" not in repr(declaration)
-    assert scrub_argv(("docker.exe", "run", "-p", "8080:80", "img"))[3] == "8080:80"
     assert "SECRET" not in repr(scrub_argv(("npx.cmd", "--call=echo SECRET")))
     assert "SECRET" not in repr(scrub_argv(("npx.cmd", "-cecho SECRET")))
+
+
+@pytest.mark.parametrize("runner", ["docker.exe", "podman.exe"])
+@pytest.mark.parametrize("args", [("login", "-p", "SECRET"), ("login", "-pSECRET"),
+                                  ("run", "image", "-p", "SECRET"), ("run", "--", "image", "-pSECRET")])
+def test_container_password_and_forwarded_short_flags_remain_redacted(runner, args):
+    assert "SECRET" not in repr(scrub_argv((runner, *args)))
+
+
+@pytest.mark.parametrize("program", [r"\\server\share\My Tool\server.exe", "//server/share/My Tool/server.exe"])
+def test_bare_unc_executable_with_spaces_is_not_split(tmp_path, program):
+    _gate, result = _config(tmp_path, {"mcpServers": {"unc": {"command": program}}})
+    assert result.declarations[0].command == program
+    assert result.declarations[0].args == ()
 
 
 def test_invalid_command_diagnostics_do_not_expose_the_line(tmp_path):

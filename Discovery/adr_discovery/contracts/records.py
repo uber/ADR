@@ -85,8 +85,8 @@ class Declaration:
     raw: dict[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        # Keep executable context: npx -p names a package, docker -p a port,
-        # and a shell wrapper's arguments are an opaque script, not argv.
+        # Keep executable context: npx -p names a package, and a shell
+        # wrapper's arguments are an opaque script, not argv.
         argv = redact.scrub_argv((self.command, *self.args)) if self.command else redact.scrub_argv(self.args)
         object.__setattr__(self, "args", argv[1:] if self.command else argv)
         if self.url is not None:

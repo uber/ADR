@@ -7,7 +7,7 @@ import shlex
 
 SHELL_WRAPPERS = frozenset({"cmd", "powershell", "pwsh"})
 _WINDOWS_LINE = re.compile(r'^\s*"?(?:[A-Za-z]:[\\/]|\\\\|[^\s"]+\.(?:exe|cmd|bat|com)(?:["\s]|$))', re.I)
-_WINDOWS_PROGRAM = re.compile(r'^[A-Za-z]:[\\/].*\.(?:exe|cmd|bat|com)$', re.I)
+_WINDOWS_PROGRAM = re.compile(r'^(?:[A-Za-z]:[\\/]|[\\/]{2}[^\\/]+[\\/][^\\/]+[\\/]).*\.(?:exe|cmd|bat|com)$', re.I)
 
 
 def executable_name(command: str | None) -> str:
