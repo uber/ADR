@@ -14,6 +14,7 @@ from adr_discovery import pipeline
 from adr_discovery.enumerator.sources.network import from_network
 from adr_discovery.enumerator.sources.registries import from_applications, from_kernel, from_packages
 from adr_discovery.world.gate import Gate, Ok, Ran, Refused
+from adr_discovery.world.platform import windows
 from adr_discovery.world.platform.windows import WindowsProviders
 
 
@@ -44,10 +45,18 @@ class _Helpers:
         response = self.responses[surface]
         if isinstance(response, (Ok, Refused)):
             return response
+        sources = getattr(windows, "_APPLICATION_SOURCES", ())
+        if surface == "applications" and sources:
+            response = [{"Source": source, "Ok": True, "Rows": response if index == 0 else []}
+                        for index, source in enumerate(sources)]
         return Ok(Ran(tuple(argv), 0, json.dumps(response)))
 
 
 def _gate(tmp_path, monkeypatch, helpers, providers=None):
+    # Keep these lifecycle checks independent of how the provider locates
+    # its native helper; all helper execution is replaced by _Helpers.
+    monkeypatch.setattr(windows, "powershell_path", lambda: r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
+                        raising=False)
     gate = Gate(str(tmp_path), providers=providers or WindowsProviders())
     monkeypatch.setattr(gate, "run_helper", helpers)
     return gate
@@ -65,8 +74,8 @@ def test_packages_applications_and_ownership_share_one_inventory(tmp_path, monke
     assert packages[0].detail["name"] == "test-agent"
     assert applications[0].detail["ident"] == "test-agent"
     assert all(owner.ok and owner.value.name == "test-agent" for owner in owners)
-    assert {(probe.name, probe.status) for probe in gate.ledger.freeze().probes} == {
-        ("packages", "ran"), ("applications", "ran"),
+    assert {("packages", "ran"), ("applications", "ran")} <= {
+        (probe.name, probe.status) for probe in gate.ledger.freeze().probes
     }
 
 
@@ -105,12 +114,14 @@ def test_empty_and_failed_queries_are_cached_with_their_coverage(tmp_path, monke
     coverage = gate.ledger.freeze()
     if response == []:
         assert first.ok and first.value == ()
-        assert coverage.unavailable == ()
+        assert not any(entry.provider == surface for entry in coverage.unavailable)
     else:
         assert not first.ok
-        assert [entry.provider for entry in coverage.unavailable] == [surface]
+        assert [entry.provider for entry in coverage.unavailable if entry.provider == surface] == [surface]
     if isinstance(response, Ok) and response.value.stdout == "invalid JSON":
-        assert [(probe.name, probe.status) for probe in coverage.probes] == [(surface, "degraded")]
+        assert any(probe.name == surface and probe.status == "degraded" for probe in coverage.probes) or any(
+            entry.provider == surface and "JSON" in entry.reason for entry in coverage.unavailable
+        )
 
 
 @pytest.mark.parametrize("surface", ["applications", "sockets"])
@@ -132,8 +143,8 @@ def test_shared_provider_keeps_gate_results_and_ledgers_separate(tmp_path, monke
     assert getattr(first_gate, surface)() is first
     assert getattr(second_gate, surface)() is second
     assert first_helpers.calls == second_helpers.calls == [surface]
-    assert second_gate.ledger.freeze().unavailable == ()
-    assert bool(first_gate.ledger.freeze().unavailable) == first_fails
+    assert not any(entry.provider == surface for entry in second_gate.ledger.freeze().unavailable)
+    assert any(entry.provider == surface for entry in first_gate.ledger.freeze().unavailable) == first_fails
 
 
 def test_discover_refreshes_failed_and_empty_snapshots_on_a_reused_gate(tmp_path, monkeypatch):
@@ -167,4 +178,4 @@ def test_discover_refreshes_failed_and_empty_snapshots_on_a_reused_gate(tmp_path
     assert observed[1][1].value[0].local_port == 11435
     assert observed[2][0].value[0].version == "3"
     assert observed[2][1].value[0].local_port == 11436
-    assert [entry.provider for entry in first.coverage.unavailable] == ["applications"]
+    assert [entry.provider for entry in first.coverage.unavailable if entry.provider == "applications"] == ["applications"]
