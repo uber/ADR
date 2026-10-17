@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shlex
 
+from ...contracts.paths import contains, key
 from .base import Application, HostResolver, NullProviders, Package, Process, Socket
 
 
@@ -70,9 +71,9 @@ class WindowsProviders(HostResolver, NullProviders):
         apps = self.applications(gate)
         if not apps.ok:
             return apps
-        folded = path.casefold()
-        for app in apps.value:
-            if app.path and folded.startswith(app.path.casefold().rstrip("\\/") + "\\"):
+        # Nested installs belong to the most specific registry root.
+        for app in sorted(apps.value, key=lambda a: len(key(a.path or "")), reverse=True):
+            if app.path and contains(app.path, path):
                 return Ok(Package("windows", app.ident, app.version, app.path))
         return Refused("not_owned", path)
 

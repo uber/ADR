@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ...contracts.paths import basename, is_windows
 from ...contracts.records import Candidate, Priority
 
 MODEL_ROOTS = (
@@ -23,8 +24,9 @@ def from_model_stores(gate, homes: tuple[str, ...]) -> tuple[Candidate, ...]:
             for entry in gate.walk(root, max_depth=4):
                 if entry.is_dir:
                     continue
-                name = entry.path.rsplit("/", 1)[-1]
-                if not (name.endswith(MODEL_SUFFIXES) or name.startswith("sha256-")):
+                name = basename(entry.path)
+                probe = name.lower() if is_windows(entry.path) else name
+                if not (probe.endswith(MODEL_SUFFIXES) or probe.startswith("sha256-")):
                     continue
                 out.append(Candidate("model_weight_candidate", entry.path, "model_store",
                                      Priority.HOME, {"name": name, "size": entry.size}))

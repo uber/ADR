@@ -11,6 +11,7 @@ from enum import Enum
 
 from ..redact import rules as redact
 from .evidence import Band, Evidence, Rung
+from .paths import logical
 
 
 class Kind(str, Enum):
@@ -62,6 +63,9 @@ class Candidate:
     priority: Priority = Priority.BREADTH
     detail: dict[str, object] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "path", logical(self.path))
+
 
 @dataclass(frozen=True, slots=True)
 class Declaration:
@@ -85,6 +89,7 @@ class Declaration:
     raw: dict[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "path", logical(self.path))
         object.__setattr__(self, "args", redact.scrub_argv(self.args))
         if self.url is not None:
             object.__setattr__(self, "url", redact.strip_url(self.url))

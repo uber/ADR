@@ -18,6 +18,8 @@ from .archive import Archiver
 from .catalog.load import EMPTY as EMPTY_CATALOG
 from .catalog.load import Catalog
 from .contracts.evidence import Channel, Evidence
+from .contracts.paths import basename, contains, is_windows, parent
+from .contracts.paths import key as path_key
 from .contracts.records import (
     Asset,
     Candidate,
@@ -173,7 +175,7 @@ def _archived(gate, assets, store: ArchiveStore, timestamp: str):
                               f"{asset.install_path}: {result.reason} {result.detail}".rstrip())
             out.append(asset)
             continue
-        home = next((h for h in user_homes if asset.install_path.startswith(h.rstrip("/") + "/")), None)
+        home = next((h for h in user_homes if contains(h, asset.install_path)), None)
         archiver.record(
             result.value, name=asset.name, source=home_relative(asset.install_path, home),
             provenance=asdict(asset.provenance) if asset.provenance else None,
@@ -357,13 +359,13 @@ def _registered_plugins(gate, roots, declarations) -> list[tuple[Candidate, Decl
     plugins, none of them loaded from there, and what the sweep does reach
     inside them still gets their provenance.
     """
-    seen = {d.path for _, d in declarations if d.kind is Kind.PLUGIN}
+    seen = {path_key(d.path) for _, d in declarations if d.kind is Kind.PLUGIN}
     out = []
     for path, provenance, installed_copy in roots:
-        if not installed_copy or path in seen or not gate.stat(path).ok:
+        if not installed_copy or path_key(path) in seen or not gate.stat(path).ok:
             continue
         candidate = Candidate(kind="marker_dir", path=path, source="plugin_registry")
-        out.append((candidate, plugin_declaration(gate, path, "plugin", provenance.plugin or path.rsplit("/", 1)[-1])))
+        out.append((candidate, plugin_declaration(gate, path, "plugin", provenance.plugin or basename(path))))
     return out
 
 
@@ -379,7 +381,7 @@ def _with_provenance(gate, assets: tuple[Asset, ...], roots) -> tuple[Asset, ...
     placed = {path: provenance for path, provenance, _ in roots}
     plugins = {a.install_path: a for a in assets if a.kind is Kind.PLUGIN and a.install_path}
     for path in sorted(plugins, key=len):
-        if path not in placed:
+        if not any(path_key(path) == path_key(p) for p in placed):
             around = _container(placed, path)
             placed[path] = _unplaced(gate, plugins[path], placed[around] if around else None)
 
@@ -406,10 +408,10 @@ def _unplaced(gate, plugin: Asset, around: Provenance | None) -> Provenance:
         return replace(around, plugin=plugin.name, plugin_version=plugin.version)
     # A clone no registry lists (a host's own temporary checkout) still
     # declares itself a marketplace one or two levels up.
-    parent = plugin.install_path
+    directory = plugin.install_path
     for _ in range(3):
-        parent = parent.rsplit("/", 1)[0]
-        market = marketplace_at(gate, parent) if parent else None
+        directory = parent(directory)
+        market = marketplace_at(gate, directory) if directory else None
         if market:
             return Provenance(AVAILABLE, marketplace=market, plugin=plugin.name, plugin_version=plugin.version)
     return Provenance(UNREGISTERED, plugin=plugin.name, plugin_version=plugin.version)
@@ -417,12 +419,10 @@ def _unplaced(gate, plugin: Asset, around: Provenance | None) -> Provenance:
 
 def _container(paths, path: str | None, proper: bool = False) -> str | None:
     """The nearest of `paths` that is `path` or one of its ancestors."""
-    probe = path.rsplit("/", 1)[0] if path and proper else path
-    while probe:
-        if probe in paths:
-            return probe
-        probe = probe.rsplit("/", 1)[0] if "/" in probe else ""
-    return None
+    if not path:
+        return None
+    matches = (root for root in paths if root and contains(root, path, proper=proper))
+    return max(matches, key=lambda root: len(path_key(root)), default=None)
 
 
 def _mark_undeclared(assets: tuple[Asset, ...], declarations) -> tuple[Asset, ...]:
@@ -473,8 +473,8 @@ def declaration_identity(declaration: Declaration) -> str:
     if explicit:
         return str(explicit)
     if declaration.kind in FILE_SHAPED_KINDS:
-        return f"{declaration.kind.value}:{declaration.path}"
-    return f"{declaration.kind.value}:{declaration.name}@{declaration.path}"
+        return f"{declaration.kind.value}:{path_key(declaration.path)}"
+    return f"{declaration.kind.value}:{declaration.name}@{path_key(declaration.path)}"
 
 
 def _declarations_by_asset(assets: tuple[Asset, ...], declarations) -> dict[str, Declaration]:
@@ -511,9 +511,11 @@ def _is_file(stat) -> bool:
 
 
 def _root_of(path: str | None) -> str | None:
-    if not path or "/" not in path:
+    if not path:
         return None
-    return path.rsplit("/", 1)[0]
+    if is_windows(path):
+        return parent(path)
+    return path.rsplit("/", 1)[0] if "/" in path else None
 
 
 def _package_id(candidate: Candidate) -> str | None:

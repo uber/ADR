@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import stat
 
+from ..contracts.paths import basename, is_windows, logical
 from ..contracts.records import Priority
 from .markers import STATE_ROOTS
 
@@ -66,7 +67,7 @@ def homes(gate) -> tuple[str, ...]:
         if not listing.ok:
             continue
         for entry in listing.value:
-            if entry.is_dir and not entry.path.rsplit("/", 1)[-1].startswith("."):
+            if entry.is_dir and not basename(entry.path).startswith("."):
                 found.append(entry.path)
     # Match provider discovery: resolve the caller fallback before direct homes.
     if not found:
@@ -125,6 +126,12 @@ def state_roots(gate) -> tuple[str, ...]:
 
 
 def in_scope(path: str, include_dependency_caches: bool = False) -> bool:
-    if any(seg in path for seg in SKIP_ALWAYS):
+    probe = logical(path)
+    windows = is_windows(path)
+    if windows:
+        probe = probe.lower()
+    if any((seg.lower() if windows else seg) in probe for seg in SKIP_ALWAYS):
         return False
-    return include_dependency_caches or not any(seg in path for seg in DEPENDENCY_CACHES)
+    return include_dependency_caches or not any(
+        (seg.lower() if windows else seg) in probe for seg in DEPENDENCY_CACHES
+    )

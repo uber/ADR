@@ -13,6 +13,7 @@ import json as _json
 import plistlib as _plistlib
 import tomllib as _tomllib
 
+from ...contracts.paths import logical
 from . import yaml as _yaml
 
 Unrepresentable = _yaml.Unrepresentable
@@ -35,7 +36,7 @@ def parse_bytes(data: bytes, fmt: str) -> dict:
 
 
 def format_for(path: str) -> str | None:
-    lowered = path.lower()
+    lowered = logical(path).lower()
     if lowered.endswith(".json") or lowered.endswith(".jsonc"):
         return "json"
     if lowered.endswith(".toml"):

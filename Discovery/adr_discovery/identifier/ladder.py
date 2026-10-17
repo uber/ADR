@@ -20,6 +20,7 @@ import re
 from fnmatch import fnmatchcase
 
 from ..contracts.evidence import Channel, Evidence, Rung
+from ..contracts.paths import basename, is_absolute, logical
 from ..contracts.records import Candidate, Kind, Verdict
 from .openworld import score, signals_for
 
@@ -39,7 +40,7 @@ def content_hash(gate, path: str, limit: int = MAX_HASH_BYTES) -> str | None:
 
 def identify(gate, candidate: Candidate, catalog) -> Verdict:
     """Produce a verdict, with the proof that produced it."""
-    name = candidate.path.rsplit("/", 1)[-1]
+    name = basename(candidate.path)
 
     if candidate.kind == "model_weight_candidate":
         raw = gate.read_bytes(candidate.path, limit=64)
@@ -135,11 +136,11 @@ def _by_provenance(gate, candidate: Candidate, catalog):
     # binaries, query ownership only when another channel makes the path
     # relevant. Live processes and journal events remain eligible because
     # execution itself is that independent signal and must survive renames.
-    basename = candidate.path.rstrip("/").rsplit("/", 1)[-1]
+    filename = basename(candidate.path)
     ownership_relevant = (
         candidate.kind in ("process", "exec_event")
-        or (candidate.kind in SOCKET_KINDS and candidate.path.startswith("/"))
-        or catalog.match("binaries", basename) is not None
+        or (candidate.kind in SOCKET_KINDS and is_absolute(candidate.path))
+        or catalog.match("binaries", filename) is not None
     )
     if not ownership_relevant:
         return None, (), None, None
@@ -179,7 +180,7 @@ def _by_layout(gate, candidate: Candidate, catalog):
         stat = gate.stat(candidate.path)
         if not stat.ok:
             return None
-        real = stat.value.real_path
+        real = logical(stat.value.real_path)
     parent, _, name = real.rpartition("/")
     forms = {parent, _home_relative(parent)}
     for layout in catalog.layouts:

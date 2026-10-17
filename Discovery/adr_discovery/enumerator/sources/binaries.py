@@ -13,8 +13,9 @@ filesystem sweep wearing a different name.
 
 from __future__ import annotations
 
+from ...contracts.paths import basename, is_windows, key
 from ...contracts.records import Candidate, Priority
-from ..markers import BUNDLE_SUFFIXES
+from ..markers import BUNDLE_SUFFIXES, WINDOWS_EXECUTABLE_SUFFIXES
 
 #: Directories that hold executables by convention, plus whatever PATH says.
 BIN_ROOTS: tuple[str, ...] = (
@@ -39,11 +40,15 @@ def from_binaries(gate, homes: tuple[str, ...]) -> tuple[Candidate, ...]:
             if kept >= MAX_PER_ROOT:
                 gate.ledger.truncate(root, kept, len(listing.value))
                 break
-            if not (entry.is_exec or entry.path.endswith(BUNDLE_SUFFIXES)):
+            windows_executable = (
+                is_windows(entry.path) and not entry.is_dir
+                and entry.path.lower().endswith(WINDOWS_EXECUTABLE_SUFFIXES)
+            )
+            if not (entry.is_exec or entry.path.endswith(BUNDLE_SUFFIXES) or windows_executable):
                 continue
-            if entry.path in seen:
+            if key(entry.path) in seen:
                 continue
-            seen.add(entry.path)
+            seen.add(key(entry.path))
             kept += 1
             out.append(
                 Candidate(
@@ -51,7 +56,7 @@ def from_binaries(gate, homes: tuple[str, ...]) -> tuple[Candidate, ...]:
                     path=entry.path,
                     source="binaries",
                     priority=Priority.HOME,
-                    detail={"name": entry.path.rsplit("/", 1)[-1], "symlink": entry.is_symlink},
+                    detail={"name": basename(entry.path), "symlink": entry.is_symlink},
                 )
             )
     return tuple(out)
@@ -64,7 +69,9 @@ def _roots(gate, homes: tuple[str, ...]) -> list[str]:
             roots.extend(home + template[1:] for home in homes)
         else:
             roots.append(template)
-    for entry in (gate.env.get("PATH") or "").split(":"):
+    search_path = gate.env.get("PATH") or ""
+    separator = ";" if ";" in search_path or is_windows(search_path) else ":"
+    for entry in search_path.split(separator):
         if entry and entry not in roots:
             roots.append(entry)
     return roots

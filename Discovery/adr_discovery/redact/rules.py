@@ -14,6 +14,8 @@ from __future__ import annotations
 import re
 from urllib.parse import urlsplit, urlunsplit
 
+from ..contracts.paths import is_windows
+
 #: Flags whose *operand* is secret. The flag name survives; the value does not.
 #: `--dangerously-skip-permissions` is deliberately absent -- it takes no
 #: operand and its presence is exactly the signal M6 needs.
@@ -157,6 +159,9 @@ def is_personal(resolved_path: str) -> bool:
     probe = resolved_path.replace("\\", "/")
     if not probe.endswith("/"):
         probe += "/"
+    if is_windows(resolved_path):
+        probe = probe.lower()
+        return any(seg.lower() in probe for seg in PERSONAL_PATH_SEGMENTS)
     return any(seg in probe for seg in PERSONAL_PATH_SEGMENTS)
 
 

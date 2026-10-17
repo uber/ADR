@@ -15,6 +15,8 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
+from ...contracts.paths import basename
+
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from ..gate import Gate, Result
 
@@ -139,7 +141,7 @@ class NullProviders:
                 out.extend(
                     e.path
                     for e in listing.value
-                    if e.is_dir and not e.path.rsplit("/", 1)[-1].startswith(".")
+                    if e.is_dir and not basename(e.path).startswith(".")
                 )
         # A root home must not suppress the caller's nonstandard HOME fallback.
         if not out:
@@ -319,7 +321,7 @@ class LanguagePackages:
                 for entry in listing.value:
                     if not entry.is_dir:
                         continue
-                    name = entry.path.rsplit("/", 1)[-1]
+                    name = basename(entry.path)
                     # Scoped packages hold their real entries one level down.
                     targets = [entry.path]
                     if name.startswith("@"):
@@ -349,7 +351,7 @@ class LanguagePackages:
                     continue
                 for entry in listing.value:
                     if entry.is_dir:
-                        out.append(Package(manager, entry.path.rsplit("/", 1)[-1], None, entry.path))
+                        out.append(Package(manager, basename(entry.path), None, entry.path))
         return out
 
 
