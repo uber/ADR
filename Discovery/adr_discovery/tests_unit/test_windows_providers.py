@@ -323,7 +323,7 @@ def test_pipe_timeout_does_not_close_an_active_reader(monkeypatch):
 
 @NATIVE
 def test_native_inherited_pipe_cannot_hold_up_the_scan(tmp_path):
-    gate = Gate(str(tmp_path), budget=Budget(max_subprocess_seconds=1))
+    gate = Gate("/", budget=Budget(max_subprocess_seconds=1))
     script = (
         "import subprocess,sys; "
         "subprocess.Popen([sys.executable,'-c','import time; time.sleep(3)'],close_fds=False); "
@@ -337,7 +337,7 @@ def test_native_inherited_pipe_cannot_hold_up_the_scan(tmp_path):
 
 @NATIVE
 def test_native_powershell_preserves_non_ascii_json(tmp_path):
-    gate = Gate(str(tmp_path), providers=windows.WindowsProviders())
+    gate = Gate("/", providers=windows.WindowsProviders())
     result = gate.providers._ps_json(
         gate, "[pscustomobject]@{Name='中文';Path='D:\\测试 空格\\Agent'} | ConvertTo-Json -Compress", "unicode",
     )
@@ -347,7 +347,7 @@ def test_native_powershell_preserves_non_ascii_json(tmp_path):
 
 @NATIVE
 def test_native_socket_script_serializes_enum_names(tmp_path, monkeypatch):
-    gate = Gate(str(tmp_path), providers=windows.WindowsProviders())
+    gate = Gate("/", providers=windows.WindowsProviders())
     original = gate.run_helper
     stub = (
         "function Get-NetTCPConnection { [CmdletBinding()]param(); "
@@ -362,7 +362,7 @@ def test_native_socket_script_serializes_enum_names(tmp_path, monkeypatch):
 
 @NATIVE
 def test_native_application_script_keeps_per_source_errors(tmp_path, monkeypatch):
-    gate = Gate(str(tmp_path), providers=windows.WindowsProviders())
+    gate = Gate("/", providers=windows.WindowsProviders())
     original = gate.run_helper
     stub = (
         "function Test-Path { [CmdletBinding()]param([string]$LiteralPath); $false }; "
@@ -378,7 +378,7 @@ def test_native_application_script_keeps_per_source_errors(tmp_path, monkeypatch
 
 @NATIVE
 def test_native_helper_rejects_invalid_utf8(tmp_path):
-    gate = Gate(str(tmp_path))
+    gate = Gate("/")
     result = gate.run_helper((windows_system.powershell_path(), "-NoProfile", "-NonInteractive", "-Command",
                               "[Console]::OpenStandardOutput().WriteByte(255)"))
     assert not result.ok and result.reason == "invalid_encoding", result
@@ -386,7 +386,7 @@ def test_native_helper_rejects_invalid_utf8(tmp_path):
 
 @NATIVE
 def test_native_helper_timeout_remains_bounded(tmp_path):
-    gate = Gate(str(tmp_path), budget=Budget(max_subprocess_seconds=0.1))
+    gate = Gate("/", budget=Budget(max_subprocess_seconds=0.1))
     result = gate.run_helper((windows_system.powershell_path(), "-NoProfile", "-NonInteractive", "-Command",
                               "Start-Sleep -Seconds 30"))
     assert not result.ok and result.reason == "timeout", result
@@ -394,7 +394,7 @@ def test_native_helper_timeout_remains_bounded(tmp_path):
 
 @NATIVE
 def test_native_helper_enforces_output_limit(tmp_path):
-    gate = Gate(str(tmp_path), budget=Budget(max_subprocess_output_bytes=1024))
+    gate = Gate("/", budget=Budget(max_subprocess_output_bytes=1024))
     result = gate.run_helper((windows_system.powershell_path(), "-NoProfile", "-NonInteractive", "-Command",
                               "[Console]::Out.Write('x' * 65536); Start-Sleep -Seconds 30"))
     assert not result.ok and result.reason == "output_limit", result
