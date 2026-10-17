@@ -6,12 +6,12 @@ import json
 import shlex
 
 from .base import Application, HostResolver, NullProviders, Package, Process, Socket
+from .windows_locations import WindowsLocations
+from .windows_packages import WindowsLanguagePackages
 
 
-class WindowsProviders(HostResolver, NullProviders):
+class WindowsProviders(WindowsLocations, HostResolver, NullProviders):
     reason = "Windows management surface unavailable"
-    HOME_ROOTS = ("/Users",)
-    DIRECT_HOMES: tuple[str, ...] = ()
 
     def processes(self, gate):
         rows = self._ps_json(gate, "Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,ExecutablePath,CommandLine | ConvertTo-Json -Compress", "processes")
@@ -60,10 +60,15 @@ class WindowsProviders(HostResolver, NullProviders):
 
     def packages(self, gate):
         apps = self.applications(gate)
-        if not apps.ok:
-            return apps
         from ..gate import Ok
-        return Ok(tuple(Package("windows", a.ident, a.version, a.path) for a in apps.value))
+        found = [Package("windows", app.ident, app.version, app.path)
+                 for app in apps.value] if apps.ok else []
+        found.extend(WindowsLanguagePackages().collect(gate, self._locations(gate)))
+        if not apps.ok:
+            gate.ledger.probe("packages", "degraded", "Windows application inventory unavailable")
+            if not found:
+                return apps
+        return Ok(tuple(dict.fromkeys(found)))
 
     def package_owner(self, gate, path):
         from ..gate import Ok, Refused

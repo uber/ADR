@@ -16,6 +16,7 @@ signals come from already-observed process and network state, not probes.
 from __future__ import annotations
 
 import hashlib
+import ntpath
 import re
 from fnmatch import fnmatchcase
 
@@ -97,6 +98,8 @@ def _by_provenance(gate, candidate: Candidate, catalog):
         manager = candidate.source.split(":", 1)[1]
         pkg_name = str(candidate.detail.get("name", ""))
         entry = catalog.match("packages", f"{manager}:{pkg_name}")
+        if entry is None and manager == "windows":
+            entry = catalog.match("registry_names", pkg_name)
         if entry is not None:
             return entry, (
                 Evidence("identifier", Channel.PACKAGE, candidate.path,
@@ -108,7 +111,8 @@ def _by_provenance(gate, candidate: Candidate, catalog):
     # are provenance and are sufficient to establish identity.
     if candidate.kind == "application":
         ident = str(candidate.detail.get("ident", ""))
-        entry = catalog.match("bundle_ids", ident) or catalog.match("desktop_ids", ident)
+        entry = (catalog.match("bundle_ids", ident) or catalog.match("desktop_ids", ident)
+                 or catalog.match("registry_names", ident))
         if entry is not None:
             return entry, (
                 Evidence("identifier", Channel.REGISTRY, candidate.path,
@@ -148,6 +152,8 @@ def _by_provenance(gate, candidate: Candidate, catalog):
     if owner.ok:
         pkg = owner.value
         entry = catalog.match("packages", f"{pkg.manager}:{pkg.name}")
+        if entry is None and pkg.manager == "windows":
+            entry = catalog.match("registry_names", pkg.name)
         if entry is not None:
             return entry, (
                 Evidence("identifier", Channel.PACKAGE, candidate.path,
@@ -180,10 +186,18 @@ def _by_layout(gate, candidate: Candidate, catalog):
         if not stat.ok:
             return None
         real = stat.value.real_path
+    windows = bool(ntpath.splitdrive(real)[0])
+    if windows:
+        real = real.replace("\\", "/")
     parent, _, name = real.rpartition("/")
-    forms = {parent, _home_relative(parent)}
+    home_paths = gate.providers.homes(gate) if windows and hasattr(gate.providers, "homes") else ()
+    forms = {parent, _home_relative(parent, home_paths)}
+    if windows:
+        forms = {form.casefold() for form in forms}
     for layout in catalog.layouts:
-        if layout.parent in forms and fnmatchcase(name, layout.pattern):
+        layout_parent = layout.parent.casefold() if windows else layout.parent
+        pattern = layout.pattern.casefold() if windows else layout.pattern
+        if layout_parent in forms and fnmatchcase(name.casefold() if windows else name, pattern):
             entry = catalog.by_id[layout.entry_id]
             return entry, (
                 Evidence("identifier", Channel.FILESYSTEM, candidate.path,
@@ -241,8 +255,22 @@ def _suspected(catalog, candidate: Candidate, name: str):
     return None
 
 
-def _home_relative(path: str) -> str:
+def _home_relative(path: str, homes: tuple[str, ...] = ()) -> str:
     """`~/.claude` in the catalog must match /Users/alice/.claude on disk."""
+    if ntpath.splitdrive(path)[0]:
+        path = path.replace("\\", "/")
+        for home in sorted(homes, key=len, reverse=True):
+            base = home.replace("\\", "/").rstrip("/")
+            if path.casefold() == base.casefold():
+                return "~"
+            if path.casefold().startswith(base.casefold() + "/"):
+                return "~" + path[len(base):]
+        _, tail = ntpath.splitdrive(path)
+        if tail.casefold().startswith("/users/"):
+            parts = tail.split("/", 3)
+            if len(parts) == 4:
+                return "~/" + parts[3]
+        return ""
     for base in ("/root/", "/var/root/"):
         if path.startswith(base):
             return "~/" + path[len(base):]

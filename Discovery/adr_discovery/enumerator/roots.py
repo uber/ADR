@@ -99,7 +99,10 @@ def ordered_roots(gate) -> tuple[tuple[str, Priority], ...]:
             if path not in seen:
                 seen.add(path)
                 out.append((path, priority))
-    for template, priority in ROOT_TEMPLATES:
+    system_roots = getattr(gate.providers, "system_roots", None)
+    system = (tuple((path, Priority.SYSTEM) for path in system_roots(gate)) if system_roots
+              else tuple(pair for pair in ROOT_TEMPLATES if not pair[0].startswith("~")))
+    for template, priority in system:
         if template.startswith("~") or template in seen:
             continue
         seen.add(template)
@@ -115,13 +118,21 @@ def state_roots(gate) -> tuple[str, ...]:
     stat (no entry charged) so absent ones leave no sweep record.
     """
     found: list[str] = []
-    for home in homes(gate):
-        for template in STATE_ROOTS:
-            path = home + template[1:]
-            st = gate.stat(path)
-            if path not in found and st.ok and stat.S_ISDIR(st.value.mode):
-                found.append(path)
+    for path in source_paths(gate, "state", STATE_ROOTS, homes(gate)):
+        st = gate.stat(path)
+        if path not in found and st.ok and stat.S_ISDIR(st.value.mode):
+            found.append(path)
     return tuple(found)
+
+
+def source_paths(gate, category: str, templates, home_paths: tuple[str, ...]) -> tuple[str, ...]:
+    """Let the platform substitute per-user known folders for source templates."""
+    provider_paths = getattr(gate.providers, "source_paths", None)
+    if provider_paths is not None:
+        return provider_paths(gate, category, templates, home_paths)
+    return tuple(path for template in templates
+                 for path in ([home + template[1:] for home in home_paths]
+                              if template.startswith("~") else [template]))
 
 
 def in_scope(path: str, include_dependency_caches: bool = False) -> bool:
