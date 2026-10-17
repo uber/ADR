@@ -1,6 +1,7 @@
 name: Discovery Windows gate
 
 on:
+  workflow_dispatch:
   push:
     branches: [codex/discovery-windows-gate]
     paths:

@@ -16,7 +16,7 @@ pytestmark = pytest.mark.skipif(os.name != "nt", reason="requires native Windows
 
 
 def _junction(link, target):
-    command = os.path.join(os.environ["SystemRoot"], "System32", "cmd.exe")
+    command = os.path.join(os.environ["SYSTEMROOT"], "System32", "cmd.exe")
     subprocess.run(
         [command, "/d", "/c", "mklink", "/J", str(link), str(target)],
         check=True, capture_output=True, timeout=10,
