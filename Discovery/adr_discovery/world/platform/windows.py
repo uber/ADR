@@ -10,6 +10,7 @@ from .windows_system import powershell_path
 
 _PS_PREFIX = (
     "$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; "
+    "$PSModuleAutoLoadingPreference='None'; "
     "[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false); "
     "$OutputEncoding=[Console]::OutputEncoding; "
 )
@@ -20,6 +21,17 @@ _OTHER_TCP_STATES = frozenset({
     "Closed", "SynSent", "SynReceived", "FinWait1", "FinWait2", "CloseWait",
     "Closing", "LastAck", "TimeWait", "DeleteTCB", "Bound",
 })
+
+
+def _import_module(name: str) -> str:
+    """Import only scanner-owned names from the trusted system PSHOME.
+
+    Autoloading can scan module metadata beyond the helper's time budget;
+    explicit imports keep both lookup and execution under the bounded helper.
+    Names here are constants, never inventory data or environment variables.
+    """
+    return ("Import-Module ($PSHOME+'\\Modules\\" + name + "\\" + name
+            + ".psd1') -ErrorAction Stop; ")
 
 
 class WindowsProviders(HostResolver, NullProviders):
@@ -117,7 +129,8 @@ class WindowsProviders(HostResolver, NullProviders):
             "@{Source='applications:machine';Path='HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall'},"
             "@{Source='applications:machine32';Path='HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall'},"
             "@{Source='applications:current_user';Path='HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall'}); "
-            "foreach($source in $sources){ try { $rows=@(); "
+            "foreach($source in $sources){ try { "
+            + _import_module("Microsoft.PowerShell.Management") + "$rows=@(); "
             "if(Test-Path -LiteralPath $source.Path -ErrorAction Stop){ "
             "$rows=@(Get-ChildItem -LiteralPath $source.Path -ErrorAction Stop | "
             "ForEach-Object {Get-ItemProperty -LiteralPath $_.PSPath -ErrorAction Stop} | "
@@ -126,7 +139,7 @@ class WindowsProviders(HostResolver, NullProviders):
             "@{n='Version';e={$_.DisplayVersion}},@{n='Vendor';e={$_.Publisher}},@{n='Path';e={$_.InstallLocation}}); }; "
             "$results+=[pscustomobject]@{Source=$source.Source;Ok=$true;Rows=$rows}; "
             "} catch { $results+=[pscustomobject]@{Source=$source.Source;Ok=$false;Error=$_.Exception.GetType().Name}; } }; "
-            "try { $rows=@(Get-AppxPackage -ErrorAction Stop | Select-Object "
+            "try { " + _import_module("Appx") + "$rows=@(Get-AppxPackage -ErrorAction Stop | Select-Object "
             "@{n='Id';e={$_.PackageFamilyName}},@{n='Name';e={$_.Name}},"
             "@{n='Version';e={[string]$_.Version}},@{n='Vendor';e={$_.Publisher}},@{n='Path';e={$_.InstallLocation}}); "
             "$results+=[pscustomobject]@{Source='applications:appx_current_user';Ok=$true;Rows=$rows}; "
@@ -221,7 +234,15 @@ class WindowsProviders(HostResolver, NullProviders):
             helper = powershell_path()
         except OSError:
             return self._failed(gate, surface, "trusted Windows PowerShell location is unavailable")
-        ran = gate.run_helper((helper, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", _PS_PREFIX + script))
+        modules = ("Microsoft.PowerShell.Utility",)
+        if surface == "processes":
+            modules += ("CimCmdlets",)
+        elif surface == "sockets":
+            modules += ("CimCmdlets", "NetTCPIP")
+        elif surface == "dns_cache":
+            modules += ("CimCmdlets", "DnsClient")
+        imports = "".join(_import_module(module) for module in modules)
+        ran = gate.run_helper((helper, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", _PS_PREFIX + imports + script))
         if not ran.ok:
             return self._failed(gate, surface, f"PowerShell helper refused: {ran.reason}")
         if ran.value.code != 0:

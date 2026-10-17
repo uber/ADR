@@ -57,6 +57,17 @@ def test_json_accepts_empty_singleton_array_and_bom(tmp_path, monkeypatch, paylo
     assert "UTF8Encoding" in calls[0][-1]
     assert "$ErrorActionPreference='Stop'" in calls[0][-1]
     assert "-NoProfile" in calls[0]
+    assert "$PSModuleAutoLoadingPreference='None'" in calls[0][-1]
+    assert "Microsoft.PowerShell.Utility.psd1" in calls[0][-1]
+
+
+@pytest.mark.parametrize("surface,module", [("processes", "CimCmdlets"), ("sockets", "NetTCPIP"), ("dns_cache", "DnsClient")])
+def test_native_surface_imports_are_explicit_and_trusted(tmp_path, monkeypatch, surface, module):
+    gate, calls = _gate(tmp_path, monkeypatch, "[]")
+    result = gate.providers._ps_json(gate, "test-query", surface)
+    assert result.ok
+    assert f"$PSHOME+'\\Modules\\{module}\\{module}.psd1'" in calls[0][-1]
+    assert "CimCmdlets.psd1" in calls[0][-1]
 
 
 @pytest.mark.parametrize("payload", ["null", "42", '"text"', "[null,42]", "{invalid"])
@@ -354,7 +365,12 @@ def test_native_socket_script_serializes_enum_names(tmp_path, monkeypatch):
         "[pscustomobject]@{State=[System.Net.NetworkInformation.TcpState]::Listen;LocalPort=11434;"
         "RemoteAddress='::';RemotePort=0;OwningProcess=42} }; "
     )
-    monkeypatch.setattr(gate, "run_helper", lambda argv: original((*argv[:-1], stub + argv[-1])))
+
+    def stub_after_imports(argv):
+        script = argv[-1].replace("Get-NetTCPConnection -ErrorAction Stop", stub + "Get-NetTCPConnection -ErrorAction Stop", 1)
+        return original((*argv[:-1], script))
+
+    monkeypatch.setattr(gate, "run_helper", stub_after_imports)
     result = gate.sockets()
     assert result.ok, result
     assert [(row.state, row.local_port) for row in result.value] == [("LISTEN", 11434)]
@@ -364,16 +380,40 @@ def test_native_socket_script_serializes_enum_names(tmp_path, monkeypatch):
 def test_native_application_script_keeps_per_source_errors(tmp_path, monkeypatch):
     gate = Gate("/", providers=windows.WindowsProviders())
     original = gate.run_helper
-    stub = (
-        "function Test-Path { [CmdletBinding()]param([string]$LiteralPath); $false }; "
-        "function Get-AppxPackage { [CmdletBinding()]param(); throw [UnauthorizedAccessException]::new('private') }; "
-    )
-    monkeypatch.setattr(gate, "run_helper", lambda argv: original((*argv[:-1], stub + argv[-1])))
+    def stub_after_imports(argv):
+        script = argv[-1].replace(
+            "if(Test-Path -LiteralPath", "function Test-Path { [CmdletBinding()]param([string]$LiteralPath); $false }; if(Test-Path -LiteralPath",
+        ).replace(
+            "$rows=@(Get-AppxPackage", "function Get-AppxPackage { [CmdletBinding()]param(); throw [UnauthorizedAccessException]::new('private') }; $rows=@(Get-AppxPackage",
+        )
+        return original((*argv[:-1], script))
+
+    monkeypatch.setattr(gate, "run_helper", stub_after_imports)
     result = gate.applications()
     assert result.ok and result.value == (), result
     assert SOURCES[-1] in _unavailable(gate)
     assert all(source not in _unavailable(gate) for source in SOURCES[:-1])
     assert "private" not in str(gate.ledger.freeze())
+
+
+@NATIVE
+@pytest.mark.parametrize("surface,query", [
+    ("processes", "Get-CimInstance Win32_Process -ErrorAction Stop | Select-Object -First 1 ProcessId"),
+    ("sockets", "Get-NetTCPConnection -State Listen -ErrorAction Stop | Select-Object -First 1 LocalPort"),
+    ("dns_cache", "Get-DnsClientCache -ErrorAction Stop | Select-Object -First 1 Entry"),
+])
+def test_native_inventory_modules_finish_or_report_access_failure(surface, query):
+    gate = Gate("/", providers=windows.WindowsProviders())
+    result = gate.providers._ps_json(gate, query + " | ConvertTo-Json -Compress", surface)
+    assert gate.budget.max_subprocess_seconds == 5.0
+    if result.ok:
+        assert len(result.value) <= 1
+    else:
+        # OS edition/service/permissions can make an inventory unavailable;
+        # a module-discovery timeout is never an acceptable empty result.
+        assert result.reason == "unavailable"
+        assert "PowerShell exited with code" in result.detail, result
+        assert surface in _unavailable(gate)
 
 
 @NATIVE
