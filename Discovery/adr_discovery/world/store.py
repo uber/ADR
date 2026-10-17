@@ -1,16 +1,14 @@
-"""Where skill archives are written: the collector's only output besides
-the snapshot itself.
+"""Private local skill archives, separate from the read-only inventory gate.
 
-Kept beside the gate because it touches the host, and kept apart from it
-because the gate only ever reads. Everything here is local and owner-only:
-the directory is 0700 and every file 0600, since an archive holds a copy of
-whatever the skill held.
+POSIX stores use mode 0700/0600. Windows stores use a protected DACL granting
+access only to the current user. Publication never exposes a partial zip.
 """
 
 from __future__ import annotations
 
 import os
-import tempfile
+
+from .private_output import plain_name, private_directory, write_temporary
 
 
 class ArchiveStore:
@@ -22,58 +20,43 @@ class ArchiveStore:
         self.directory = os.path.abspath(directory)
 
     def open(self) -> None:
-        os.makedirs(self.directory, mode=0o700, exist_ok=True)
-        if os.path.islink(self.directory):
-            raise OSError(f"archive directory must not be a symlink: {self.directory}")
-        os.chmod(self.directory, 0o700)
+        with private_directory(self.directory):
+            pass
 
     def path_of(self, name: str) -> str:
-        if not name or "/" in name or "\\" in name or name in (".", ".."):
-            raise ValueError(f"not a plain file name: {name!r}")
+        plain_name(name)
         return os.path.join(self.directory, name)
 
     def has(self, name: str) -> bool:
-        return os.path.isfile(self.path_of(name))
+        return self.read(name) is not None
 
     def read(self, name: str) -> bytes | None:
-        try:
-            with open(self.path_of(name), "rb") as fh:
-                return fh.read()
-        except FileNotFoundError:
-            return None
+        with private_directory(self.directory) as directory:
+            return directory.read(name)
 
     def put_once(self, name: str, data: bytes) -> bool:
-        """Write `name` unless it exists. True when this call wrote it.
+        """Atomically publish a complete file without replacing any existing name.
 
-        Written to a temporary file and linked into place, so a reader never
-        sees a partial archive and a concurrent writer of the same name
-        cannot replace it.
+        Windows rename has the required no-overwrite behavior and works on
+        filesystems without hard links. POSIX uses link from a private temp.
         """
-        target = self.path_of(name)
-        if os.path.exists(target):
-            return False
-        temporary = self._write_temporary(data)
-        try:
-            os.link(temporary, target)
-        except FileExistsError:
-            return False
-        finally:
-            os.unlink(temporary)
+        plain_name(name)
+        with private_directory(self.directory) as directory:
+            temporary = write_temporary(directory, data)
+            try:
+                directory.publish(temporary, name, replace=False)
+            except FileExistsError:
+                return False
+            finally:
+                directory.unlink(temporary)
         return True
 
     def replace(self, name: str, data: bytes) -> None:
-        """Atomically replace a mutable file (the index)."""
-        os.replace(self._write_temporary(data), self.path_of(name))
-
-    def _write_temporary(self, data: bytes) -> str:
-        # mkstemp creates the file 0600, and a link or rename keeps the mode.
-        fd, temporary = tempfile.mkstemp(dir=self.directory, prefix=".partial-")
-        try:
-            with os.fdopen(fd, "wb") as fh:
-                fh.write(data)
-                fh.flush()
-                os.fsync(fh.fileno())
-        except BaseException:
-            os.unlink(temporary)
-            raise
-        return temporary
+        """Atomically replace the mutable index; failed publication leaves no temp."""
+        plain_name(name)
+        with private_directory(self.directory) as directory:
+            temporary = write_temporary(directory, data)
+            try:
+                directory.publish(temporary, name, replace=True)
+            finally:
+                directory.unlink(temporary)

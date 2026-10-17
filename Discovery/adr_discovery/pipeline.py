@@ -174,10 +174,14 @@ def _archived(gate, assets, store: ArchiveStore, timestamp: str):
             out.append(asset)
             continue
         home = next((h for h in user_homes if asset.install_path.startswith(h.rstrip("/") + "/")), None)
-        archiver.record(
-            result.value, name=asset.name, source=home_relative(asset.install_path, home),
-            provenance=asdict(asset.provenance) if asset.provenance else None,
-        )
+        try:
+            archiver.record(
+                result.value, name=asset.name, source=home_relative(asset.install_path, home),
+                provenance=asdict(asset.provenance) if asset.provenance else None,
+            )
+        except OSError as exc:
+            gate.ledger.probe("skill_archive", "degraded",
+                              f"{asset.install_path}: index entry not recorded: {exc}")
         archived += 1
         written += result.value.written
         out.append(replace(asset, archive=result.value.ref))

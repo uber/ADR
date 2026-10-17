@@ -27,6 +27,7 @@ from .world import host_identity
 from .world.budget import Budget
 from .world.gate import Gate
 from .world.platform import for_host
+from .world.private_output import write_private
 from .world.store import ArchiveStore
 
 EXIT_OK, EXIT_ERROR, EXIT_PARTIAL = 0, 1, 2
@@ -206,38 +207,10 @@ def _telemetry(document: dict) -> dict[str, str]:
 
 def _write_private(output_dir: str, filename: str, text: str) -> str:
     """Create a new private snapshot without following a target symlink."""
-    if os.path.basename(filename) != filename:
-        raise OSError("snapshot filename must not contain a directory")
-    os.makedirs(output_dir, mode=0o700, exist_ok=True)
-    absolute = os.path.abspath(output_dir)
-    if os.path.islink(absolute):
-        raise OSError("output directory must not be a symlink")
-
-    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
-    directory_fd = os.open(absolute, directory_flags)
     try:
-        before = os.fstat(directory_fd)
-        current = os.stat(absolute, follow_symlinks=False)
-        if (before.st_dev, before.st_ino) != (current.st_dev, current.st_ino):
-            raise OSError("output directory changed during validation")
-
-        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
-        if os.open in os.supports_dir_fd:
-            fd = os.open(filename, flags, 0o600, dir_fd=directory_fd)
-        else:  # Windows has no dir_fd variant; O_EXCL still prevents clobbering.
-            fd = os.open(os.path.join(absolute, filename), flags, 0o600)
-        try:
-            if hasattr(os, "fchmod"):
-                os.fchmod(fd, 0o600)
-            with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                fd = -1
-                fh.write(text)
-        finally:
-            if fd >= 0:
-                os.close(fd)
-    finally:
-        os.close(directory_fd)
-    return os.path.join(output_dir, filename)
+        return write_private(output_dir, filename, text)
+    except ValueError as exc:
+        raise OSError(str(exc)) from exc
 
 
 def _terminal(value: object) -> str:

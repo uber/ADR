@@ -1,0 +1,158 @@
+"""Native Windows output/ACL regression tests, independent of the inventory Gate."""
+
+from __future__ import annotations
+
+import ctypes
+import os
+import re
+import subprocess
+from ctypes import wintypes
+
+import pytest
+
+from adr_discovery.cli import _write_private
+from adr_discovery.world import private_output
+from adr_discovery.world.private_output import private_directory
+from adr_discovery.world.store import ArchiveStore
+
+pytestmark = pytest.mark.skipif(os.name != "nt", reason="native Windows handles and DACLs")
+
+
+def _sddl(path):
+    """Inspect the persisted ACL independently through the named-object API."""
+    advapi = ctypes.WinDLL("advapi32", use_last_error=True)
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    advapi.GetNamedSecurityInfoW.argtypes = [wintypes.LPWSTR, ctypes.c_int, wintypes.DWORD,
+                                            ctypes.POINTER(wintypes.LPVOID), ctypes.POINTER(wintypes.LPVOID),
+                                            ctypes.POINTER(wintypes.LPVOID), ctypes.POINTER(wintypes.LPVOID),
+                                            ctypes.POINTER(wintypes.LPVOID)]
+    advapi.GetNamedSecurityInfoW.restype = wintypes.DWORD
+    advapi.ConvertSecurityDescriptorToStringSecurityDescriptorW.argtypes = [wintypes.LPVOID, wintypes.DWORD,
+                                                                           wintypes.DWORD, ctypes.POINTER(wintypes.LPWSTR),
+                                                                           ctypes.POINTER(wintypes.DWORD)]
+    advapi.ConvertSecurityDescriptorToStringSecurityDescriptorW.restype = wintypes.BOOL
+    kernel.LocalFree.argtypes = [wintypes.LPVOID]
+    kernel.LocalFree.restype = wintypes.LPVOID
+    descriptor, text = wintypes.LPVOID(), wintypes.LPWSTR()
+    code = advapi.GetNamedSecurityInfoW(str(path), 1, 5, None, None, None, None, ctypes.byref(descriptor))
+    if code:
+        raise ctypes.WinError(code)
+    try:
+        if not advapi.ConvertSecurityDescriptorToStringSecurityDescriptorW(descriptor, 1, 5, ctypes.byref(text), None):
+            raise ctypes.WinError(ctypes.get_last_error())
+        return text.value
+    finally:
+        if text:
+            kernel.LocalFree(ctypes.cast(text, wintypes.LPVOID))
+        kernel.LocalFree(descriptor)
+
+
+def _assert_private(path, *, directory=False):
+    from adr_discovery.world._win_output import _API
+
+    sid = _API().sid
+    descriptor = _sddl(path)
+    assert descriptor.startswith(f"O:{sid}D:")
+    dacl = descriptor.split("D:", 1)[1]
+    assert "P" in dacl.split("(", 1)[0]
+    assert re.findall(r"\([^)]*\)", dacl) == [f"(A;{'OICI' if directory else ''};FA;;;{sid})"]
+
+
+def test_snapshot_has_owner_only_acl_before_any_payload_write(tmp_path, monkeypatch):
+    output = tmp_path / "输出 with spaces"
+    original = private_output.os.fdopen
+    observed = []
+
+    def inspect_before_write(fd, *args, **kwargs):
+        _assert_private(output, directory=True)
+        _assert_private(output / "snapshot.json")
+        assert (output / "snapshot.json").stat().st_size == 0
+        observed.append(True)
+        return original(fd, *args, **kwargs)
+
+    monkeypatch.setattr(private_output.os, "fdopen", inspect_before_write)
+    _write_private(str(output), "snapshot.json", "private payload")
+    assert observed == [True]
+    assert (output / "snapshot.json").read_text() == "private payload"
+
+
+def test_existing_directory_inherited_or_broad_acl_is_restricted(tmp_path):
+    output = tmp_path / "existing output"
+    with private_directory(str(output)):
+        pass
+    subprocess.run(["icacls", str(output), "/grant", "*S-1-1-0:(OI)(CI)F"], check=True, capture_output=True)
+    _write_private(str(output), "snapshot.json", "private payload")
+    _assert_private(output, directory=True)
+    _assert_private(output / "snapshot.json")
+
+
+def test_acl_failure_refuses_output_before_writing(tmp_path, monkeypatch):
+    from adr_discovery.world._win_output import _API
+
+    def refused(_self, _handle, _directory):
+        raise PermissionError("DACL cannot be secured")
+
+    monkeypatch.setattr(_API, "protect", refused)
+    output = tmp_path / "out"
+    with pytest.raises(PermissionError, match="DACL cannot"):
+        _write_private(str(output), "snapshot.json", "private payload")
+    assert not (output / "snapshot.json").exists()
+
+
+def test_output_ancestors_cannot_be_renamed_while_in_use(tmp_path):
+    parent = tmp_path / "parent"
+    output = parent / "out"
+    with private_directory(str(output)):
+        with pytest.raises(OSError):
+            os.rename(output, parent / "moved")
+        with pytest.raises(OSError):
+            os.rename(parent, tmp_path / "moved-parent")
+
+
+@pytest.mark.parametrize("link_is_parent", [False, True])
+def test_junction_output_and_junction_ancestor_are_refused(tmp_path, link_is_parent):
+    target, junction = tmp_path / "target", tmp_path / "junction"
+    target.mkdir()
+    made = subprocess.run(["cmd", "/d", "/c", "mklink", "/J", str(junction), str(target)], capture_output=True)
+    assert made.returncode == 0, made.stderr
+    try:
+        output = junction / "out" if link_is_parent else junction
+        with pytest.raises(OSError, match="reparse"):
+            _write_private(str(output), "snapshot.json", "private payload")
+        assert list(target.iterdir()) == []
+    finally:
+        os.rmdir(junction)
+
+
+def test_archive_publication_does_not_require_hard_links_and_never_overwrites(tmp_path, monkeypatch):
+    def no_hardlinks(*_args, **_kwargs):
+        raise OSError("hard links unsupported")
+
+    monkeypatch.setattr(os, "link", no_hardlinks)
+    store = ArchiveStore(str(tmp_path / "archives"))
+    assert store.put_once("archive.zip", b"first\r\n\x1a\0")
+    assert not store.put_once("archive.zip", b"second")
+    assert store.read("archive.zip") == b"first\r\n\x1a\0"
+    store.replace("index.jsonl", b"first index")
+    store.replace("index.jsonl", b"second index")
+    assert store.read("index.jsonl") == b"second index"
+    _assert_private(store.directory, directory=True)
+    _assert_private(store.path_of("archive.zip"))
+    _assert_private(store.path_of("index.jsonl"))
+    assert sorted(path.name for path in (tmp_path / "archives").iterdir()) == ["archive.zip", "index.jsonl"]
+
+
+def test_index_held_without_delete_sharing_keeps_old_data_and_cleans_temp(tmp_path):
+    from adr_discovery.world._win_output import _API
+
+    store = ArchiveStore(str(tmp_path / "archives"))
+    store.replace("index.jsonl", b"original index")
+    api = _API()
+    handle = api.open(store.path_of("index.jsonl"), 0x80000000)
+    try:
+        with pytest.raises(PermissionError):
+            store.replace("index.jsonl", b"replacement index")
+    finally:
+        api.kernel.CloseHandle(handle)
+    assert store.read("index.jsonl") == b"original index"
+    assert [path.name for path in (tmp_path / "archives").iterdir()] == ["index.jsonl"]

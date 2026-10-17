@@ -1,0 +1,61 @@
+name: Discovery Windows output
+
+on:
+  push:
+    branches: [codex/discovery-windows-output]
+  pull_request:
+    branches: [main]
+    paths:
+      - Discovery/**
+      - .github/workflows/discovery-windows-output.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-output:
+    name: Windows output (Python ${{ matrix.python-version }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.13']
+    defaults:
+      run:
+        working-directory: Discovery
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Set up Python
+        run: uv python install ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: uv sync --extra dev --python ${{ matrix.python-version }}
+      - name: Exercise native writes, DACLs, atomic publication and archive failure isolation
+        run: uv run --python ${{ matrix.python-version }} pytest adr_discovery/tests_unit/test_private_output.py adr_discovery/tests_unit/test_windows_output.py adr_discovery/tests_unit/test_import_rules.py -q
+
+  linux-regression:
+    name: Linux Discovery regression
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Discovery
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Set up Python
+        run: uv python install 3.11
+      - name: Install dependencies
+        run: uv sync --extra dev --python 3.11
+      - name: Existing Discovery tests
+        run: uv run --python 3.11 pytest -q
+      - name: Lint
+        run: uv run --python 3.11 ruff check .
