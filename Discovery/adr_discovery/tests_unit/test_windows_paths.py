@@ -23,7 +23,7 @@ from adr_discovery.extractor.registries import (
 from adr_discovery.extractor.surfaces import surface_for
 from adr_discovery.pipeline import _container, _root_of, declaration_identity
 from adr_discovery.redact.rules import is_personal
-from adr_discovery.resolver import resolve
+from adr_discovery.resolver import bind_contained, resolve
 from adr_discovery.world.gate import Entry, Ok, Refused
 from adr_discovery.world.platform.base import Application
 from adr_discovery.world.platform.windows import WindowsProviders
@@ -122,7 +122,8 @@ def test_paths_merge_one_install_but_do_not_merge_other_drives():
     assert len(resolve((first, second))) == 1
     assert resolve((first,))[0].asset_id == resolve((second,))[0].asset_id
     assert len(resolve((first, other))) == 2
-    child = replace(first, identity="child", path="c:/apps/agent/bin/agent.exe")
+    child = replace(first, path="c:/apps/agent/bin/agent.exe")
+    assert bind_contained((first, child))[1].attribute_of == first.path
     assert len(resolve((first, child))) == 1
 
 
