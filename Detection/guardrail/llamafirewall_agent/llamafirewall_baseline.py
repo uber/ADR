@@ -249,6 +249,9 @@ Return a JSON object with the following keys:
         detections = []
         threat_count = 0
         max_confidence = 0.0
+        # Highest confidence seen across ALL scanned (non-threat) messages, so
+        # the benign-case risk scaling below actually has something to scale.
+        max_scanner_confidence = 0.0
 
         # Build conversation trace for LlamaFirewall
         conversation_trace = []
@@ -303,6 +306,8 @@ Return a JSON object with the following keys:
                         threat_count += 1
                         max_confidence = max(max_confidence, confidence)
                         break  # Stop on first threat (like scan_replay does)
+                    else:
+                        max_scanner_confidence = max(max_scanner_confidence, confidence)
 
         except Exception as e:
             logger.error(f"Error analyzing conversation with LlamaFirewall: {e}")
@@ -334,8 +339,8 @@ Return a JSON object with the following keys:
             # For benign: convert scanner confidence to low malicious risk
             # If scanners had some concerns (high confidence), slightly higher risk
             # If scanners were very confident it's safe, very low risk
-            if max_confidence > 0:
-                confidence_score = max(0.1, min(0.3, max_confidence * 0.3))  # Scale to 0.1-0.3 range
+            if max_scanner_confidence > 0:
+                confidence_score = max(0.1, min(0.3, max_scanner_confidence * 0.3))  # Scale to 0.1-0.3 range
             else:
                 confidence_score = 0.1  # No scanner concerns = very low risk
 
