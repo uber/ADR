@@ -1,0 +1,80 @@
+name: Discovery Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, 'codex/discovery-windows-*']
+    paths:
+      - 'Discovery/**'
+      - '.github/workflows/discovery-windows*.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Discovery/**'
+      - '.github/workflows/discovery-windows*.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows Discovery (Python ${{ matrix.python-version }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.13']
+    defaults:
+      run:
+        working-directory: Discovery
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --extra dev --python ${{ matrix.python-version }}
+      - name: Run available Windows regressions
+        run: |
+          $tests = @(
+            Get-ChildItem -LiteralPath 'adr_discovery/tests_unit' -File |
+              Where-Object {
+                $_.Name -like 'test_windows*.py' -or
+                $_.Name -in @(
+                  'test_private_output.py',
+                  'test_gate_tree_bounds.py',
+                  'test_import_rules.py'
+                )
+              } |
+              Sort-Object Name |
+              ForEach-Object { $_.FullName }
+          )
+          if ($tests.Count -eq 0) {
+            throw 'No Windows regression tests were found.'
+          }
+          uv run --python '${{ matrix.python-version }}' pytest -q @tests
+          exit $LASTEXITCODE
+
+  linux:
+    name: Linux Discovery branch regression
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref != 'refs/heads/main')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Discovery
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --extra dev --python 3.11
+      - name: Run Discovery regression suite
+        run: uv run --python 3.11 pytest -q
+      - name: Lint Discovery
+        run: uv run --python 3.11 ruff check .
