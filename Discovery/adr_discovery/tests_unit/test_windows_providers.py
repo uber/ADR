@@ -347,69 +347,12 @@ def test_native_inherited_pipe_cannot_hold_up_the_scan(tmp_path):
 
 
 @NATIVE
-def test_native_powershell_preserves_non_ascii_json(tmp_path, monkeypatch, capfd):
-    # Diagnose the first system PowerShell on a cold CI host without starting
-    # a separate warmup process. Only this diagnostic has a longer deadline;
-    # the production default and the remaining native checks stay at 5s.
-    gate = Gate("/", providers=windows.WindowsProviders(), budget=Budget(max_subprocess_seconds=15))
-    stages = []
-    labels = {"script_start", "prefix_done", "utility_start", "utility_done", "query_done"}
-    started = time.time()
-    elapsed_start = time.monotonic()
-    original_popen = gate_module.subprocess.Popen
-
-    class DiagnosticStderr:
-        def __init__(self, stream):
-            self.stream = stream
-            self.pending = b""
-
-        def __enter__(self):
-            self.stream.__enter__()
-            return self
-
-        def __exit__(self, *args):
-            return self.stream.__exit__(*args)
-
-        def read(self, size=-1):
-            chunk = self.stream.read(size)
-            self.pending += chunk
-            while b"\n" in self.pending:
-                line, _, self.pending = self.pending.partition(b"\n")
-                fields = line.rstrip(b"\r").split(b":")
-                if len(fields) == 3 and fields[0] == b"ADR_NATIVE_DIAG":
-                    label = fields[1].decode("ascii", "ignore")
-                    if label in labels and fields[2].isdigit():
-                        stages.append((label, int(fields[2]) / 1000 - started))
-            # Error text is neither retained indefinitely nor printed.
-            self.pending = self.pending[-1024:]
-            return chunk
-
-    def instrumented_popen(*args, **kwargs):
-        proc = original_popen(*args, **kwargs)
-        proc.stderr = DiagnosticStderr(proc.stderr)
-        return proc
-
-    def marker(label):
-        return ("[Console]::Error.WriteLine('ADR_NATIVE_DIAG:" + label
-                + ":'+[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()); ")
-
-    original_import = windows._import_module
-
-    def instrumented_import(name):
-        return marker("utility_start") + original_import(name) + marker("utility_done")
-
-    monkeypatch.setattr(gate_module.subprocess, "Popen", instrumented_popen)
-    monkeypatch.setattr(windows, "_PS_PREFIX", marker("script_start") + windows._PS_PREFIX + marker("prefix_done"))
-    monkeypatch.setattr(windows, "_import_module", instrumented_import)
+def test_native_powershell_preserves_non_ascii_json(tmp_path):
+    gate = Gate("/", providers=windows.WindowsProviders())
+    assert gate.budget.max_subprocess_seconds == 10.0
     result = gate.providers._ps_json(
-        gate, "[pscustomobject]@{Name='中文';Path='D:\\测试 空格\\Agent'} | ConvertTo-Json -Compress; "
-        + marker("query_done"), "unicode",
+        gate, "[pscustomobject]@{Name='中文';Path='D:\\测试 空格\\Agent'} | ConvertTo-Json -Compress", "unicode",
     )
-    with capfd.disabled():
-        for label, elapsed in stages:
-            print(f"native_ps_diag stage={label} elapsed={elapsed:.3f}s", flush=True)
-        status = "ok" if result.ok else "refused"
-        print(f"native_ps_diag stage=complete elapsed={time.monotonic() - elapsed_start:.3f}s status={status}", flush=True)
     assert result.ok, result
     assert result.value == ({"Name": "中文", "Path": r"D:\测试 空格\Agent"},)
 
@@ -464,7 +407,7 @@ def test_native_application_script_keeps_per_source_errors(tmp_path, monkeypatch
 def test_native_inventory_modules_finish_or_report_access_failure(surface, query):
     gate = Gate("/", providers=windows.WindowsProviders())
     result = gate.providers._ps_json(gate, query + " | ConvertTo-Json -Compress", surface)
-    assert gate.budget.max_subprocess_seconds == 5.0
+    assert gate.budget.max_subprocess_seconds == 10.0
     if result.ok:
         assert len(result.value) <= 1
     else:
@@ -486,9 +429,28 @@ def test_native_helper_rejects_invalid_utf8(tmp_path):
 @NATIVE
 def test_native_helper_timeout_remains_bounded(tmp_path):
     gate = Gate("/", budget=Budget(max_subprocess_seconds=0.1))
+    assert gate.budget.max_subprocess_seconds == 0.1
     result = gate.run_helper((windows_system.powershell_path(), "-NoProfile", "-NonInteractive", "-Command",
                               "Start-Sleep -Seconds 30"))
     assert not result.ok and result.reason == "timeout", result
+
+
+@NATIVE
+@pytest.mark.parametrize("seconds", [0.1, 5.0, 30.0])
+def test_native_helper_budget_preserves_explicit_limits(seconds):
+    assert Budget().max_subprocess_seconds == 10.0
+    assert Budget(max_subprocess_seconds=seconds).max_subprocess_seconds == seconds
+
+
+@NATIVE
+def test_native_helper_cannot_outlive_remaining_scan_budget():
+    budget = Budget(max_subprocess_seconds=30, max_seconds=2.5)
+    budget.started -= 2.0
+    gate = Gate("/", budget=budget)
+    started = time.monotonic()
+    result = gate.run_helper((sys.executable, "-c", "import time; time.sleep(30)"))
+    assert not result.ok and result.reason == "timeout", result
+    assert time.monotonic() - started < 2.0
 
 
 @NATIVE

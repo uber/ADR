@@ -657,6 +657,14 @@ class Gate:
             target = validated.value
 
         limit = self.budget.max_subprocess_seconds if timeout is None else timeout
+        deadline = None
+        if os.name == "nt":
+            # Cold PowerShell startup needs headroom, but a helper may never
+            # claim more time than remains in the shared scan budget. Keep
+            # startup and pipe drainage inside that same Windows deadline.
+            now = time.monotonic()
+            deadline = min(now + limit, self.budget.started + self.budget.max_seconds)
+            limit = max(0.0, deadline - now)
         try:
             if os.name == "nt":
                 from .platform.windows_system import helper_environment
@@ -709,7 +717,8 @@ class Gate:
         for thread in threads:
             thread.start()
 
-        deadline = time.monotonic() + limit
+        if deadline is None:
+            deadline = time.monotonic() + limit
         reason = None
         while proc.poll() is None:
             if overflow.wait(timeout=min(0.02, max(0.0, deadline - time.monotonic()))):
