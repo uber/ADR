@@ -12,6 +12,7 @@ at match time has already shipped to the fleet.
 from __future__ import annotations
 
 import json
+import ntpath
 import re
 from dataclasses import dataclass, field
 
@@ -143,13 +144,14 @@ def loads(text: str) -> Catalog:
                 index[kind][key] = entry.id
 
         for layout in _layouts(entry):
-            owner = layouts.get(layout.target)
+            key = layout.target.casefold() if ntpath.splitdrive(layout.target)[0] else layout.target
+            owner = layouts.get(key)
             if owner is not None and owner.entry_id != entry.id:
                 raise CatalogError(
                     f"ambiguous install layout {layout.target!r} claimed by "
                     f"{owner.entry_id!r} and {entry.id!r}"
                 )
-            layouts[layout.target] = layout
+            layouts[key] = layout
 
     return Catalog(version, tuple(entries), by_id, index, tuple(layouts.values()))
 
@@ -162,9 +164,16 @@ def _layouts(entry: Entry) -> list[Layout]:
     for item in raw:
         if not isinstance(item, dict) or not isinstance(item.get("target"), str):
             raise CatalogError(f"{entry.id}: install layout needs a string target")
-        target = item["target"].rstrip("/")
-        if not target.startswith(("~/", "/")):
-            raise CatalogError(f"{entry.id}: install layout {target!r} must start with ~/ or /")
+        target = item["target"]
+        drive, tail = ntpath.splitdrive(target)
+        windows = bool(drive) and tail.startswith(("/", "\\"))
+        if windows:
+            target = target.replace("\\", "/")
+        if (drive and not windows) or not (windows or target.startswith(("~/", "/"))):
+            raise CatalogError(f"{entry.id}: install layout {target!r} must be absolute or start with ~/")
+        if target.startswith(("//?/", "//./")):
+            raise CatalogError(f"{entry.id}: device paths are not install layouts")
+        target = target.rstrip("/")
         parent, _, pattern = target.rpartition("/")
         if not pattern or _GLOB.search(parent):
             raise CatalogError(

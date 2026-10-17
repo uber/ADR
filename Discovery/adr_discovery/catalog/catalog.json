@@ -87,7 +87,8 @@
     },
     {
       "id": "ollama", "name": "Ollama", "vendor": "Ollama", "kind": "model_runtime",
-      "fingerprints": {"binaries": ["ollama"], "ports": [11434],
+      "fingerprints": {"binaries": ["ollama", "ollama.exe", "ollama app.exe"], "ports": [11434],
+                       "registry_names": ["{44E83376-CE68-45EB-8FC1-393500EB558C}_is1"],
                        "model_dirs": ["~/.ollama/models"], "state_dirs": ["~/.ollama"]},
       "proofs": {"provenance": ["brew:ollama"],
                  "version_probe": ["--version"], "version_shape": "\\d+\\.\\d+\\.\\d+"},
