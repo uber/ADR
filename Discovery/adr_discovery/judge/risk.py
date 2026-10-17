@@ -142,7 +142,7 @@ def launch_shape(command: str | None, args: tuple[str, ...], *, separated: bool 
     if command is None:
         return "unknown"
     runner, _ = canonical_launch(command, args)
-    if runner in SHELL_WRAPPERS:
+    if runner.casefold() in SHELL_WRAPPERS:
         return "unknown"
     if runner in EPHEMERAL_RUNNERS or runner in CONTAINER_RUNNERS:
         operand, _ = operand_of(command, args)

@@ -79,7 +79,7 @@ def test_quoted_windows_commandline_and_docker_drive_mount():
     assert launch_shape(r"C:\Program Files\local.exe", (), separated=True) == "local"
 
 
-@pytest.mark.parametrize("command", ["cmd.exe", "CMD.EXE", r"C:\Windows\System32\cmd.exe", "powershell.exe", "pwsh.exe"])
+@pytest.mark.parametrize("command", ["cmd.exe", "CMD.EXE", r"C:\Windows\System32\cmd.exe", "powershell.exe", "pwsh.exe", "CMD", "PowerShell", "PWSH"])
 def test_shell_wrapper_is_opaque_unknown_and_drops_script_arguments(command):
     args = ("/c", "npx example@1.2.3 --token SECRET")
     assert launch_shape(command, args) == "unknown"
@@ -95,6 +95,8 @@ def test_package_and_port_flags_keep_their_nonsecret_operands():
     assert package_of(declaration.command, declaration.args) == ("npm", "@example/server", "1.2.3")
     assert "SECRET" not in repr(declaration)
     assert scrub_argv(("docker.exe", "run", "-p", "8080:80", "img"))[3] == "8080:80"
+    assert "SECRET" not in repr(scrub_argv(("npx.cmd", "--call=echo SECRET")))
+    assert "SECRET" not in repr(scrub_argv(("npx.cmd", "-cecho SECRET")))
 
 
 def test_invalid_command_diagnostics_do_not_expose_the_line(tmp_path):

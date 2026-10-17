@@ -117,7 +117,7 @@ def scrub_argv(argv: tuple[str, ...] | list[str]) -> tuple[str, ...]:
     # Shell bodies have a different grammar from argv. Retaining an opaque
     # -Command/-EncodedCommand or /c body can expose secrets inside a script.
     runner = executable_name(argv[0]) if argv else ""
-    if runner in SHELL_WRAPPERS:
+    if runner.casefold() in SHELL_WRAPPERS:
         return (argv[0], REDACTED) if len(argv) > 1 else (argv[0],)
     public_p = runner in {"npx", "npm", "pnpm", "yarn", "uvx", "pipx", "docker", "podman"}
     out: list[str] = []
@@ -138,9 +138,14 @@ def scrub_argv(argv: tuple[str, ...] | list[str]) -> tuple[str, ...]:
 
         if "=" in arg:
             flag, _, _ = arg.partition("=")
-            if flag in CREDENTIAL_FLAGS or _is_credential_key(flag):
+            if (flag in CREDENTIAL_FLAGS or _is_credential_key(flag)
+                    or runner in {"npx", "npm"} and flag in {"-c", "--call"}):
                 out.append(f"{flag}={REDACTED}")
                 continue
+
+        if runner in {"npx", "npm"} and arg.startswith("-c") and len(arg) > 2:
+            out.append(f"-c{REDACTED}")
+            continue
 
         joined_flag = next(
             (
