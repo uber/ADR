@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 
 from ...contracts.commandline import windows_argv
-
 from .base import Application, HostResolver, NullProviders, Package, Process, Socket
 
 
