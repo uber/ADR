@@ -105,6 +105,20 @@ def test_container_password_and_forwarded_short_flags_remain_redacted(runner, ar
     assert "SECRET" not in repr(scrub_argv((runner, *args)))
 
 
+@pytest.mark.parametrize("argv", [
+    ("npx.cmd", "@anthropic-ai/claude-code", "-p", "SECRET"),
+    ("npx.cmd", "-p", "package@1.2.3", "command", "-p", "SECRET"),
+    ("uvx.exe", "agent", "-pSECRET"),
+    ("pnpm.cmd", "dlx", "agent", "--", "-p", "SECRET"),
+    ("npx.cmd", "--", "-p", "SECRET"),
+])
+def test_package_runner_forwarded_prompt_flags_remain_redacted(argv):
+    safe = scrub_argv(argv)
+    assert "SECRET" not in repr(safe)
+    if "package@1.2.3" in argv:
+        assert "package@1.2.3" in safe
+
+
 @pytest.mark.parametrize("program", [r"\\server\share\My Tool\server.exe", "//server/share/My Tool/server.exe"])
 def test_bare_unc_executable_with_spaces_is_not_split(tmp_path, program):
     _gate, result = _config(tmp_path, {"mcpServers": {"unc": {"command": program}}})
