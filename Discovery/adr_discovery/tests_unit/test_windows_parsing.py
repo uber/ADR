@@ -253,13 +253,17 @@ def test_profile_file_symlink_is_refused(tmp_path):
     assert from_profiles(gate) == ()
 
 
-def test_profile_exception_does_not_bypass_other_personal_boundaries(tmp_path):
-    logical = "/Users/Alice/.ssh/PowerShell/profile.ps1"
+@pytest.mark.parametrize("logical,requested", [
+    ("/Users/Alice/.ssh/PowerShell/profile.ps1", "/Users/Alice/.ssh/PowerShell/profile.ps1"),
+    ("/.ssh/PowerShell/profile.ps1", ".ssh/PowerShell/profile.ps1"),
+    ("/.ssh/PowerShell/profile.ps1", "folder/../.ssh/PowerShell/profile.ps1"),
+])
+def test_profile_exception_does_not_bypass_other_personal_boundaries(tmp_path, logical, requested):
     target = tmp_path / logical.lstrip("/")
     target.parent.mkdir(parents=True)
     target.write_text("$env:OPENAI_API_KEY='SECRET'", encoding="utf-8")
     gate = Gate(str(tmp_path), providers=_WindowsProfiles((logical,)))
-    assert gate.read_profile(logical).reason == "personal_path"
+    assert gate.read_profile(requested).reason == "personal_path"
 
 
 def test_profile_hardlink_is_refused(tmp_path):

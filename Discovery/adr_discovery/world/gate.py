@@ -223,7 +223,7 @@ class Gate:
             return os.path.normcase(os.path.abspath(value))
 
         normalized = logical.replace("\\", "/").casefold().split("/")
-        probe = "/".join(normalized) + "/"
+        probe = "/" + self.logical_path(resolved).replace("\\", "/").casefold().strip("/") + "/"
         if any(segment.casefold() in probe for segment in redact.PERSONAL_PATH_SEGMENTS
                if segment.casefold() != "/documents/"):
             self.ledger.deny(logical, "personal_path")
