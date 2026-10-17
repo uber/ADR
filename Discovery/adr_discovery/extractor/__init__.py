@@ -12,6 +12,8 @@ import hashlib
 import re
 from types import MappingProxyType
 
+from ..contracts.commandline import split_command
+from ..contracts.powershell import environment_names
 from ..contracts.records import Candidate, Declaration, ExtractError, Extraction, Kind
 from ..redact import rules as redact
 from .formats import format_for, parse_bytes
@@ -56,6 +58,8 @@ def extract(gate, candidate: Candidate) -> Extraction:
 
     if candidate.kind == "shell_profile":
         return _shell_profile(gate, candidate.path)
+
+    windows = getattr(gate.providers, "command_syntax", "") == "windows"
 
     if surface_for(candidate.path) is not None:
         directory = extract_surface(gate, candidate, _scope_of(candidate.path))
@@ -106,7 +110,7 @@ def extract(gate, candidate: Candidate) -> Extraction:
         return _workflow(document, candidate.path)
 
     if candidate.path.endswith("/.mcpb/manifest.json"):
-        return _mcpb(document, candidate.path, scope)
+        return _mcpb(document, candidate.path, scope, windows=windows)
 
     servers = _server_block(document)
     chunks: list[Extraction] = []
@@ -114,7 +118,7 @@ def extract(gate, candidate: Candidate) -> Extraction:
         records = list(servers.items())
         chunks.append(per_record(
             records,
-            lambda i, rec: _server(rec, candidate.path, scope),
+            lambda i, rec: _server(rec, candidate.path, scope, windows=windows),
             candidate.path,
             cap=RECORD_CAP,
         ))
@@ -123,7 +127,7 @@ def extract(gate, candidate: Candidate) -> Extraction:
     if hooks:
         chunks.append(per_record(
             hooks,
-            lambda i, rec: _hook(rec, candidate.path, scope),
+            lambda i, rec: _hook(rec, candidate.path, scope, windows=windows),
             candidate.path,
             cap=RECORD_CAP,
         ))
@@ -143,7 +147,7 @@ def extract(gate, candidate: Candidate) -> Extraction:
     return result
 
 
-def _mcpb(document: dict, path: str, scope: str) -> Extraction:
+def _mcpb(document: dict, path: str, scope: str, *, windows: bool = False) -> Extraction:
     """An MCP bundle manifest: one bundle, one launch spec.
 
     The manifest names the bundle and says how its server starts under
@@ -165,10 +169,10 @@ def _mcpb(document: dict, path: str, scope: str) -> Extraction:
     def build(index: int, record: object) -> Declaration:
         config = server.get("mcp_config")
         config = config if isinstance(config, dict) else {}
-        command, args = _launch_of(config)
+        command, args = _launch_of(config, windows=windows)
         name = document.get("name")
         version = document.get("version")
-        raw: dict[str, object] = {"surface": Kind.MCP_BUNDLE.value, "transport": "stdio"}
+        raw: dict[str, object] = {"surface": Kind.MCP_BUNDLE.value, "transport": "stdio", "command_format": "argv"}
         if isinstance(version, (str, int, float)) and not isinstance(version, bool):
             raw["version"] = str(version)
         if isinstance(server.get("type"), str):
@@ -179,7 +183,7 @@ def _mcpb(document: dict, path: str, scope: str) -> Extraction:
             path=path,
             scope=scope,
             command=command,
-            args=redact.scrub_argv(args),
+            args=args,
             env_names=redact.env_names(as_env(config.get("env"))),
             raw=raw,
         )
@@ -207,7 +211,7 @@ def _hook_records(document: dict):
                     yield str(event), pattern if isinstance(pattern, str) else None, hook
 
 
-def _hook(record, path: str, scope: str) -> Declaration:
+def _hook(record, path: str, scope: str, *, windows: bool = False) -> Declaration:
     """A hook's identity is what it is, not where it sits in the file.
 
     Settings path, event, matcher and the scrubbed command fix the digest,
@@ -215,8 +219,14 @@ def _hook(record, path: str, scope: str) -> Declaration:
     read only to be scrubbed and hashed; it is not kept on the asset.
     """
     event, matcher, body = record
-    command = as_text(body.get("command"), "command")
-    scrubbed = redact.scrub_argv((command,))[0]
+    original = as_text(body.get("command"), "command")
+    command, args = split_command(original, (), windows=windows)
+    argv = (command or "", *args)
+    safe = redact.scrub_argv(argv)
+    # Existing non-secret hook identities stay stable. A credential-bearing
+    # command must be hashed only after redaction, including opaque scripts.
+    scrubbed = original if safe == argv else "\0".join(safe)
+    command, args = safe[0], safe[1:]
     digest = hashlib.sha256("\0".join((path, event, matcher or "", scrubbed)).encode("utf-8")).hexdigest()[:12]
     label = f"{event} hook"
     if matcher:
@@ -226,9 +236,10 @@ def _hook(record, path: str, scope: str) -> Declaration:
         name=f"{label} {digest[:6]}",
         path=path,
         scope=scope,
-        command=scrubbed,
+        command=command,
+        args=args,
         raw={"event": event, "matcher": matcher, "surface": Kind.HOOK.value,
-             "identity": f"hook:{path}:{digest}"},
+             "identity": f"hook:{path}:{digest}", "command_format": "argv"},
     )
 
 
@@ -237,14 +248,18 @@ _EXPORT = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=")
 
 def _shell_profile(gate, path: str) -> Extraction:
     """Collect only AI credential variable names, never profile values."""
-    raw = gate.read_text(path, limit=256 * 1024)
+    powershell = path.casefold().endswith(".ps1")
+    raw = gate.read_profile(path) if powershell else gate.read_text(path, limit=256 * 1024)
     if not raw.ok:
         return Extraction(errors=(ExtractError(path, None, raw.reason),), declared=0)
-    names = []
-    for line in raw.value.splitlines():
-        match = _EXPORT.match(line)
-        if match and redact.credential_kinds((match.group(1),)):
-            names.append(match.group(1))
+    if powershell:
+        names = [name for name in environment_names(raw.value) if redact.credential_kinds((name,))]
+    else:
+        names = []
+        for line in raw.value.splitlines():
+            match = _EXPORT.match(line)
+            if match and redact.credential_kinds((match.group(1),)):
+                names.append(match.group(1))
     if not names:
         return Extraction(declared=0)
     return Extraction(
@@ -311,16 +326,16 @@ def _server_block(document: dict) -> dict:
     return {}
 
 
-def _server(record: tuple[str, object], path: str, scope: str) -> Declaration:
+def _server(record: tuple[str, object], path: str, scope: str, *, windows: bool = False) -> Declaration:
     name, body = record
     if not isinstance(body, dict):
         raise TypeError(f"server {name!r} must be a mapping, got {type(body).__name__}")
 
-    command, args = _launch_of(body)
+    command, args = _launch_of(body, windows=windows)
     env = as_env(body.get("env") if "env" in body else body.get("environment"))
     url = body.get("url")
 
-    raw: dict[str, object] = {"transport": _transport(body.get("type"), url)}
+    raw: dict[str, object] = {"transport": _transport(body.get("type"), url), "command_format": "argv"}
     if body.get("enabled") is False or body.get("disabled") is True:
         raw["flags"] = ("disabled",)
 
@@ -330,24 +345,30 @@ def _server(record: tuple[str, object], path: str, scope: str) -> Declaration:
         path=path,
         scope=scope,
         command=command,
-        args=redact.scrub_argv(args),
+        args=args,
         env_names=redact.env_names(env),
         url=redact.strip_url(as_text(url, "url")) if url is not None else None,
         raw=raw,
     )
 
 
-def _launch_of(body: dict) -> tuple[str | None, tuple[str, ...]]:
+def _launch_of(body: dict, *, windows: bool = False) -> tuple[str | None, tuple[str, ...]]:
     """`command` is a string with separate `args`, or (opencode) one argv list."""
     command = body.get("command")
     if isinstance(command, (list, tuple)):
         argv = as_args(command)
         if not argv:
             raise TypeError("command must not be an empty array")
-        return argv[0], argv[1:] + as_args(body.get("args"))
+        command, args = argv[0], argv[1:] + as_args(body.get("args"))
+    elif command is None:
+        return None, redact.scrub_argv(as_args(body.get("args")))
+    else:
+        command, args = split_command(as_text(command, "command"), as_args(body.get("args")),
+                                      separated="args" in body, windows=windows)
     if command is None:
-        return None, as_args(body.get("args"))
-    return as_text(command, "command"), as_args(body.get("args"))
+        return None, ()
+    scrubbed = redact.scrub_argv((command, *args))
+    return scrubbed[0], scrubbed[1:]
 
 
 #: opencode names its transports by locality; everything else by protocol.

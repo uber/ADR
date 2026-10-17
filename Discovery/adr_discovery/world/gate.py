@@ -24,9 +24,10 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass
-from stat import S_ISDIR, S_ISREG
+from stat import S_ISDIR, S_ISLNK, S_ISREG
 from typing import Callable, Generic, Iterator, Protocol, TypeVar
 
+from ..contracts.text import decode_text
 from ..coverage.ledger import Ledger
 from ..redact import rules as redact
 from .budget import Budget
@@ -184,7 +185,7 @@ class Gate:
             return "/" + host[len(self._root) + 1 :]
         return host
 
-    def _validate(self, logical: str) -> Result[str]:
+    def _validate(self, logical: str, *, profile: bool = False) -> Result[str]:
         """Canonicalize, then decide. Returns the resolved host path."""
         candidate = self.host_path(logical)
         try:
@@ -198,26 +199,87 @@ class Gate:
             self.ledger.deny(logical, "outside_root")
             return Refused("outside_root", self.logical_path(resolved))
 
-        if redact.is_personal(self.logical_path(resolved)):
+        if profile:
+            allowed = self._profile_path(logical, candidate, resolved)
+            if not allowed.ok:
+                return allowed
+        elif redact.is_personal(self.logical_path(resolved)):
             self.ledger.deny(logical, "personal_path")
             return Refused("personal_path", "")
 
         return Ok(resolved)
 
+    def _profile_path(self, logical: str, candidate: str, resolved: str) -> Result[str]:
+        """A file-only exception for provider-enumerated PowerShell profiles.
+
+        Never used by normal reads, walks or listings. Both the spelling and
+        the resolved target must be the exact same allowlisted regular file;
+        every ancestor is checked for links/reparse points on each validation.
+        """
+        paths = getattr(self.providers, "powershell_profile_paths", None)
+        allowed = paths(self) if callable(paths) else ()
+
+        def key(value):
+            return os.path.normcase(os.path.abspath(value))
+
+        normalized = logical.replace("\\", "/").casefold().split("/")
+        probe = "/" + self.logical_path(resolved).replace("\\", "/").casefold().strip("/") + "/"
+        if any(segment.casefold() in probe for segment in redact.PERSONAL_PATH_SEGMENTS
+               if segment.casefold() != "/documents/"):
+            self.ledger.deny(logical, "personal_path")
+            return Refused("personal_path")
+        known_name = (len(normalized) >= 2
+                      and normalized[-2] in {"powershell", "windowspowershell"}
+                      and normalized[-1] in {"profile.ps1", "microsoft.powershell_profile.ps1"})
+        if not known_name or key(candidate) not in {key(self.host_path(path)) for path in allowed}:
+            self.ledger.deny(logical, "not_a_known_profile")
+            return Refused("not_a_known_profile")
+        if key(candidate) != key(resolved):
+            self.ledger.deny(logical, "profile_redirect")
+            return Refused("profile_redirect")
+        current = os.path.abspath(candidate)
+        first = True
+        while True:
+            try:
+                info = os.lstat(current)
+            except FileNotFoundError:
+                return Refused("absent", logical)
+            except OSError as exc:
+                self.ledger.deny(logical, "profile_stat_failed")
+                return Refused("profile_stat_failed", exc.strerror or "stat failed")
+            if S_ISLNK(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
+                self.ledger.deny(logical, "profile_redirect")
+                return Refused("profile_redirect")
+            if first and (not S_ISREG(info.st_mode) or info.st_nlink != 1):
+                self.ledger.deny(logical, "profile_not_regular")
+                return Refused("profile_not_regular")
+            parent = os.path.dirname(current)
+            if parent == current:
+                break
+            current, first = parent, False
+        return Ok(resolved)
+
     # ---------------------------------------------------------------- reads
 
-    def _open_verified(self, logical: str, resolved: str, flags: int = os.O_RDONLY) -> Result[int]:
+    def _open_verified(self, logical: str, resolved: str, flags: int = os.O_RDONLY,
+                       *, profile: bool = False) -> Result[int]:
         """Open a target, then prove the descriptor still names the validated path.
 
         Revalidating after open closes the ancestor-swap race: checking only
         the final component with ``O_NOFOLLOW`` is insufficient when an
         attacker controls a directory above it.
         """
+        before = None
+        if profile:
+            try:
+                before = os.lstat(resolved)
+            except OSError:
+                return Refused("swapped", "profile changed before open")
         if self.on_validated is not None:
             self.on_validated(resolved)
 
         try:
-            fd = os.open(resolved, flags | getattr(os, "O_NOFOLLOW", 0))
+            fd = os.open(resolved, flags | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0))
         except FileNotFoundError:
             return Refused("absent", resolved)
         except OSError as exc:
@@ -225,7 +287,7 @@ class Gate:
                 return Refused("swapped", "target became a symlink after validation")
             return Refused("open_failed", exc.strerror or str(exc))
 
-        current = self._validate(logical)
+        current = self._validate(logical, profile=profile)
         try:
             descriptor = os.fstat(fd)
             path_stat = os.stat(resolved, follow_symlinks=False)
@@ -236,20 +298,24 @@ class Gate:
             not current.ok
             or current.value != resolved
             or (descriptor.st_dev, descriptor.st_ino) != (path_stat.st_dev, path_stat.st_ino)
+            or before is not None and (before.st_dev, before.st_ino) != (descriptor.st_dev, descriptor.st_ino)
         ):
             os.close(fd)
             return Refused("swapped", "descriptor did not match the revalidated target")
         return Ok(fd)
 
     def read_bytes(self, logical: str, limit: int | None = None) -> Result[bytes]:
+        return self._read_bytes(logical, limit)
+
+    def _read_bytes(self, logical: str, limit: int | None = None, *, profile: bool = False) -> Result[bytes]:
         self.calls["read_bytes"] += 1
-        validated = self._validate(logical)
+        validated = self._validate(logical, profile=profile)
         if not validated.ok:
             return validated
         resolved = validated.value
         ceiling = self.budget.max_read_bytes if limit is None else min(limit, self.budget.max_read_bytes)
 
-        opened = self._open_verified(logical, resolved)
+        opened = self._open_verified(logical, resolved, profile=profile)
         if not opened.ok:
             if opened.reason in ("open_failed", "stat_failed"):
                 self.ledger.deny(logical, opened.detail or opened.reason)
@@ -270,12 +336,30 @@ class Gate:
 
     def read_text(self, logical: str, limit: int | None = None) -> Result[str]:
         raw = self.read_bytes(logical, limit)
+        return self._decode(logical, raw, allow_utf16=logical.casefold().endswith((".json", ".jsonc")))
+
+    def read_profile(self, logical: str) -> Result[str]:
+        """Read one exact, known PowerShell profile without opening Documents."""
+        raw = self._read_bytes(logical, 256 * 1024, profile=True)
+        return self._decode(logical, raw, allow_utf16=True)
+
+    def _decode(self, logical: str, raw: Result[bytes], *, allow_utf16: bool) -> Result[str]:
         if not raw.ok:
             return raw
-        return Ok(raw.value.decode("utf-8", errors="replace"))
+        try:
+            return Ok(decode_text(raw.value, allow_utf16=allow_utf16))
+        except ValueError as exc:
+            self.ledger.probe("text_decode", "degraded", f"{logical}: {exc}")
+            return Refused("invalid_encoding", str(exc))
 
     def stat(self, logical: str) -> Result[Stat]:
-        validated = self._validate(logical)
+        return self._stat(logical)
+
+    def stat_profile(self, logical: str) -> Result[Stat]:
+        return self._stat(logical, profile=True)
+
+    def _stat(self, logical: str, *, profile: bool = False) -> Result[Stat]:
+        validated = self._validate(logical, profile=profile)
         if not validated.ok:
             return validated
         resolved = validated.value
@@ -286,7 +370,7 @@ class Gate:
         except OSError as exc:
             self.ledger.deny(logical, exc.strerror or str(exc))
             return Refused("stat_failed", exc.strerror or str(exc))
-        current = self._validate(logical)
+        current = self._validate(logical, profile=profile)
         if not current.ok or current.value != resolved:
             self.ledger.deny(logical, "target swapped after validation")
             return Refused("swapped", "path changed during stat")

@@ -60,7 +60,8 @@ def _risk_for(asset: Asset, declaration: Declaration | None, ledger) -> Risk:
     if declaration.kind not in LAUNCHING_KINDS:
         return asset.risk
 
-    pinned, factors = pinning(declaration.command, declaration.args)
+    separated = declaration.raw.get("command_format") == "argv"
+    pinned, factors = pinning(declaration.command, declaration.args, separated=separated)
     # A launch command we could not read at all: record the ambiguity and
     # raise nothing, which is the safe verdict. Local programs, interpreters
     # and hooks (a shell line, not an MCP launch) are readable and simply
@@ -68,7 +69,7 @@ def _risk_for(asset: Asset, declaration: Declaration | None, ledger) -> Risk:
     if (
         declaration.kind in (Kind.MCP_SERVER, Kind.MCP_BUNDLE)
         and not declaration.url
-        and launch_shape(declaration.command, declaration.args) == "unknown"
+        and launch_shape(declaration.command, declaration.args, separated=separated) == "unknown"
         and ledger is not None
     ):
         ledger.probe("judge", "degraded", f"unreadable launch shape: {declaration.name}")

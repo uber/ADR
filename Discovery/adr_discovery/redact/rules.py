@@ -14,6 +14,8 @@ from __future__ import annotations
 import re
 from urllib.parse import urlsplit, urlunsplit
 
+from ..contracts.commandline import SHELL_WRAPPERS, executable_name
+
 #: Flags whose *operand* is secret. The flag name survives; the value does not.
 #: `--dangerously-skip-permissions` is deliberately absent -- it takes no
 #: operand and its presence is exactly the signal M6 needs.
@@ -105,6 +107,41 @@ def credential_kinds(names: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(sorted(kinds))
 
 
+def _public_package_options(argv, runner: str) -> set[int]:
+    """Positions of runner-owned -p options, before a command or `--`.
+
+    After the package operand, the same flag can be an AI prompt. Unknown
+    option shapes stop recognition conservatively rather than exposing a
+    downstream value. Container flags deliberately have no exception here.
+    """
+    start = 1
+    if runner not in {"npx", "uvx"}:
+        return set()
+    values = ({"-p", "--package", "-c", "--call", "--node-options", "--registry", "--userconfig"}
+              if runner == "npx" else {"-p", "--python", "--from", "--with", "--index-url"})
+    switches = ({"-y", "--yes", "--no", "--quiet", "-q"} if runner == "npx"
+                else {"--isolated", "--offline", "--no-cache", "--quiet", "-q", "--verbose", "-v"})
+    public = set()
+    i = start
+    while i < len(argv):
+        arg = argv[i]
+        if arg == "--" or not arg.startswith("-"):
+            break
+        flag, eq, _ = arg.partition("=")
+        if flag in values:
+            if flag == "-p":
+                public.add(i)
+            i += 1 if eq else 2
+        elif arg.startswith("-p") and len(arg) > 2:
+            public.add(i)
+            i += 1
+        elif arg in switches:
+            i += 1
+        else:
+            break
+    return public
+
+
 def scrub_argv(argv: tuple[str, ...] | list[str]) -> tuple[str, ...]:
     """Keep every flag name and every non-secret operand.
 
@@ -112,24 +149,38 @@ def scrub_argv(argv: tuple[str, ...] | list[str]) -> tuple[str, ...]:
     (``--token X``), assignment (``--token=X`` or ``password=X``), and joined
     short-option (``-pX``) forms.
     """
+    # Shell bodies have a different grammar from argv. Retaining an opaque
+    # -Command/-EncodedCommand or /c body can expose secrets inside a script.
+    runner = executable_name(argv[0]) if argv else ""
+    if runner.casefold() in SHELL_WRAPPERS:
+        return (argv[0], REDACTED) if len(argv) > 1 else (argv[0],)
+    public_p = _public_package_options(argv, runner)
     out: list[str] = []
     expect_value = False
-    for arg in argv:
+    for index, arg in enumerate(argv):
         if expect_value:
             out.append(REDACTED)
             expect_value = False
             continue
 
-        if arg in CREDENTIAL_FLAGS:
+        if index in public_p:
+            out.append(arg)
+            continue
+        if arg in CREDENTIAL_FLAGS or runner in {"npx", "npm"} and arg in {"-c", "--call"}:
             out.append(arg)
             expect_value = True
             continue
 
         if "=" in arg:
             flag, _, _ = arg.partition("=")
-            if flag in CREDENTIAL_FLAGS or _is_credential_key(flag):
+            if (flag in CREDENTIAL_FLAGS or _is_credential_key(flag)
+                    or runner in {"npx", "npm"} and flag in {"-c", "--call"}):
                 out.append(f"{flag}={REDACTED}")
                 continue
+
+        if runner in {"npx", "npm"} and arg.startswith("-c") and len(arg) > 2:
+            out.append(f"-c{REDACTED}")
+            continue
 
         joined_flag = next(
             (
@@ -169,5 +220,6 @@ def explain() -> tuple[str, ...]:
         f"environment variable names only ({len(CREDENTIAL_ENV_PREFIXES)} prefixes mapped to credential kinds)",
         f"argv with the operands of {len(CREDENTIAL_FLAGS)} credential-bearing flags replaced",
         "URLs with userinfo, query and fragment removed",
-        f"no access at all under {len(PERSONAL_PATH_SEGMENTS)} personal path segments",
+        f"no directory traversal under {len(PERSONAL_PATH_SEGMENTS)} personal path segments",
+        "only exact known PowerShell profile files may be read under Documents; credential names only",
     )

@@ -40,6 +40,14 @@ UV_CACHE_DIR=/tmp/adr-discovery-uv-cache uv run pytest -q
 
 A scan that encounters an unreadable, unavailable or truncated surface still emits a snapshot and exits with status `2`; that status means partial coverage, not a failed scan.
 
+### Windows text and launch declarations
+
+Windows process command lines use Windows double-quote and backslash rules. Explicit `command` plus `args`, and argv arrays, remain separated. Legacy whole-line config commands are tokenized without execution or expansion. Runner recognition accepts Windows drive paths, case variants and `.exe`, `.cmd` and `.bat` shims. `cmd`, Windows PowerShell and `pwsh` wrappers remain an unknown launch shape: their script arguments are removed at collection rather than interpreted as a package name.
+
+Text configs accept UTF-8 with or without a BOM. JSON additionally accepts UTF-16 with a BOM; PowerShell profiles accept the same UTF-8/UTF-16 encodings. Invalid or unsupported encodings produce degraded coverage without including source bytes in diagnostics. Other text formats do not silently decode UTF-16 or replace invalid bytes.
+
+PowerShell credential discovery reads only the provider's exact known `profile.ps1` and `Microsoft.PowerShell_profile.ps1` files in `Documents/WindowsPowerShell` and `Documents/PowerShell`, including a registry-redirected Documents location. A dedicated file reader validates those paths before and after opening, rejects symlinks, reparse points and hard links, and keeps ordinary Documents reads and enumeration denied. It extracts names from direct `$env:NAME = ...` assignments outside comments and strings, never values. Dynamic environment assignments, custom-host profiles, all-users profiles and script execution are outside this static recognizer's scope.
+
 ## What it has to find
 
 Four targets. They are not variations on one search — each lives somewhere different, is proven by different evidence, and fails differently. They are the contract, and a category the module has no representation for cannot be reported missing.

@@ -102,7 +102,8 @@ class Indicator:
     def _package_matches(self, asset: Asset, declaration: Declaration | None) -> bool:
         found: tuple[str, str, str | None] | None = None
         if asset.kind in _MCP_KINDS and declaration is not None:
-            found = package_of(declaration.command, declaration.args)
+            found = package_of(declaration.command, declaration.args,
+                               separated=declaration.raw.get("command_format") == "argv")
         if found is None and asset.package_id and ":" in asset.package_id:
             manager, _, package = asset.package_id.partition(":")
             ecosystem = MANAGER_ECOSYSTEM.get(manager)

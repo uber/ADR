@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
-import shlex
 
+from ...contracts.commandline import windows_argv
 from .base import Application, HostResolver, NullProviders, Package, Process, Socket
 
 
 class WindowsProviders(HostResolver, NullProviders):
+    command_syntax = "windows"
     reason = "Windows management surface unavailable"
     HOME_ROOTS = ("/Users",)
     DIRECT_HOMES: tuple[str, ...] = ()
@@ -24,7 +25,7 @@ class WindowsProviders(HostResolver, NullProviders):
             if not exe:
                 continue
             try:
-                argv = tuple(shlex.split(row.get("CommandLine") or "", posix=False))
+                argv = windows_argv(row.get("CommandLine") or "")
             except ValueError:
                 argv = ()
             out.append(Process(int(row.get("ProcessId") or 0), str(exe), argv,

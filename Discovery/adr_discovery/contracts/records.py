@@ -85,7 +85,10 @@ class Declaration:
     raw: dict[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "args", redact.scrub_argv(self.args))
+        # Keep executable context: npx -p names a package, and a shell
+        # wrapper's arguments are an opaque script, not argv.
+        argv = redact.scrub_argv((self.command, *self.args)) if self.command else redact.scrub_argv(self.args)
+        object.__setattr__(self, "args", argv[1:] if self.command else argv)
         if self.url is not None:
             object.__setattr__(self, "url", redact.strip_url(self.url))
         # An env *mapping* must never survive as one: names only.
