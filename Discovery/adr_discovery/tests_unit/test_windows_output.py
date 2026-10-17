@@ -52,10 +52,38 @@ def _assert_private(path, *, directory=False):
 
     sid = _API().sid
     descriptor = _sddl(path)
-    assert descriptor.startswith(f"O:{sid}D:")
+    owner = descriptor.removeprefix("O:").split("D:", 1)[0]
+    assert _full_sid(owner) == sid
     dacl = descriptor.split("D:", 1)[1]
     assert "P" in dacl.split("(", 1)[0]
-    assert re.findall(r"\([^)]*\)", dacl) == [f"(A;{'OICI' if directory else ''};FA;;;{sid})"]
+    (ace,) = re.findall(r"\(([^)]*)\)", dacl)
+    fields = ace.split(";")
+    assert fields[:-1] == ["A", "OICI" if directory else "", "FA", "", ""]
+    assert _full_sid(fields[-1]) == sid
+
+
+def _full_sid(value):
+    # Windows renders well-known SIDs with aliases, including LA for the
+    # local Administrator account used by GitHub's hosted runner.
+    advapi = ctypes.WinDLL("advapi32", use_last_error=True)
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    advapi.ConvertStringSidToSidW.argtypes = [wintypes.LPCWSTR, ctypes.POINTER(wintypes.LPVOID)]
+    advapi.ConvertStringSidToSidW.restype = wintypes.BOOL
+    advapi.ConvertSidToStringSidW.argtypes = [wintypes.LPVOID, ctypes.POINTER(wintypes.LPWSTR)]
+    advapi.ConvertSidToStringSidW.restype = wintypes.BOOL
+    kernel.LocalFree.argtypes = [wintypes.LPVOID]
+    kernel.LocalFree.restype = wintypes.LPVOID
+    native, text = wintypes.LPVOID(), wintypes.LPWSTR()
+    if not advapi.ConvertStringSidToSidW(value, ctypes.byref(native)):
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        if not advapi.ConvertSidToStringSidW(native, ctypes.byref(text)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        return text.value
+    finally:
+        if text:
+            kernel.LocalFree(ctypes.cast(text, wintypes.LPVOID))
+        kernel.LocalFree(native)
 
 
 def test_snapshot_has_owner_only_acl_before_any_payload_write(tmp_path, monkeypatch):

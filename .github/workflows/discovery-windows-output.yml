@@ -1,6 +1,7 @@
 name: Discovery Windows output
 
 on:
+  workflow_dispatch:
   push:
     branches: [codex/discovery-windows-output]
   pull_request:

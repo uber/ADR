@@ -18,6 +18,7 @@ _READ_CONTROL = 0x00020000
 _WRITE_DAC = 0x00040000
 _WRITE_OWNER = 0x00080000
 _FILE_READ_ATTRIBUTES = 0x80
+_FILE_LIST_DIRECTORY = 0x1
 _DIRECTORY = 0x10
 _REPARSE_POINT = 0x400
 _OWNER_INFORMATION = 0x1
@@ -211,7 +212,10 @@ class WindowsDirectory:
         try:
             for path in reversed(parts):
                 # Parents are pinned before a child is created or opened.
-                access = _FILE_READ_ATTRIBUTES
+                # Attribute-only handles do not participate in share-access
+                # checks. Directory read access makes the no-delete share
+                # policy effective for the entire pinned ancestor chain.
+                access = _FILE_READ_ATTRIBUTES | _FILE_LIST_DIRECTORY
                 if path == self.path:
                     access |= _READ_CONTROL | _WRITE_DAC | _WRITE_OWNER
                 try:
