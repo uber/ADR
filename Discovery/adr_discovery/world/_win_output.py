@@ -89,6 +89,8 @@ class _API:
                                          ctypes.POINTER(_ObjectAttributes), ctypes.POINTER(_IoStatusBlock),
                                          wintypes.LPVOID, wintypes.ULONG, wintypes.ULONG, wintypes.ULONG,
                                          wintypes.ULONG, wintypes.LPVOID, wintypes.ULONG], wintypes.LONG),
+            (self.ntdll, "NtSetInformationFile", [wintypes.HANDLE, ctypes.POINTER(_IoStatusBlock),
+                                                 wintypes.LPVOID, wintypes.ULONG, ctypes.c_int], wintypes.LONG),
             (self.ntdll, "RtlNtStatusToDosError", [wintypes.LONG], wintypes.ULONG),
             (self.advapi, "OpenProcessToken", [wintypes.HANDLE, wintypes.DWORD, ctypes.POINTER(wintypes.HANDLE)], wintypes.BOOL),
             (self.advapi, "GetTokenInformation", [wintypes.HANDLE, ctypes.c_int, wintypes.LPVOID,
@@ -255,13 +257,16 @@ class _API:
     def rename(self, handle, root, name: str, *, replace: bool) -> None:
         plain_name(name)
         encoded = name.encode("utf-16-le", errors="surrogatepass")
-        size = _RenameInformation.name.offset + len(encoded)
-        buffer = ctypes.create_string_buffer(max(size + 2, ctypes.sizeof(_RenameInformation)))
+        buffer = ctypes.create_string_buffer(ctypes.sizeof(_RenameInformation) + len(encoded))
         info = _RenameInformation.from_buffer(buffer)
         info.replace, info.root, info.length = int(replace), root, len(encoded)
         ctypes.memmove(ctypes.addressof(buffer) + _RenameInformation.name.offset, encoded, len(encoded))
-        if not self.kernel.SetFileInformationByHandle(handle, 3, buffer, len(buffer)):
-            raise self.error(name)
+        # The Win32 wrapper rejects this relative RootDirectory form on
+        # supported Windows builds. Keep both endpoints native and anchored.
+        status = _IoStatusBlock()
+        result = self.ntdll.NtSetInformationFile(handle, ctypes.byref(status), buffer, len(buffer), 10)
+        if result < 0:
+            raise self.error(name, self.ntdll.RtlNtStatusToDosError(result))
 
 
 class WindowsDirectory:
