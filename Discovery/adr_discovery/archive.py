@@ -151,6 +151,9 @@ class _Pack:
         self._zip.close()
         return self._buffer.getvalue()
 
+    def close(self) -> None:
+        self._zip.close()
+
     def _flush(self) -> None:
         if self._entry is not None:
             self._zip.writestr(self._entry, b"".join(self._chunks), compresslevel=COMPRESS_LEVEL)
@@ -173,24 +176,33 @@ class Archiver:
         """Archive the skill directory at `path` (a logical path, read
         through `gate`). With `expected`, an archive already filed under
         that hash is verified and reused without reading the tree again."""
+        try:
+            return self._archive(gate, path, expected)
+        except (OSError, ArchiveError, zipfile.BadZipFile) as exc:
+            return Refused("archive_failed", str(exc))
+
+    def _archive(self, gate: Gate, path: str, expected: str | None) -> Result[Archived]:
         if expected is not None:
             kept = self._existing(expected)
             if kept is not None:
                 return kept
         pack = _Pack()
         try:
-            read = gate.read_tree(path, pack)
-        except UnicodeDecodeError:
-            return Refused("unencodable_name", "a file name is not UTF-8")
-        if not read.ok:
-            return read
-        digest = pack.hash.digest.hexdigest()
-        if expected is not None and digest != expected:
-            return Refused("changed", "the tree changed after it was hashed")
-        kept = self._existing(digest)
-        if kept is not None:
-            return kept
-        data = pack.finish()
+            try:
+                read = gate.read_tree(path, pack)
+            except UnicodeDecodeError:
+                return Refused("unencodable_name", "a file name is not UTF-8")
+            if not read.ok:
+                return read
+            digest = pack.hash.digest.hexdigest()
+            if expected is not None and digest != expected:
+                return Refused("changed", "the tree changed after it was hashed")
+            kept = self._existing(digest)
+            if kept is not None:
+                return kept
+            data = pack.finish()
+        finally:
+            pack.close()
         if zip_content_sha256(data) != digest:
             return Refused("verify_failed", "archive does not reproduce the folder hash")
         written = self.store.put_once(f"{digest}.zip", data)
@@ -205,7 +217,7 @@ class Archiver:
             return None
         try:
             content, files, size = _content(data)
-        except ArchiveError as exc:
+        except (ArchiveError, zipfile.BadZipFile) as exc:
             return Refused("corrupt_archive", str(exc))
         if content != digest:
             return Refused("corrupt_archive", f"{digest}.zip holds {content}")
@@ -242,14 +254,15 @@ class Archiver:
 
     def _load(self) -> dict[tuple[str, str], dict]:
         if self._index is None:
-            self._index = {}
+            index = {}
             raw = self.store.read(ArchiveStore.INDEX) or b""
             for line in raw.decode("utf-8", errors="replace").splitlines():
                 try:
                     row = json.loads(line)
-                    self._index[(row["skill_sha256"], row["source"])] = row
+                    index[(row["skill_sha256"], row["source"])] = row
                 except (ValueError, KeyError, TypeError):
                     continue  # a damaged line is dropped, not fatal
+            self._index = index
         return self._index
 
 
@@ -260,11 +273,14 @@ def archive_skill(path: str, dest: str, gate: Gate | None = None, now: str = "")
     is a path on this machine unless `gate` says otherwise.
     """
     store = ArchiveStore(dest)
-    store.open()
-    archiver = Archiver(store, now)
-    result = archiver.archive(gate if gate is not None else Gate("/"), path)
-    if result.ok:
-        name = path.rstrip("/").rsplit("/", 1)[-1]
-        archiver.record(result.value, name=name, source=path)
-        archiver.close()
-    return result
+    try:
+        store.open()
+        archiver = Archiver(store, now)
+        result = archiver.archive(gate if gate is not None else Gate("/"), path)
+        if result.ok:
+            name = path.rstrip("/\\").replace("\\", "/").rsplit("/", 1)[-1]
+            archiver.record(result.value, name=name, source=path)
+            archiver.close()
+        return result
+    except OSError as exc:
+        return Refused("archive_failed", str(exc))
