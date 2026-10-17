@@ -67,6 +67,8 @@ class Entry:
     is_symlink: bool
     size: int
     is_exec: bool = False
+    # Junctions and other name-surrogate reparse points redirect traversal.
+    is_reparse: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,6 +139,10 @@ class Gate:
         env: dict[str, str] | None = None,
         resolve_names: bool = False,
     ) -> None:
+        # '/' is the public live-world sentinel, not a native Windows root.
+        # Resolving it first would lose that distinction and confine a scan
+        # to the current drive (with a broken trailing-separator check).
+        self._live = os.fspath(root) == "/"
         self._root = os.path.realpath(root)
         self.ledger = ledger if ledger is not None else Ledger()
         self.budget = budget if budget is not None else Budget()
@@ -169,20 +175,40 @@ class Gate:
 
     def host_path(self, logical: str) -> str:
         """Map a logical (machine) path into this world."""
-        if self._root == "/":
+        if self._live:
+            return logical
+        # Native absolute paths, including UNC, must retain their anchor.
+        # _validate will allow them only when they are inside the fixture.
+        if os.path.splitdrive(logical)[0]:
             return logical
         return os.path.join(self._root, logical.lstrip("/\\"))
 
     def logical_path(self, host: str) -> str:
         """Inverse of `host_path`, so records read the same in a fixture and
         on a real machine."""
-        if self._root == "/":
-            return host
-        if host == self._root:
+        if self._live:
+            return self._logical_separators(host)
+        if self._same_path(host, self._root):
             return "/"
-        if host.startswith(self._root + os.sep):
-            return "/" + host[len(self._root) + 1 :]
-        return host
+        if self._contains(host):
+            return "/" + self._logical_separators(os.path.relpath(host, self._root))
+        return self._logical_separators(host)
+
+    @staticmethod
+    def _logical_separators(path: str) -> str:
+        # Backslash remains a legal filename character on POSIX.
+        return path.replace("\\", "/") if os.name == "nt" else path
+
+    @staticmethod
+    def _same_path(left: str, right: str) -> bool:
+        return os.path.normcase(os.path.normpath(left)) == os.path.normcase(os.path.normpath(right))
+
+    def _contains(self, path: str) -> bool:
+        try:
+            common = os.path.commonpath((self._root, path))
+        except ValueError:  # Different drives, or incompatible path anchors.
+            return False
+        return self._same_path(common, self._root)
 
     def _validate(self, logical: str) -> Result[str]:
         """Canonicalize, then decide. Returns the resolved host path."""
@@ -192,9 +218,7 @@ class Gate:
         except (OSError, ValueError) as exc:
             return Refused("unresolvable", str(exc))
 
-        if self._root != "/" and not (
-            resolved == self._root or resolved.startswith(self._root + os.sep)
-        ):
+        if not self._live and not self._contains(resolved):
             self.ledger.deny(logical, "outside_root")
             return Refused("outside_root", self.logical_path(resolved))
 
@@ -217,7 +241,7 @@ class Gate:
             self.on_validated(resolved)
 
         try:
-            fd = os.open(resolved, flags | getattr(os, "O_NOFOLLOW", 0))
+            fd = os.open(resolved, flags | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0))
         except FileNotFoundError:
             return Refused("absent", resolved)
         except OSError as exc:
@@ -309,6 +333,37 @@ class Gate:
             )
         )
 
+    @staticmethod
+    def _redirects(info: os.stat_result) -> bool:
+        # The name-surrogate bit covers junctions and Windows symlinks.
+        # Other reparse tags (for example cloud-file metadata) do not by
+        # themselves mean that a directory points somewhere else.
+        return bool(getattr(info, "st_reparse_tag", 0) & 0x20000000)
+
+    def _directory_identity(self, logical: str, resolved: str) -> Result[tuple[int, int]]:
+        current = self._validate(logical)
+        if not current.ok or not self._same_path(current.value, resolved):
+            return Refused("swapped", "directory changed after validation")
+        try:
+            info = os.stat(resolved, follow_symlinks=False)
+        except FileNotFoundError:
+            return Refused("absent", logical)
+        except OSError as exc:
+            return Refused("open_failed", exc.strerror or str(exc))
+        if not S_ISDIR(info.st_mode):
+            return Refused("not_directory", logical)
+        if self._redirects(info):
+            return Refused("swapped", "validated directory became a reparse point")
+        return Ok((info.st_dev, info.st_ino))
+
+    def _directory_unchanged(
+        self, logical: str, resolved: str, identity: tuple[int, int]
+    ) -> Result[None]:
+        current = self._directory_identity(logical, resolved)
+        if not current.ok or current.value != identity:
+            return Refused("swapped", "directory identity changed during enumeration")
+        return Ok(None)
+
     def list_dir(self, logical: str, retain: bool = False) -> Result[tuple[Entry, ...]]:
         kept = self._retained.get(logical)
         if kept is not None:
@@ -317,18 +372,39 @@ class Gate:
         if not validated.ok:
             return validated
         resolved = validated.value
-        directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
-        opened = self._open_verified(logical, resolved, directory_flags)
-        if not opened.ok:
-            if opened.reason not in ("absent",):
-                self.ledger.deny(logical, opened.detail or opened.reason)
-            return opened
-
-        fd = opened.value
+        fd = None
+        identity = None
+        if os.name == "nt":
+            # Windows CRT cannot open a directory as a file descriptor,
+            # and scandir(fd) is Unix-only. Never publish the path-based
+            # listing until both its target and directory identity have
+            # been checked again after enumeration.
+            before = self._directory_identity(logical, resolved)
+            if not before.ok:
+                if before.reason != "absent":
+                    self.ledger.deny(logical, before.detail or before.reason)
+                return before
+            identity = before.value
+            if self.on_validated is not None:
+                self.on_validated(resolved)
+            unchanged = self._directory_unchanged(logical, resolved, identity)
+            if not unchanged.ok:
+                self.ledger.deny(logical, unchanged.detail)
+                return unchanged
+            source = resolved
+        else:
+            directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+            opened = self._open_verified(logical, resolved, directory_flags)
+            if not opened.ok:
+                if opened.reason != "absent":
+                    self.ledger.deny(logical, opened.detail or opened.reason)
+                return opened
+            fd = opened.value
+            source = fd
         entries: list[Entry] = []
         exhausted = False
         try:
-            with os.scandir(fd) as listing:
+            with os.scandir(source) as listing:
                 for e in listing:
                     if not self.budget.take_entries():
                         exhausted = True
@@ -338,11 +414,12 @@ class Gate:
                         is_dir = e.is_dir(follow_symlinks=False)
                         entries.append(
                             Entry(
-                                path=os.path.join(logical, e.name) if logical != "/" else "/" + e.name,
+                                path=self._logical_separators(os.path.join(logical, e.name)),
                                 is_dir=is_dir,
                                 is_symlink=e.is_symlink(),
                                 size=info.st_size,
                                 is_exec=bool(info.st_mode & 0o111) and not is_dir,
+                                is_reparse=self._redirects(info),
                             )
                         )
                     except OSError:
@@ -351,7 +428,14 @@ class Gate:
             self.ledger.deny(logical, getattr(exc, "strerror", None) or str(exc))
             return Refused("listdir_failed", str(exc))
         finally:
-            os.close(fd)
+            if fd is not None:
+                os.close(fd)
+
+        if identity is not None:
+            unchanged = self._directory_unchanged(logical, resolved, identity)
+            if not unchanged.ok:
+                self.ledger.deny(logical, unchanged.detail)
+                return unchanged
 
         if exhausted:
             self.ledger.boundary(
@@ -435,6 +519,7 @@ class Gate:
                     if (
                         entry.is_dir
                         and not entry.is_symlink
+                        and not entry.is_reparse
                         and entry.path not in listed
                         and entry.path not in queued
                     ):
@@ -531,44 +616,80 @@ class Gate:
         """(sort key, relative path, size) for each regular file, sorted.
 
         Not charged to the entry ceiling, which the sweep may already have
-        spent: a truncated listing would become a partial hash. The per-tree
-        file cap bounds it instead. Each file is still opened through the
-        validated, descriptor-checked path before a byte is read.
+        spent: a truncated listing would become a partial hash. Independent
+        file, directory and depth caps bound this pass, along with the scan
+        time budget. Each directory is revalidated before and after listing;
+        each file is descriptor-checked before a byte is read.
         """
         members: list[tuple[bytes, str, int]] = []
-        pending = [""]
+        pending = [("", 0)]
+        directories = 1
+        visited: set[tuple[int, int]] = set()
+        if directories > self.budget.max_tree_directories:
+            return self._tree_refused(logical_root, "too_many_directories", "directory cap exhausted")
         while pending:
-            rel_dir = pending.pop()
+            if self.budget.time_exhausted:
+                return self._tree_refused(logical_root, "time_budget_exhausted", "scan time budget exhausted")
+            rel_dir, depth = pending.pop()
+            if depth > self.budget.max_tree_depth:
+                return self._tree_refused(logical_root, "tree_too_deep", rel_dir)
+            directory = os.path.join(resolved, *rel_dir.split("/")) if rel_dir else resolved
+            logical = self.logical_path(directory)
+            before = self._directory_identity(logical, directory)
+            if not before.ok:
+                return self._tree_refused(logical_root, "unlistable", f"{rel_dir or '.'}: {before.reason}")
+            if before.value in visited:
+                return self._tree_refused(logical_root, "repeated_directory", rel_dir or ".")
+            visited.add(before.value)
             try:
-                with os.scandir(os.path.join(resolved, *rel_dir.split("/")) if rel_dir else resolved) as listing:
-                    entries = list(listing)
+                with os.scandir(directory) as listing:
+                    for entry in listing:
+                        if self.budget.time_exhausted:
+                            return self._tree_refused(
+                                logical_root, "time_budget_exhausted", "scan time budget exhausted"
+                            )
+                        rel = f"{rel_dir}/{entry.name}" if rel_dir else entry.name
+                        try:
+                            info = entry.stat(follow_symlinks=False)
+                        except OSError:
+                            return self._tree_refused(logical_root, "unlistable", rel)
+                        # As with symlinks, junction targets are not members
+                        # of the tree. In particular, a parent junction may
+                        # cycle forever without consuming the file budget.
+                        if self._redirects(info):
+                            continue
+                        if S_ISDIR(info.st_mode):
+                            directories += 1
+                            if directories > self.budget.max_tree_directories:
+                                return self._tree_refused(
+                                    logical_root, "too_many_directories",
+                                    f"cap {self.budget.max_tree_directories}",
+                                )
+                            pending.append((rel, depth + 1))
+                        elif S_ISREG(info.st_mode):
+                            if info.st_size > self.budget.max_tree_file_bytes:
+                                return self._tree_refused(
+                                    logical_root, "file_too_large",
+                                    f"{rel}: {info.st_size} bytes; cap {self.budget.max_tree_file_bytes}",
+                                )
+                            members.append((os.fsencode(rel), rel, info.st_size))
+                            if len(members) > self.budget.max_tree_files:
+                                return self._tree_refused(
+                                    logical_root, "too_many_files", f"cap {self.budget.max_tree_files}"
+                                )
             except OSError as exc:
                 return self._tree_refused(
                     logical_root, "unlistable", f"{rel_dir or '.'}: {exc.strerror or exc}"
                 )
-            for entry in entries:
-                rel = f"{rel_dir}/{entry.name}" if rel_dir else entry.name
-                try:
-                    info = entry.stat(follow_symlinks=False)
-                except OSError:
-                    return self._tree_refused(logical_root, "unlistable", rel)
-                if S_ISDIR(info.st_mode):
-                    pending.append(rel)
-                elif S_ISREG(info.st_mode):
-                    if info.st_size > self.budget.max_tree_file_bytes:
-                        return self._tree_refused(
-                            logical_root, "file_too_large",
-                            f"{rel}: {info.st_size} bytes; cap {self.budget.max_tree_file_bytes}",
-                        )
-                    members.append((os.fsencode(rel), rel, info.st_size))
-                    if len(members) > self.budget.max_tree_files:
-                        return self._tree_refused(
-                            logical_root, "too_many_files", f"cap {self.budget.max_tree_files}"
-                        )
+            unchanged = self._directory_unchanged(logical, directory, before.value)
+            if not unchanged.ok:
+                return self._tree_refused(logical_root, "unlistable", f"{rel_dir or '.'}: {unchanged.reason}")
         members.sort()
         return Ok(members)
 
     def _feed_file(self, logical: str, key: bytes, sink: TreeSink) -> Result[int]:
+        if self.budget.time_exhausted:
+            return Refused("time_budget_exhausted", "scan time budget exhausted")
         validated = self._validate(logical)
         if not validated.ok:
             return validated
@@ -583,6 +704,8 @@ class Gate:
                 return Refused("not_regular", logical)
             sink.begin(key, mode)
             while chunk := os.read(fd, 1 << 20):
+                if self.budget.time_exhausted:
+                    return Refused("time_budget_exhausted", "scan time budget exhausted")
                 size += len(chunk)
                 if size > self.budget.max_tree_file_bytes:
                     return Refused("file_too_large", logical)
@@ -647,7 +770,7 @@ class Gate:
             return Refused("time_budget_exhausted", f"{self.budget.max_seconds}s")
 
         target = argv[0]
-        if self._root != "/" and target.startswith("/"):
+        if not self._live:
             validated = self._validate(target)
             if not validated.ok:
                 return validated
