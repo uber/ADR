@@ -82,6 +82,7 @@ def test_packages_applications_and_ownership_share_one_inventory(tmp_path, monke
 def test_kernel_and_network_share_one_socket_inventory(tmp_path, monkeypatch):
     helpers = _Helpers(processes=[], sockets=[_socket()])
     gate = _gate(tmp_path, monkeypatch, helpers)
+    monkeypatch.setattr(gate, "dns_cache", lambda: Ok(()))
 
     kernel = from_kernel(gate)
     network = from_network(gate, kernel)
