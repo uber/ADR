@@ -11,6 +11,8 @@ catalog (U2-03).
 
 from __future__ import annotations
 
+from ..contracts.paths import is_windows, logical
+
 #: Directory names that mark a surface worth reading.
 DIR_MARKERS: frozenset[str] = frozenset(
     {
@@ -140,6 +142,7 @@ MODEL_PROVIDER_SUFFIXES: tuple[str, ...] = (
 #: Bundles and portable executables carry their own runtime, so nothing
 #: else on disk reveals them.
 BUNDLE_SUFFIXES: tuple[str, ...] = (".AppImage", ".app", ".exe")
+WINDOWS_EXECUTABLE_SUFFIXES: tuple[str, ...] = (".exe", ".com", ".cmd", ".bat")
 
 #: Ports a local model runtime answers on.
 LOCAL_MODEL_PORTS: frozenset[int] = frozenset({11434, 1234, 8080, 8000, 5000, 7860})
@@ -156,6 +159,8 @@ def is_loose_executable(entry, name: str) -> bool:
     Extensionless is the test that keeps this from matching every script in
     every repository: real CLI tools ship as `claude`, not `claude.sh`.
     """
+    if is_windows(entry.path):
+        return not entry.is_dir and name.lower().endswith(WINDOWS_EXECUTABLE_SUFFIXES)
     if entry.is_dir:
         return name.endswith(BUNDLE_SUFFIXES)
     if name.endswith(BUNDLE_SUFFIXES):
@@ -164,13 +169,19 @@ def is_loose_executable(entry, name: str) -> bool:
 
 
 def marker_kind(name: str, path: str = "") -> str | None:
+    path = logical(path)
+    if is_windows(path):
+        path = path.lower()
+        name = name.lower()
     if WORKFLOW_DIR in path and path.endswith(WORKFLOW_SUFFIXES):
         return "marker_file"
     if name in DIR_MARKERS:
         return "marker_dir"
     if name in FILE_MARKERS:
         return "marker_file"
-    if name in INSTRUCTION_MARKERS:
+    if name in INSTRUCTION_MARKERS or (
+        is_windows(path) and name in {marker.lower() for marker in INSTRUCTION_MARKERS}
+    ):
         return "instruction_file"
     if name in (".bashrc", ".zshrc"):
         return "shell_profile"

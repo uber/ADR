@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import re
 
+from ..contracts.paths import key as path_key
 from ..contracts.records import Observation
 
 #: Content-addressed store paths carry a build hash that changes on every
@@ -32,6 +33,7 @@ _STORE_PATTERNS = (
 def normalize_root(path: str | None) -> str | None:
     if not path:
         return path
+    path = path_key(path)
     for pattern in _STORE_PATTERNS:
         m = pattern.match(path)
         if m:
@@ -45,7 +47,7 @@ def keys_for(obs: Observation) -> tuple[tuple[str, str], ...]:
     if obs.content_hash:
         out.append(("content", obs.content_hash))
     if obs.real_path:
-        out.append(("realpath", obs.real_path))
+        out.append(("realpath", path_key(obs.real_path)))
     if obs.inode:
         out.append(("inode", obs.inode))
     if obs.package_id:
@@ -57,15 +59,15 @@ def keys_for(obs: Observation) -> tuple[tuple[str, str], ...]:
         # Uncatalogued things still have an identity. Without this key a
         # server declared in two scopes becomes two assets -- a false split
         # that looks exactly like two servers.
-        out.append(("identity", f"{obs.kind.value}|{obs.identity}|{obs.owner or 'system'}"))
+        out.append(("identity", f"{obs.kind.value}|{identity_of(obs)}|{obs.owner or 'system'}"))
     # An attribute binds to *its* install and never stands alone, so both
     # sides of the binding have to emit the same key. Keying on the
     # parent's path rather than its identity is what keeps two installs of
     # one tool -- a release and a vendored alpha -- from collapsing into one.
     if obs.attribute_of:
-        out.append(("install", obs.attribute_of))
+        out.append(("install", path_key(obs.attribute_of)))
     elif obs.path:
-        out.append(("install", obs.path))
+        out.append(("install", path_key(obs.path)))
     return tuple(out)
 
 
@@ -77,7 +79,7 @@ def identity_of(obs: Observation) -> str:
     """
     if _is_declared(obs):
         return obs.identity
-    return obs.catalog_id or obs.identity
+    return obs.catalog_id or path_key(obs.identity)
 
 
 def _is_declared(obs: Observation) -> bool:
@@ -95,5 +97,5 @@ def asset_id(kind: str, identity: str, owner: str, install_root: str | None) -> 
     inside a content-addressed store path (a rebuild is not a new asset).
     """
     root = normalize_root(install_root) or ""
-    payload = f"{kind}\0{identity}\0{owner}\0{root}"
+    payload = f"{kind}\0{path_key(identity)}\0{owner}\0{root}"
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:32]

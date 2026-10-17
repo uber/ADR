@@ -7,6 +7,7 @@ can ruin the budget, so it carries the budget.
 
 from __future__ import annotations
 
+from ..contracts.paths import basename, key
 from ..contracts.records import Candidate, Priority
 from .markers import is_loose_executable, marker_kind
 from .roots import in_scope, ordered_roots, state_roots
@@ -30,13 +31,13 @@ def sweep(gate, include_dependency_caches: bool = False) -> tuple[Candidate, ...
 
     def retain(path: str) -> bool:
         # Surface directories are listed again by extraction; keep the answer.
-        return marker_kind(path.rsplit("/", 1)[-1]) == "marker_dir"
+        return marker_kind(basename(path), path) == "marker_dir"
 
     def scan(root: str, priority: Priority) -> None:
         for entry in gate.walk(root, descend=descend, seen=visited, retain=retain):
             if not in_scope(entry.path, include_dependency_caches):
                 continue
-            name = entry.path.rsplit("/", 1)[-1]
+            name = basename(entry.path)
             kind = marker_kind(name, entry.path)
             if kind is None and is_loose_executable(entry, name):
                 # A tarball unpacked into /opt, a binary copied out of a
@@ -44,9 +45,9 @@ def sweep(gate, include_dependency_caches: bool = False) -> tuple[Candidate, ...
                 # walk is already listing this entry, so noticing costs
                 # nothing beyond the name test that follows it.
                 kind = "binary"
-            if kind is None or entry.path in seen:
+            if kind is None or key(entry.path) in seen:
                 continue
-            seen.add(entry.path)
+            seen.add(key(entry.path))
             out.append(
                 Candidate(
                     kind=kind,

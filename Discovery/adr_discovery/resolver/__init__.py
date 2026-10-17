@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from types import MappingProxyType
 
+from ..contracts.paths import contains
 from ..contracts.records import Asset, Kind, Liveness, Observation, Risk
 from .confidence import band_for
 from .keys import asset_id, identity_of, normalize_root
@@ -130,7 +131,7 @@ def _containing(obs: Observation, roots) -> str | None:
             continue
         if obs.catalog_id and other.catalog_id and obs.catalog_id != other.catalog_id:
             continue
-        if any(probe.startswith(root + "/") for probe in probes):
+        if any(contains(root, probe, proper=True) for probe in probes):
             return other.path
     return None
 

@@ -19,6 +19,8 @@ import re
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
+from ..contracts.paths import basename, is_windows, join, logical, relative_to
+from ..contracts.paths import key as path_key
 from ..contracts.records import Provenance, SourceRef
 from ..redact import rules as redact
 from .formats import parse as parse_document
@@ -49,6 +51,10 @@ class Marketplace:
     #: The clone or directory the host loads it from, when it says.
     location: str | None = None
 
+    def __post_init__(self):
+        if self.location:
+            object.__setattr__(self, "location", logical(self.location).rstrip("/"))
+
 
 @dataclass(frozen=True, slots=True)
 class Install:
@@ -63,6 +69,11 @@ class Install:
     project: str | None = None
     installed_at: str | None = None
     present: bool = True
+
+    def __post_init__(self):
+        object.__setattr__(self, "path", logical(self.path).rstrip("/"))
+        if self.project:
+            object.__setattr__(self, "project", logical(self.project).rstrip("/"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +95,9 @@ class Listing:
     marketplace: str
     plugin: str
     path: str
+
+    def __post_init__(self):
+        object.__setattr__(self, "path", logical(self.path).rstrip("/"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,7 +127,9 @@ class Registries:
             if scope != "user" and not project:
                 continue
             for toggle in self.toggles:
-                if (toggle.host, toggle.key, toggle.scope, toggle.project) == (install.host, key, scope, project):
+                if (toggle.host, toggle.key, toggle.scope, path_key(toggle.project or "")) == (
+                    install.host, key, scope, path_key(project or "")
+                ):
                     return toggle.enabled
         return None
 
@@ -166,25 +182,25 @@ def plugin_roots(found: Registries) -> tuple[tuple[str, Provenance, bool], ...]:
     Install records that name a missing directory place nothing; they are
     counted in coverage by `read_registries`.
     """
-    out: dict[str, tuple[Provenance, bool]] = {}
+    out: dict[str, tuple[str, Provenance, bool]] = {}
     for market in found.marketplaces:
         if market.location:
-            out[market.location.rstrip("/")] = (Provenance(
+            out[path_key(market.location)] = (market.location, Provenance(
                 AVAILABLE, market.host, market.name, market.source), False)
     for listing in found.listings:
         market = found.marketplace(listing.host, listing.marketplace)
-        out[listing.path] = (Provenance(
+        out[path_key(listing.path)] = (listing.path, Provenance(
             AVAILABLE, listing.host, listing.marketplace, market.source if market else None,
             plugin=listing.plugin), False)
     for cached in found.cached:
-        out[cached.path] = (_provenance(found, STALE, [cached]), True)
+        out[path_key(cached.path)] = (cached.path, _provenance(found, STALE, [cached]), True)
     installed: dict[str, list[Install]] = {}
     for install in found.installs:
         if install.present:
-            installed.setdefault(install.path, []).append(install)
+            installed.setdefault(path_key(install.path), []).append(install)
     for path, records in installed.items():
-        out[path] = (_provenance(found, INSTALLED, records), True)
-    return tuple((path, provenance, is_plugin) for path, (provenance, is_plugin) in out.items())
+        out[path] = (records[0].path, _provenance(found, INSTALLED, records), True)
+    return tuple(out.values())
 
 
 def _provenance(found: Registries, state: str, records: list[Install]) -> Provenance:
@@ -215,7 +231,7 @@ def marketplace_at(gate, directory: str) -> str | None:
         if gate.stat(path).ok:
             document = _document(gate, path) or {}
             name = document.get("name")
-            return name if isinstance(name, str) and name else directory.rsplit("/", 1)[-1]
+            return name if isinstance(name, str) and name else basename(directory)
     return None
 
 
@@ -376,7 +392,7 @@ def _cursor_install(gate, path: str, plugin: str, market: str, scope: str) -> In
 
 
 def _name(path: str) -> str:
-    return path.rsplit("/", 1)[-1]
+    return basename(path)
 
 
 def _cache_entries(gate, base: str):
@@ -386,15 +402,14 @@ def _cache_entries(gate, base: str):
     for market in _subdirs(gate, base):
         for plugin in _subdirs(gate, market):
             for version in _subdirs(gate, plugin):
-                yield (market.rsplit("/", 1)[-1], plugin.rsplit("/", 1)[-1],
-                       version.rsplit("/", 1)[-1], version)
+                yield (basename(market), basename(plugin), basename(version), version)
 
 
 def _subdirs(gate, path: str) -> list[str]:
     listing = gate.list_dir(path)
     if not listing.ok:
         return []
-    return sorted(e.path for e in listing.value if e.is_dir and not e.path.rsplit("/", 1)[-1].startswith("."))
+    return sorted(e.path for e in listing.value if e.is_dir and not basename(e.path).startswith("."))
 
 
 # ------------------------------------------------------------- listings
@@ -426,6 +441,8 @@ def _listings(gate, market: Marketplace) -> list[Listing]:
 
 
 def _join(root: str, relative: str) -> str:
+    if is_windows(root):
+        return join(root, relative.removeprefix("./").removeprefix(".\\"))
     parts = [p for p in relative.split("/") if p not in ("", ".")]
     return "/".join([root.rstrip("/"), *parts])
 
@@ -475,9 +492,10 @@ def repo_of(url: str) -> str | None:
 
 
 def home_relative(path: str, home: str | None) -> str:
-    if home and (path == home or path.startswith(home.rstrip("/") + "/")):
-        return "~" + path[len(home.rstrip("/")):]
-    return path
+    relative = relative_to(path, home) if home else None
+    if relative is not None:
+        return "~" if relative == "." else "~/" + relative
+    return logical(path)
 
 
 # ---------------------------------------------------------------- reading

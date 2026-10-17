@@ -12,6 +12,8 @@ import hashlib
 import re
 from types import MappingProxyType
 
+from ..contracts.paths import is_windows, logical
+from ..contracts.paths import key as path_key
 from ..contracts.records import Candidate, Declaration, ExtractError, Extraction, Kind
 from ..redact import rules as redact
 from .formats import format_for, parse_bytes
@@ -228,7 +230,7 @@ def _hook(record, path: str, scope: str) -> Declaration:
         scope=scope,
         command=scrubbed,
         raw={"event": event, "matcher": matcher, "surface": Kind.HOOK.value,
-             "identity": f"hook:{path}:{digest}"},
+             "identity": f"hook:{path_key(path)}:{digest}"},
     )
 
 
@@ -286,7 +288,7 @@ def _step_label(step: dict) -> str:
 
 def _ci_agent(record, path: str, ordinal: int = 0) -> Declaration:
     job_name, step, reference, catalog_id = record
-    identity = f"ci_agent:{path}:{job_name}:{reference}:{_step_label(step)}"
+    identity = f"ci_agent:{path_key(path)}:{job_name}:{reference}:{_step_label(step)}"
     if ordinal:
         identity += f"#{ordinal}"
     return Declaration(
@@ -361,6 +363,9 @@ def _transport(declared: object, url: object) -> object:
 
 
 def _scope_of(path: str) -> str:
+    path = logical(path)
+    if is_windows(path):
+        path = path.lower()
     name = path.rsplit("/", 1)[-1]
     for scope, filename in SCOPES:
         if name == filename:

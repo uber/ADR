@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from types import MappingProxyType
 
+from ..contracts.paths import basename, is_windows
 from ..contracts.records import Declaration, Kind
 from .formats import parse as parse_document
 from .formats.frontmatter import NoFrontmatter, parse_with_notes
@@ -38,7 +39,9 @@ MANIFEST_LIMIT = 64 * 1024
 
 def surface_for(path: str):
     """Which surface, if any, this marker directory is."""
-    name = path.rstrip("/").rsplit("/", 1)[-1]
+    name = basename(path)
+    if is_windows(path):
+        name = name.lower()
     for surface, kind, suffixes, nested in SURFACES:
         if name == surface:
             return kind, suffixes, nested
@@ -80,7 +83,9 @@ def extract_surface(gate, candidate, scope: str):
 
 
 def _is_member(entry, suffixes: tuple[str, ...], nested: bool) -> bool:
-    name = entry.path.rsplit("/", 1)[-1]
+    name = basename(entry.path)
+    if is_windows(entry.path):
+        name = name.lower()
     if name.startswith("."):
         return False
     if nested:
@@ -100,7 +105,7 @@ MANIFESTS = MappingProxyType({
 
 
 def _declaration(gate, entry, kind: Kind, scope: str, nested: bool, skipped: list[str]) -> Declaration:
-    name = entry.path.rsplit("/", 1)[-1]
+    name = basename(entry.path)
     body_path = entry.path
 
     if nested:
@@ -164,7 +169,7 @@ def _plugin(gate, path: str, manifest: str, scope: str) -> Declaration:
     reason in coverage: the directory is still there and still loads.
     """
     raw: dict[str, object] = {"surface": Kind.PLUGIN.value}
-    name = path.rsplit("/", 1)[-1]
+    name = basename(path)
     text = gate.read_text(manifest, limit=MANIFEST_LIMIT)
     document: object = None
     if not text.ok:

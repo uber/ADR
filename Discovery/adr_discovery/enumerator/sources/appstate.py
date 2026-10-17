@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 
+from ...contracts.paths import basename
 from ...contracts.records import Candidate, Priority
 from ..markers import (
     BROWSER_PROFILE_ROOTS,
@@ -34,7 +35,7 @@ def from_app_state(gate, homes: tuple[str, ...]) -> tuple[Candidate, ...]:
             if gate.stat(path).ok:
                 kind = "shell_profile" if path.endswith(("/.bashrc", "/.zshrc")) else "marker_file"
                 out.append(Candidate(kind=kind, path=path, source="app_state:config",
-                                     priority=Priority.HOME, detail={"marker": path.rsplit("/", 1)[-1]}))
+                                     priority=Priority.HOME, detail={"marker": basename(path)}))
 
     for template in STATE_ROOTS:
         for path in _expand(gate, template, homes):
@@ -54,7 +55,7 @@ def from_app_state(gate, homes: tuple[str, ...]) -> tuple[Candidate, ...]:
             for profile in profiles.value:
                 if not profile.is_dir:
                     continue
-                name = profile.path.rsplit("/", 1)[-1]
+                name = basename(profile.path)
                 if name != "Default" and not name.startswith("Profile "):
                     continue
                 ext_root = profile.path + "/Extensions"
@@ -70,7 +71,7 @@ def from_app_state(gate, homes: tuple[str, ...]) -> tuple[Candidate, ...]:
                             path=ext.path,
                             source="app_state:browser",
                             priority=Priority.HOME,
-                            detail={"extension_id": ext.path.rsplit("/", 1)[-1],
+                            detail={"extension_id": basename(ext.path),
                                     "profile": name, "browser": browser_root},
                         )
                     )
@@ -103,7 +104,7 @@ def from_app_state(gate, homes: tuple[str, ...]) -> tuple[Candidate, ...]:
                     continue
                 for ext in extensions.value:
                     if ext.is_dir or ext.path.endswith(".xpi"):
-                        ident = ext.path.rsplit("/", 1)[-1].removesuffix(".xpi")
+                        ident = basename(ext.path).removesuffix(".xpi")
                         out.append(Candidate(
                             kind="extension", path=ext.path, source="app_state:firefox",
                             priority=Priority.HOME,
@@ -124,4 +125,4 @@ def _editor_identity(gate, path: str) -> tuple[str, str | None]:
                 return f"{publisher}.{name}", str(version) if version else None
         except (ValueError, TypeError):
             gate.ledger.probe("extension_manifest", "degraded", path)
-    return path.rsplit("/", 1)[-1], None
+    return basename(path), None
