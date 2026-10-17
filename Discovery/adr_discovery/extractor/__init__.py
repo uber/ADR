@@ -44,6 +44,7 @@ def extract(gate, candidate: Candidate) -> Extraction:
     records, and a *directory* whose members are the records. They share
     the isolation rule and the true-count rule; only the reader differs.
     """
+    probe_path = candidate.path.lower() if is_windows(candidate.path) else candidate.path
     if candidate.kind == "instruction_file":
         return Extraction(
             declarations=(Declaration(
@@ -78,7 +79,7 @@ def extract(gate, candidate: Candidate) -> Extraction:
     try:
         document = parse_bytes(raw.value, fmt)
     except Exception as exc:
-        if "/.mcpb/" in candidate.path and candidate.path.endswith("/manifest.json"):
+        if "/.mcpb/" in probe_path and probe_path.endswith("/manifest.json"):
             return Extraction(
                 declarations=(Declaration(
                     kind=Kind.MCP_BUNDLE,
@@ -107,7 +108,7 @@ def extract(gate, candidate: Candidate) -> Extraction:
     if fmt == "workflow":
         return _workflow(document, candidate.path)
 
-    if candidate.path.endswith("/.mcpb/manifest.json"):
+    if probe_path.endswith("/.mcpb/manifest.json"):
         return _mcpb(document, candidate.path, scope)
 
     servers = _server_block(document)
