@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from typing import Mapping
+from urllib.parse import urlsplit
 
 from ..contracts.records import Asset, Declaration, Finding, Kind, Risk
 from .findings import findings_for
@@ -79,7 +80,8 @@ def _risk_for(asset: Asset, declaration: Declaration | None, ledger) -> Risk:
 
     destinations = ()
     if declaration.url:
-        host = declaration.url.split("//", 1)[-1].split("/", 1)[0].split(":", 1)[0]
+        # urlsplit keeps an IPv6 literal whole; splitting on ":" would not.
+        host = urlsplit(declaration.url).hostname or declaration.url.split("//", 1)[-1].split("/", 1)[0].split(":", 1)[0]
         destinations = (host,)
 
     return Risk(

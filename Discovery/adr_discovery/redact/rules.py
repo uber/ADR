@@ -77,11 +77,14 @@ def strip_url(url: str) -> str:
     """
     try:
         parts = urlsplit(url)
+        port = parts.port  # raises for `:${PORT}` or an out-of-range number
     except ValueError:
         return REDACTED
     host = parts.hostname or ""
-    if parts.port:
-        host = f"{host}:{parts.port}"
+    if ":" in host:
+        host = f"[{host}]"  # an IPv6 literal keeps its brackets
+    if port:
+        host = f"{host}:{port}"
     return urlunsplit((parts.scheme, host, parts.path, "", ""))
 
 
