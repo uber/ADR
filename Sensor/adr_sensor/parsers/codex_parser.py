@@ -146,6 +146,10 @@ class CodexParser(BaseParser):
             if not stat.S_ISREG(file_stat.st_mode):
                 return
             file_mtime = datetime.fromtimestamp(file_stat.st_mtime, tz=timezone.utc)
+        except FileNotFoundError:
+            # State catalogs keep rows for rollouts that were later deleted; a
+            # missing optional input is not a read failure.
+            return
         except (OSError, RuntimeError, ValueError, OverflowError):
             self.record_diagnostic("file_stat_error")
             return

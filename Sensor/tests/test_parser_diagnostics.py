@@ -216,6 +216,20 @@ def test_stat_failure_is_not_reported_as_age_filtering(tmp_path, monkeypatch):
     assert parser.get_diagnostics() == {"file_stat_error": 1}
 
 
+def test_codex_catalog_row_for_deleted_rollout_is_not_a_stat_failure(tmp_path):
+    parser = isolated_parser(CodexParser, tmp_path)
+    catalog = tmp_path / "state_5.sqlite"
+    with sqlite3.connect(catalog) as connection:
+        connection.execute("CREATE TABLE threads (id TEXT, rollout_path TEXT)")
+        connection.execute(
+            "INSERT INTO threads VALUES ('deleted', ?)", (str(tmp_path / "sessions" / "deleted.jsonl"),)
+        )
+    candidates = {}
+    parser._add_catalog_rollouts(candidates, catalog)
+    assert candidates == {}
+    assert parser.get_diagnostics() == {}
+
+
 def test_cline_malformed_file_and_expected_old_file_are_distinct(tmp_path):
     parser = isolated_parser(ClineParser, tmp_path)
     parser.base_path = tmp_path
