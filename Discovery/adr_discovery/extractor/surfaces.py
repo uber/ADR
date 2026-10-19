@@ -119,7 +119,9 @@ def _declaration(gate, entry, kind: Kind, scope: str, nested: bool, skipped: lis
             except NoFrontmatter:
                 metadata = {}
 
-    declared_name = str(metadata.get("name") or name.removesuffix(".md"))
+    # A file member is named without its suffix: `review.toml` is `/review`.
+    stem = name if nested else name.rsplit(".", 1)[0]
+    declared_name = str(metadata.get("name") or stem)
     tools = metadata.get("allowed-tools") or metadata.get("allowed_tools") or metadata.get("tools")
     model = metadata.get("model")
     raw: dict[str, object] = {
