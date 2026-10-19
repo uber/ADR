@@ -45,7 +45,7 @@ class DshParser(BaseParser):
         if self.max_age_days > 0:
             cutoff = datetime.now(timezone.utc) - timedelta(days=self.max_age_days)
 
-        files = self._select_session_generations()
+        files = self._select_session_generations(cutoff)
         entries: Dict[str, AgentEvent] = {}
         for path in files:
             failure_code = "file_stat_error"
@@ -72,8 +72,12 @@ class DshParser(BaseParser):
         updated_at = DshParser._timestamp(context.get("last_event_at")) or entry.timestamp
         return updated_at, context.get("event_count", 0)
 
-    def _select_session_generations(self) -> List[Path]:
-        """Select the highest generation per directory when it is current v3."""
+    def _select_session_generations(self, cutoff: Optional[datetime] = None) -> List[Path]:
+        """Select the highest generation per directory when it is current v3.
+
+        Sessions outside the lookback window are age-skipped, not reported as
+        unsupported, so long-finished legacy sessions do not signal drift.
+        """
         selected: Dict[Path, tuple[int, float, Path]] = {}
         candidates = [*self.base_path.glob("**/session.jsonl"), *self.base_path.glob("**/session.jsonl.zstd")]
         candidates.extend(self.base_path.glob("**/session.v*.jsonl"))
@@ -94,8 +98,11 @@ class DshParser(BaseParser):
             if current is None or candidate[:2] > current[:2]:
                 selected[path.parent] = candidate
         current_paths = []
-        for version, _, path in sorted(selected.values(), key=lambda item: item[1], reverse=True):
+        for version, mtime, path in sorted(selected.values(), key=lambda item: item[1], reverse=True):
             if version != MAX_SUPPORTED_SESSION_VERSION:
+                if cutoff is not None and mtime < cutoff.timestamp():
+                    self.record_diagnostic("file_age_skipped")
+                    continue
                 self.record_diagnostic("unsupported_schema")
                 logger.warning("[DSH] Unsupported session generation v%s in %s", version, path.parent)
                 continue

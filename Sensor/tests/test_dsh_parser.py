@@ -414,6 +414,25 @@ def test_future_or_legacy_generation_is_not_parsed_as_v3(tmp_path):
     assert DshParser().parse_session_file(legacy_path) is None
 
 
+def test_old_legacy_generation_is_age_skipped_not_reported_as_drift(tmp_path):
+    events = [
+        {"type": "session", "version": 2, "id": "legacy", "createdAt": 1750000000000},
+        {"type": "user/message", "data": {"role": "user", "content": [{"type": "text", "text": "hello world"}]}},
+    ]
+    old = write_session(tmp_path, events, "session.v2.jsonl", session_dir_name="old-legacy")
+    os.utime(old, (1, 1))
+
+    parser = DshParser(base_path=tmp_path / "sessions")
+    assert parser.parse_all() == []
+    assert parser.get_diagnostics() == {"file_age_skipped": 1}
+
+    recent = write_session(tmp_path, events, "session.v2.jsonl", session_dir_name="recent-legacy")
+    parser = DshParser(base_path=tmp_path / "sessions")
+    assert parser.parse_all() == []
+    assert parser.get_diagnostics() == {"file_age_skipped": 1, "unsupported_schema": 1}
+    assert recent.exists()
+
+
 def test_default_home_follows_dsh_home_or_user_home(monkeypatch, tmp_path):
     monkeypatch.delenv("DSH_HOME", raising=False)
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
