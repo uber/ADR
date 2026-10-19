@@ -45,6 +45,42 @@ class TestConfig:
         assert len(disallowed) > 10
 
 
+class TestMainConcurrency:
+    @staticmethod
+    def _run_main(monkeypatch, argv):
+        import main_benchmark
+
+        captured = {}
+
+        class FakeRunner:
+            def __init__(self, config):
+                captured["config"] = config
+
+            async def run_benchmark(self, task_range=None, benchmark_type="adr_bench"):
+                return None
+
+        monkeypatch.setattr(main_benchmark, "BenchmarkRunner", FakeRunner)
+        monkeypatch.setattr(sys, "argv", ["main_benchmark.py", *argv])
+        main_benchmark.main()
+        return captured["config"]
+
+    def test_config_concurrency_used_without_flag(self, tmp_path: Path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "config_benchmark.yaml").write_text(
+            "concurrency:\n  max_concurrent_tasks: 3\n", encoding="utf-8"
+        )
+        config = self._run_main(monkeypatch, [])
+        assert config.max_concurrent_tasks == 3
+
+    def test_flag_overrides_config_concurrency(self, tmp_path: Path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "config_benchmark.yaml").write_text(
+            "concurrency:\n  max_concurrent_tasks: 3\n", encoding="utf-8"
+        )
+        config = self._run_main(monkeypatch, ["--concurrent", "5"])
+        assert config.max_concurrent_tasks == 5
+
+
 class TestCommandBuilder:
     def test_builds_claude_command(self, tmp_path: Path, monkeypatch):
         monkeypatch.chdir(tmp_path)

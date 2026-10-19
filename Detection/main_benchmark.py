@@ -1330,8 +1330,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run ADR Benchmark")
     parser.add_argument("--tasks", type=str,
                        help="Task IDs to run (e.g., --tasks 109,110 or --tasks 109 or --tasks 1-5)")
-    parser.add_argument("--concurrent", type=int, default=10,
-                       help="Max concurrent tasks (e.g., --concurrent 3)")
+    parser.add_argument("--concurrent", type=int, default=None,
+                       help="Max concurrent tasks (default: concurrency.max_concurrent_tasks "
+                            "from config_benchmark.yaml)")
     parser.add_argument("--benchmark", type=str, choices=["adr_bench", "agentdojo"], default="adr_bench",
                        help="Benchmark type to run (adr_bench or agentdojo)")
 
@@ -1339,7 +1340,8 @@ def main() -> None:
 
     task_ids = args.tasks if args.tasks else None
 
-    config.update_concurrent_tasks(args.concurrent)
+    if args.concurrent is not None:
+        config.update_concurrent_tasks(args.concurrent)
 
     runner = BenchmarkRunner(config)
     asyncio.run(runner.run_benchmark(task_ids, args.benchmark))
