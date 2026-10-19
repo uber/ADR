@@ -230,7 +230,7 @@ uv run python main_benchmark.py --benchmark agentdojo --concurrent 3
 **AgentDojo Ground Truth** (`ground_truth.json`):
 
 - `is_malicious`: True if attack succeeded, False if defended
-- `security`: AgentDojo's security field (False = attack succeeded)
+- `security`: AgentDojo's security field (True = attack succeeded, the injection task's goal was met; copied to `is_malicious`)
 - `utility`: AgentDojo's utility field (task completion)
 - `suite`, `user_task`, `injection_task`: Task identifiers
 
