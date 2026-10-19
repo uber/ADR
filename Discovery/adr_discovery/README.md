@@ -30,7 +30,7 @@ The rewrite exists because the old layout had no boundary a linter could check. 
 
 ### Run it
 
-From the repository root:
+From the `Discovery` directory (where `pyproject.toml` defines the `adr-discovery` script):
 
 ```sh
 uv run adr-discovery --dry-run --json
