@@ -26,7 +26,7 @@ class Unrepresentable(ValueError):
 def loads(text: str) -> dict:
     lines: list[tuple[int, int, str]] = []
     for lineno, raw in enumerate(text.splitlines(), 1):
-        line = raw.split(" #", 1)[0].rstrip() if " #" in raw else raw.rstrip()
+        line = _strip_comment(raw)
         if not line.strip() or line.lstrip().startswith("#"):
             continue
         lines.append((lineno, len(line) - len(line.lstrip()), line.strip()))
@@ -35,6 +35,20 @@ def loads(text: str) -> dict:
     if consumed != len(lines):
         raise Unrepresentable(f"line {lines[consumed][0]}: indentation does not resolve")
     return value if isinstance(value, dict) else {"": value}
+
+
+def _strip_comment(raw: str) -> str:
+    """Drop a ` #` comment that sits outside quotes; keep the indentation."""
+    quote = ""
+    for index, ch in enumerate(raw):
+        if quote:
+            if ch == quote:
+                quote = ""
+        elif ch in "\"'" and (index == 0 or raw[index - 1] in " \t-:[,"):
+            quote = ch
+        elif ch == "#" and index > 0 and raw[index - 1] in " \t":
+            return raw[:index].rstrip()
+    return raw.rstrip()
 
 
 def _block(lines, i: int, indent: int):
