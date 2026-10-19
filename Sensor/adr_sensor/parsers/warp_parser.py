@@ -222,6 +222,18 @@ class WarpParser(BaseParser):
                         msg = ChatMessage(role="user", content=text, tools=[], sequence_id=sequence_id)
                         entry.chat_history.append(msg)
 
+                    # Legacy databases keep the model's reply to the query in ai_blocks.
+                    response_text = self._extract_llm_text(llm_output)
+                    if response_text:
+                        entry.chat_history.append(
+                            ChatMessage(
+                                role="assistant",
+                                content=response_text,
+                                tools=[],
+                                sequence_id=f"{sequence_id}_response",
+                            )
+                        )
+
                 elif "ActionResult" in first_item:
                     action_result = first_item["ActionResult"]
                     tools = []

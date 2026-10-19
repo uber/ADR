@@ -1985,13 +1985,17 @@ class TestWarpParser:
         entry = entries[0]
         assert entry.source == "warp"
         assert entry.session_id == "warp_conv-1"
-        assert len(entry.chat_history) == 2
+        assert len(entry.chat_history) == 3
 
         user_msg = entry.chat_history[0]
         assert user_msg.role == "user"
         assert "hello from ex-1" in user_msg.content
 
-        assistant_msg = entry.chat_history[1]
+        reply_msg = entry.chat_history[1]
+        assert reply_msg.role == "assistant"
+        assert reply_msg.content == "reply for ex-1"
+
+        assistant_msg = entry.chat_history[2]
         assert assistant_msg.role == "assistant"
         assert len(assistant_msg.tools) == 1
         assert assistant_msg.tools[0].tool_name == "execute_command"
@@ -2035,6 +2039,27 @@ class TestWarpParser:
 
         assert len(entries) == 1
         assert entries[0].chat_history[0].content == "synthetic response"
+
+    def test_legacy_schema_retains_query_response(self, tmp_path):
+        """The model's reply to a user query is kept alongside the query."""
+        now = datetime.now(timezone.utc).isoformat()
+        conversations = [
+            {
+                "conversation_id": "legacy-query-conv",
+                "last_modified_at": now,
+                "exchanges": [self._query_exchange("legacy-query", now)],
+            }
+        ]
+        db_path = tmp_path / "warp.sqlite"
+        _build_warp_db(db_path, conversations)
+
+        entries = self._make_parser(tmp_path).parse_all()
+
+        assert len(entries) == 1
+        assert [(m.role, m.content) for m in entries[0].chat_history] == [
+            ("user", "hello from legacy-query"),
+            ("assistant", "reply for legacy-query"),
+        ]
 
     def test_checks_legacy_table_once_per_database(self, tmp_path):
         """Schema detection should not add one sqlite_master query per conversation."""
