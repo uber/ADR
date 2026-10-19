@@ -79,7 +79,7 @@ def _mapping(lines, i: int, indent: int):
         if depth > indent:
             raise Unrepresentable(f"line {lineno}: unexpected indentation")
         _guard(body, lineno)
-        if ":" not in body:
+        if body.startswith("- ") or ":" not in body:
             raise Unrepresentable(f"line {lineno}: not a mapping entry")
         key, _, rest = body.partition(":")
         key, rest = key.strip(), rest.strip()
@@ -89,6 +89,10 @@ def _mapping(lines, i: int, indent: int):
             continue
         if i < len(lines) and lines[i][1] > indent:
             out[key], i = _block(lines, i, lines[i][1])
+        elif i < len(lines) and lines[i][1] == indent and lines[i][2].startswith("- "):
+            # `steps:` followed by `- uses: x` at the key's own column: a
+            # block sequence YAML allows without further indentation.
+            out[key], i = _sequence(lines, i, indent)
         else:
             out[key] = None
     return out, i
