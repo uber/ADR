@@ -94,8 +94,11 @@ def load_and_recalculate(analysis_path: Path, detector_name: str) -> Dict[str, A
 
     # Recalculate costs based on detector type
     for task in data['analyses']:
-        input_tokens = task.get('input_tokens', 0)
-        output_tokens = task.get('output_tokens', 0)
+        # Detectors serialize missing measurements as null (e.g. the
+        # BaseDetector.analyze_task fallback after an analysis error), so the
+        # keys are present with value None and .get() defaults do not apply.
+        input_tokens = task.get('input_tokens') or 0
+        output_tokens = task.get('output_tokens') or 0
         model = task.get('model_used', 'gpt-4')
 
         # Get pricing for the model
@@ -105,7 +108,7 @@ def load_and_recalculate(analysis_path: Path, detector_name: str) -> Dict[str, A
         if detector_name == 'adr' or detector_name.startswith('adr-'):
             # For ADR and ablation configs, use stored cost_usd if available
             # In centralized mode, token counts aren't tracked — default to 0
-            if 'cost_usd' not in task:
+            if task.get('cost_usd') is None:
                 task['cost_usd'] = 0.0
 
         else:
@@ -129,8 +132,8 @@ def extract_metrics(data: Dict[str, Any]) -> Tuple[np.ndarray, np.ndarray, np.nd
         pred = 1 if task.get('is_malicious', False) else 0
         label = 1 if task.get('ground_truth_binary', False) else 0
         conf = task.get('confidence_score', 0.5)
-        cost = task.get('cost_usd', 0.0)
-        latency = task.get('analysis_time', 0.0)
+        cost = task.get('cost_usd') or 0.0
+        latency = task.get('analysis_time') or 0.0
 
         predictions.append(pred)
         labels.append(label)
