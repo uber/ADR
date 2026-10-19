@@ -177,14 +177,14 @@ class LinuxProviders(HostResolver, NullProviders):
                 raw = gate.read_text(entry.path, limit=65536)
                 if not raw.ok:
                     continue
-                fields = dict(
-                    line.split("=", 1) for line in raw.value.splitlines() if "=" in line and not line.startswith("#")
-                )
+                fields = _desktop_entry(raw.value)
                 apps.append(
                     Application(
                         ident=entry.path.rsplit("/", 1)[-1].removesuffix(".desktop"),
                         name=fields.get("Name", ""),
-                        version=fields.get("Version"),
+                        # `Version` in a desktop entry is the version of the
+                        # Desktop Entry specification, not of the application.
+                        version=None,
                         path=fields.get("Exec"),
                     )
                 )
@@ -213,6 +213,26 @@ class LinuxProviders(HostResolver, NullProviders):
             return Refused("not_owned", path)
         pkg = ran.value.stdout.split(":", 1)[0].strip()
         return Ok(Package("dpkg", pkg, None, path))
+
+
+def _desktop_entry(text: str) -> dict[str, str]:
+    """Keys of the `[Desktop Entry]` group only.
+
+    Later groups such as `[Desktop Action new-window]` reuse `Name` and
+    `Exec` for their own menu items and must not override the application's.
+    """
+    fields: dict[str, str] = {}
+    in_entry = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            in_entry = stripped == "[Desktop Entry]"
+            continue
+        if not in_entry or not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, _, value = stripped.partition("=")
+        fields.setdefault(key.strip(), value.strip())
+    return fields
 
 
 def _hex_ip(hex_addr: str) -> str:

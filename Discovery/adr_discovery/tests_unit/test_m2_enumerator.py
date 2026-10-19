@@ -386,3 +386,31 @@ def test_legacy_home_roots_with_root_is_not_treated_as_parent():
     assert "/root" in discovered
     assert "/home/alice" in discovered
     assert "/root/child_dir" not in discovered
+
+
+def test_linux_desktop_entry_ignores_action_groups(world):
+    """A .desktop file's `[Desktop Action ...]` groups reuse `Name` and
+    `Exec`; they must not replace the application's own, and `Version` is
+    the desktop-entry spec version, not the application's."""
+    from adr_discovery.world.platform.linux import LinuxProviders
+
+    world.file(
+        "/usr/share/applications/code.desktop",
+        "[Desktop Entry]\n"
+        "Version=1.0\n"
+        "Name=Visual Studio Code\n"
+        "Exec=/usr/share/code/code %F\n"
+        "Type=Application\n"
+        "Actions=new-empty-window;\n"
+        "\n"
+        "[Desktop Action new-empty-window]\n"
+        "Name=New Empty Window\n"
+        "Exec=/usr/share/code/code --new-window %F\n",
+    )
+    result = world.gate(providers=LinuxProviders()).applications()
+    assert result.ok
+    (app,) = result.value
+    assert app.ident == "code"
+    assert app.name == "Visual Studio Code"
+    assert app.path == "/usr/share/code/code %F"
+    assert app.version is None
