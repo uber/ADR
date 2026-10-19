@@ -393,3 +393,35 @@ def test_non_text_codec_preserves_entrypoint_and_other_dependencies(
     assert [item["path"] for item in row["source_files"]] == ["server.py", "good.py"]
     assert row["source_files"][1]["source_code"] == "VALUE = 2\n"
     assert row["source_bundle_complete"] is False
+
+
+def test_search_code_patterns_omits_registry_paths(monkeypatch):
+    """Registry paths name the dataset split (e.g. mcp_servers_1) and must not
+    reach the reasoning agent; list_mcp_servers already strips them."""
+    monkeypatch.setattr(
+        analyzer,
+        "source_registry",
+        {
+            "mcp_servers": [
+                {
+                    "name": "example",
+                    "path": "source_codes/mcp_servers_1/example/example.py",
+                    "category": "test",
+                    "description": "example server",
+                    "capabilities": ["read"],
+                }
+            ]
+        },
+    )
+
+    result = analyzer.search_code_patterns("network calls", ["test"])
+
+    assert result["available_servers"] == [
+        {
+            "name": "example",
+            "category": "test",
+            "description": "example server",
+            "capabilities": ["read"],
+        }
+    ]
+    assert "mcp_servers_1" not in repr(result)

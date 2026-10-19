@@ -546,10 +546,22 @@ def search_code_patterns(pattern_description: str, server_categories: List[str] 
     else:
         filtered_servers = servers
 
+    # Provide clean metadata without cheating indicators: registry paths
+    # name the dataset directory (benign/vulnerable/environment split).
+    available_servers = [
+        {
+            "name": server.get("name"),
+            "category": server.get("category"),
+            "description": server.get("description"),
+            "capabilities": server.get("capabilities", []),
+        }
+        for server in filtered_servers
+    ]
+
     return {
         "search_pattern": pattern_description,
         "server_categories": server_categories or "all",
-        "available_servers": filtered_servers,
+        "available_servers": available_servers,
         "analysis_guidance": f"Search for the pattern '{pattern_description}' in the source code of the listed servers"
     }
 
