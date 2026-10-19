@@ -26,6 +26,25 @@ class TestAgentObserver:
         assert observer.dsh_parser.max_age_days == 14
         assert ("dsh", "DeepSeek Harness") in observer.SOURCES
 
+    def test_init_creates_nested_output_dir(self, tmp_path):
+        """`--output-dir a/b/c` must not crash when the parents do not exist yet."""
+        output_dir = tmp_path / "a" / "b" / "c"
+        observer = AgentObserver(output_dir=output_dir)
+        assert observer.output_dir.is_dir()
+
+    def test_save_to_file_creates_nested_output_dir(self, tmp_path):
+        observer = AgentObserver(output_dir=tmp_path)
+        entry = AgentEvent(
+            timestamp=datetime(2025, 1, 1, tzinfo=timezone.utc),
+            source="claude",
+            session_id="test",
+            hostname="host",
+            username="user",
+            chat_history=[ChatMessage(role="user", content="hello"), ChatMessage(role="assistant", content="hi")],
+        )
+        saved = observer.save_to_file([entry], [], output_dir=tmp_path / "x" / "y")
+        assert saved[0].exists()
+
     def test_init_propagates_max_age_days_to_cline(self, tmp_path):
         observer = AgentObserver(output_dir=tmp_path, max_age_days=30)
 

@@ -106,7 +106,7 @@ class AgentObserver:
         )
 
         self.output_dir = output_dir if output_dir else Path("output")
-        self.output_dir.mkdir(exist_ok=True)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         self._diagnostic_records: List[dict] = []
         self._diagnostics_flushed = 0
         self._diagnostic_write_failed = False
@@ -311,7 +311,7 @@ class AgentObserver:
             List of saved file paths.
         """
         target_dir = output_dir if output_dir else self.output_dir
-        target_dir.mkdir(exist_ok=True)
+        target_dir.mkdir(parents=True, exist_ok=True)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         saved_files = []
