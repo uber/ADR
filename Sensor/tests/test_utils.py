@@ -91,6 +91,22 @@ class TestNormalizeTimestamp:
         dt = normalize_timestamp(1704067200.5)
         assert dt.year == 2024
 
+    @pytest.mark.parametrize(
+        ("value", "microsecond"),
+        [
+            ("2025-07-16T13:32:09.5Z", 500000),
+            ("2025-07-16T13:32:09.12345Z", 123450),
+            ("2025-07-16T13:32:09.123456789Z", 123456),
+            ("2025-07-16T13:32:09.123456789-07:00", 123456),
+            ("2025-07-16 13:32:09.1234567", 123456),
+        ],
+    )
+    def test_iso_string_with_any_fraction_length(self, value, microsecond):
+        # Python < 3.11 fromisoformat() only accepts 3 or 6 fractional digits.
+        dt = normalize_timestamp(value)
+        assert dt.tzinfo == timezone.utc
+        assert (dt.minute, dt.second, dt.microsecond) == (32, 9, microsecond)
+
 
 class TestFormatTimestampForFilename:
     def test_format(self):

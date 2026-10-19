@@ -2,8 +2,17 @@
 Timestamp utilities for standardized datetime handling across parsers.
 """
 
+import re
 from datetime import datetime, timezone
 from typing import Optional, Union
+
+# Python < 3.11 fromisoformat() only accepts 3 or 6 fractional-second digits,
+# but RFC 3339 writers (e.g. Go's RFC3339Nano) emit anywhere from 1 to 9.
+_FRACTIONAL_SECONDS = re.compile(r"(?<=:\d\d)\.(\d+)")
+
+
+def _fraction_to_microseconds(match: "re.Match[str]") -> str:
+    return "." + (match.group(1) + "000000")[:6]
 
 
 def normalize_timestamp(timestamp: Union[str, int, float, datetime]) -> datetime:
@@ -28,6 +37,7 @@ def normalize_timestamp(timestamp: Union[str, int, float, datetime]) -> datetime
     elif isinstance(timestamp, str):
         try:
             iso_str = timestamp.replace("Z", "+00:00")
+            iso_str = _FRACTIONAL_SECONDS.sub(_fraction_to_microseconds, iso_str, count=1)
             dt = datetime.fromisoformat(iso_str)
         except ValueError:
             try:
