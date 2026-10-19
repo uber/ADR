@@ -470,13 +470,17 @@ if __name__ == "__main__":
     "command": "uv",
     "args_template": [
       "run", "fastmcp", "run",
-      "context_providers/source_codes/mcp_servers_0/your_server/your_server.py"
+      "../../../../context_providers/source_codes/mcp_servers_0/your_server/your_server.py"
     ],
     "capabilities": ["your_function"],
     "verified": true
   }
 }
 ```
+
+   The benchmark starts each server from the task workspace
+   (`benchmark/adr_bench_*/task_XXX/workspace/`), so the script path must be
+   relative to that directory, as in the existing registry entries.
 
 1. **Test your server**:
 
