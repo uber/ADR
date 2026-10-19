@@ -35,6 +35,23 @@ class TestBenchmarkPackRoundTrip:
         assert (out_dir / "task_001" / "result.json").exists()
 
 
+    def test_deflate_skips_raw_agentdojo_run_dirs(self, tmp_path: Path):
+        bench_dir = tmp_path / "agentdojo_20260101_000000"
+        bench_dir.mkdir()
+        workspace = bench_dir / "task_001" / "workspace"
+        workspace.mkdir(parents=True)
+        with open(workspace / "claude_conversation.json", "w", encoding="utf-8") as f:
+            json.dump([{"role": "user", "content": "hi"}], f)
+        # Raw AgentDojo output written next to the converted task directory.
+        (bench_dir / "task_001_agentdojo_run" / "slack").mkdir(parents=True)
+
+        jsonl_path = tmp_path / "out.jsonl"
+        cmd_deflate(bench_dir, tasks_file_arg=None, output=jsonl_path)
+
+        records = [json.loads(line) for line in jsonl_path.read_text().splitlines()]
+        assert records[0]["task_count"] == 1
+        assert [r["task_id"] for r in records[1:]] == ["task_001"]
+
 class TestBenchmarkPackSecurity:
     def test_rejects_path_traversal_task_id(self, tmp_path: Path, sample_jsonl: Path, capsys):
         malicious = sample_jsonl.read_text().splitlines()

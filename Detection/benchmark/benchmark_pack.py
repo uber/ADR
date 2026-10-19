@@ -83,10 +83,11 @@ def cmd_deflate(benchmark_dir: Path, tasks_file_arg: str | None, output: Path | 
     else:
         print("Warning: ground_truth.json not found; manifest will omit ground truth", file=sys.stderr)
 
-    # Discover task directories (task_NNN)
+    # Discover task directories (task_NNN), skipping raw AgentDojo output
+    # directories (task_NNN_agentdojo_run) that hold no conversation
     task_dirs = sorted(
         d for d in benchmark_dir.iterdir()
-        if d.is_dir() and d.name.startswith("task_")
+        if d.is_dir() and d.name.startswith("task_") and not d.name.endswith("_agentdojo_run")
     )
     task_count = len(task_dirs)
 
