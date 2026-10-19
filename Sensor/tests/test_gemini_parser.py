@@ -85,6 +85,25 @@ def test_journal_updates_keep_results_permissions_and_metadata(tmp_path):
     assert (path.read_bytes(), path.stat().st_mtime_ns) == before
 
 
+def test_history_patch_is_a_journal_control_not_session_metadata(tmp_path):
+    rows = records()
+    finished = deepcopy(rows[-1])
+    finished["toolCalls"][0].update(status="success", result=[{"text": "original output"}])
+    patch = {
+        "$patch": {
+            "updates": [{"id": "assistant1", "toolCalls": [{"id": "call1", "result": [{"text": "[masked]"}]}]}],
+            "removeIds": ["user1"],
+        }
+    }
+    rows.extend([finished, patch])
+    write(tmp_path / "project/chats/session-patch.jsonl", rows)
+    event = GeminiParser(base_path=tmp_path).parse_all()[0]
+    assert "$patch" not in event.session_context["session_metadata"]
+    assert event.session_context["journal_controls"] == [patch]
+    assert [message.sequence_id for message in event.chat_history] == ["user1", "assistant1"]
+    assert "original output" in event.chat_history[-1].tools[0].result
+
+
 def test_legacy_snapshot_and_jsonl_migration_deduplicate(tmp_path):
     rows = records()
     legacy = dict(rows[0], messages=rows[1:])

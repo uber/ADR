@@ -1,8 +1,9 @@
 """Read Gemini CLI chat journals and legacy conversation snapshots.
 
 The source contract is Google's chatRecordingTypes.ts / chatRecordingService.ts.
-Journals upsert complete messages by ID; ADR retains activity across rewinds
-and checkpoints because removing model context does not undo executed actions.
+Journals upsert complete messages by ID; ADR retains activity across rewinds,
+history patches and checkpoints because removing or masking model context does
+not undo executed actions.
 """
 
 import json
@@ -140,7 +141,7 @@ class GeminiParser(BaseParser):
                     malformed += 1
                     continue
                 event_count += 1
-                if "$rewindTo" in record:
+                if "$rewindTo" in record or "$patch" in record:
                     controls.append(record)
                     continue
                 if "id" in record:
