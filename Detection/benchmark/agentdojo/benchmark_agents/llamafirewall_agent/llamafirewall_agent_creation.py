@@ -172,8 +172,12 @@ Return a JSON object:
         firewall = state["firewall"]
         warnings = state.get("warnings", [])
 
-        # Scan user input with LlamaFirewall (includes PromptGuard)
-        if messages:
+        # Scan user input with LlamaFirewall (includes PromptGuard) once per run.
+        # call_model runs again after every tool step; rescanning would add a
+        # duplicate PromptGuard warning and re-append the user message to the
+        # trace after the tool outputs that AlignmentCheck reviews.
+        user_input_already_scanned = any(w.message_type == "user_input" for w in warnings)
+        if messages and not user_input_already_scanned:
             last_user_message = None
             for msg in reversed(messages):
                 if isinstance(msg, HumanMessage):
