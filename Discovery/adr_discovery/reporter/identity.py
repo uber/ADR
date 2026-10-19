@@ -19,6 +19,13 @@ def by_id(assets: tuple[Asset, ...]) -> dict[str, Asset]:
     return {a.asset_id: a for a in assets}
 
 
-def by_identity(assets: tuple[Asset, ...]) -> dict[tuple[str, str, str], Asset]:
-    """A weaker key, used only to tell a reinstall from a disappearance."""
-    return {(a.kind.value, a.identity, a.owner): a for a in assets}
+def by_identity(assets: tuple[Asset, ...]) -> dict[tuple[str, str, str], list[Asset]]:
+    """A weaker key, used only to tell a reinstall from a disappearance.
+
+    Several assets can share it (two installs of one tool by one owner), so
+    every one is kept, in snapshot order.
+    """
+    grouped: dict[tuple[str, str, str], list[Asset]] = {}
+    for a in assets:
+        grouped.setdefault((a.kind.value, a.identity, a.owner), []).append(a)
+    return grouped

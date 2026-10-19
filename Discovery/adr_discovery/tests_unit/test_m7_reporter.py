@@ -113,3 +113,29 @@ def test_u7_09_a_snapshot_round_trips():
     assert document["assets"][0]["asset_id"] == "id-claude-code"
     assert document["assets"][0]["kind"] == "cli_agent"
     assert json.loads(to_json(original)) == document
+
+
+def test_a_second_install_of_the_same_tool_does_not_hide_a_removal():
+    """Two installs share (kind, identity, owner). Removing one and adding
+    another must still account for every old asset exactly once."""
+    a = asset(asset_id="id-a", root="/opt/a")
+    b = asset(asset_id="id-b", root="/opt/b")
+    c = asset(asset_id="id-c", root="/opt/c")
+
+    delta = diff(snapshot([a, b]), snapshot([b, c]))
+
+    assert [(ch.kind, ch.asset_id, ch.detail) for ch in delta.changes] == [
+        ("reinstalled", "id-c", "/opt/a -> /opt/c")
+    ]
+
+
+def test_one_removed_install_pairs_with_at_most_one_new_install():
+    a = asset(asset_id="id-a", root="/opt/a")
+    b = asset(asset_id="id-b", root="/opt/b")
+    c = asset(asset_id="id-c", root="/opt/c")
+
+    delta = diff(snapshot([a]), snapshot([b, c]))
+
+    assert [(ch.kind, ch.asset_id) for ch in delta.changes] == [
+        ("reinstalled", "id-b"), ("appeared", "id-c")
+    ]

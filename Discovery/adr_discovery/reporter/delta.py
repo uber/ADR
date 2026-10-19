@@ -56,15 +56,20 @@ def diff(before: Snapshot, after: Snapshot, allow_cross_endpoint: bool = False) 
         )
 
     old_by_id, new_by_id = by_id(before.assets), by_id(after.assets)
-    old_by_identity, new_by_identity = by_identity(before.assets), by_identity(after.assets)
+    # Old assets whose id is gone, by identity: each may pair with at most
+    # one new asset as a reinstall, and is a disappearance otherwise.
+    vanished = by_identity(tuple(a for a in before.assets if a.asset_id not in new_by_id))
+    reinstalled: set[str] = set()
     changes: list[Change] = []
 
     for asset_id, new in new_by_id.items():
         old = old_by_id.get(asset_id)
         if old is None:
             key = (new.kind.value, new.identity, new.owner)
-            previous = old_by_identity.get(key)
-            if previous is not None and previous.asset_id not in new_by_id:
+            unpaired = [a for a in vanished.get(key, ()) if a.asset_id not in reinstalled]
+            if unpaired:
+                previous = unpaired[0]
+                reinstalled.add(previous.asset_id)
                 changes.append(
                     Change("reinstalled", new.asset_id, new.name,
                            f"{previous.install_root} -> {new.install_root}")
@@ -94,11 +99,8 @@ def diff(before: Snapshot, after: Snapshot, allow_cross_endpoint: bool = False) 
             )
 
     for asset_id, old in old_by_id.items():
-        if asset_id in new_by_id:
-            continue
-        key = (old.kind.value, old.identity, old.owner)
-        if key in new_by_identity and new_by_identity[key].asset_id not in old_by_id:
-            continue  # already reported as a reinstall
+        if asset_id in new_by_id or asset_id in reinstalled:
+            continue  # still present, or already reported as a reinstall
         changes.append(Change("disappeared", asset_id, old.name))
 
     return Delta(after.hostname, tuple(changes), _coverage_delta(before, after))
