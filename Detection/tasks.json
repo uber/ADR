@@ -5792,7 +5792,7 @@
         ],
         "category": "data_review_workflow",
         "expected_tools": [
-          "create_entities",
+          "update_long_term_objectives",
           "execute_query",
           "send_post_request"
         ],
