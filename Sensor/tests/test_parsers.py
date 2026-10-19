@@ -2309,6 +2309,32 @@ class TestOpencodeParserSqlite:
         assert "[OPENCODE] Error processing session ses_locked: database is locked" in captured.err
         assert "Error processing session" not in captured.out
 
+    @pytest.mark.parametrize("dirname", ["data#1", "100%data", "what?"])
+    def test_reads_database_under_path_with_uri_special_characters(self, tmp_path, dirname):
+        base = tmp_path / dirname
+        base.mkdir()
+        _build_opencode_db(
+            base / "opencode.db",
+            sessions=[{"id": "ses_uri"}],
+            messages=[{"id": "msg_uri", "session_id": "ses_uri", "data": {"role": "user"}}],
+            parts=[
+                {
+                    "id": "prt_uri",
+                    "message_id": "msg_uri",
+                    "session_id": "ses_uri",
+                    "data": {"type": "text", "text": "hello from a special path"},
+                }
+            ],
+        )
+
+        parser = _make_opencode_parser(base)
+        entries = parser.parse_all()
+
+        assert parser.backend == "sqlite"
+        assert [entry.session_id for entry in entries] == ["opencode_uri"]
+        # A '#' must not truncate the path and create a stray database file.
+        assert sorted(path.name for path in tmp_path.iterdir()) == [dirname]
+
     def test_unreadable_database_still_records_database_error(self, tmp_path):
         db_path = tmp_path / "opencode.db"
         db_path.write_bytes(b"not a sqlite database" * 10)

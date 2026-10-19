@@ -156,11 +156,16 @@ class OpencodeParser(BaseParser):
         return candidates[0] if candidates else None
 
     @staticmethod
+    def _read_only_uri(db_path: Path) -> str:
+        """Build a read-only SQLite URI, percent-encoding characters such as '#', '?' and '%'."""
+        return f"{Path(db_path).resolve().as_uri()}?mode=ro"
+
+    @staticmethod
     def _has_session_schema(db_path: Path) -> bool:
         """Return True if the database has opencode's session tables."""
         conn = None
         try:
-            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            conn = sqlite3.connect(OpencodeParser._read_only_uri(db_path), uri=True)
             rows = conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
         except (sqlite3.Error, OSError):
             return False
@@ -224,7 +229,7 @@ class OpencodeParser(BaseParser):
         conn = None
         try:
             # Open read-only so we never disturb a live opencode process.
-            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            conn = sqlite3.connect(OpencodeParser._read_only_uri(db_path), uri=True)
             conn.row_factory = sqlite3.Row
 
             sessions = self._get_sqlite_sessions(conn)
