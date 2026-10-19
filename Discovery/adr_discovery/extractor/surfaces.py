@@ -84,7 +84,10 @@ def _is_member(entry, suffixes: tuple[str, ...], nested: bool) -> bool:
     if name.startswith("."):
         return False
     if nested:
-        return entry.is_dir
+        # A linked skill or plugin directory (`ln -s ~/src/review
+        # ~/.claude/skills/review`) loads like a real one. The manifest
+        # check that follows drops links to files and dangling links.
+        return entry.is_dir or entry.is_symlink
     return any(name.endswith(s) for s in suffixes if s)
 
 

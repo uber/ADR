@@ -88,6 +88,21 @@ def test_one_broken_skill_does_not_remove_its_siblings(world):
     assert len(result.errors) == 1
 
 
+def test_a_linked_skill_directory_is_a_member(world):
+    """`ln -s ~/src/review ~/.claude/skills/review` loads like a real directory."""
+    world.file("/Users/a/src/review/SKILL.md", "---\nname: review\n---\nbody\n")
+    world.file("/Users/a/.claude/skills/other/SKILL.md", "---\nname: other\n---\nbody\n")
+    world.file("/Users/a/notes.md", "not a skill")
+    world.symlink("/Users/a/.claude/skills/review", "/Users/a/src/review")
+    world.symlink("/Users/a/.claude/skills/file-link", "/Users/a/notes.md")
+    world.symlink("/Users/a/.claude/skills/dangling", "/Users/a/nowhere")
+
+    result = read(world, "/Users/a/.claude/skills")
+
+    assert sorted(d.name for d in result.declarations) == ["other", "review"]
+    assert result.declared == 2 and result.errors == ()
+
+
 def test_a_directory_without_its_manifest_is_not_a_member(world):
     """`plugins/` also holds the host's bookkeeping. That is not a failed read."""
     world.file("/Users/a/.claude/plugins/p/.claude-plugin/plugin.json", '{"name": "p"}')
