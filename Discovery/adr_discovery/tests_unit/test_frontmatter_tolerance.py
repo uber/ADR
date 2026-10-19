@@ -162,3 +162,25 @@ def test_skipped_keys_become_a_coverage_note_not_an_error(world):
     assert result.errors == () and len(result.declarations) == 1
     probes = [p for p in gate.ledger.freeze().probes if p.name == "frontmatter"]
     assert len(probes) == 1 and probes[0].status == "ran" and "description" in probes[0].detail
+
+
+def test_bracketed_argument_hint_is_skipped_not_failed():
+    # The form Claude Code documents for slash commands.
+    values, skipped = parse_with_notes(fm("argument-hint: [pr-number] [priority] [assignee]", "model: haiku"))
+
+    assert values == {"model": "haiku"}
+    assert skipped == ("argument-hint",)
+
+
+def test_a_command_with_a_bracketed_argument_hint_is_a_declaration(world):
+    from adr_discovery.contracts.records import Candidate
+    from adr_discovery.extractor import extract
+
+    world.file("/Users/a/.claude/commands/review-pr.md",
+               fm("argument-hint: [pr-number] [priority]", "allowed-tools: Bash(gh pr view:*)"))
+    result = extract(world.gate(), Candidate("marker_dir", "/Users/a/.claude/commands", "sweep"))
+
+    assert result.errors == ()
+    assert [(d.name, d.raw["allowed_tools"]) for d in result.declarations] == [
+        ("review-pr", ("Bash(gh pr view:*)",))
+    ]

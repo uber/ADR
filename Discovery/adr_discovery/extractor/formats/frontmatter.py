@@ -153,9 +153,12 @@ def _value(key: str, rest: str, continuation: list[str]):
         raise Unrepresentable(f"{key}: anchor, alias or tag outside the supported subset")
 
     if rest[:1] == "[":
+        if not is_list:
+            # Only list keys use the items. `argument-hint: [pr] [priority]`
+            # is how Claude Code documents hints; it is not one flow list.
+            return _SKIP
         text = " ".join([rest, *(_strip_comment(line.strip()) for line in content)])
-        items = _flow_items(key, text)
-        return items if is_list else _SKIP
+        return _flow_items(key, text)
 
     if rest[:1] == "{":
         if is_list:
