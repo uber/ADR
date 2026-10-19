@@ -3291,7 +3291,7 @@ wheels = [
 
 [[package]]
 name = "mcp"
-version = "1.11.0"
+version = "1.30.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -3300,15 +3300,18 @@ dependencies = [
     { name = "jsonschema" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "pyjwt", extra = ["crypto"] },
     { name = "python-multipart" },
     { name = "pywin32", marker = "sys_platform == 'win32'" },
     { name = "sse-starlette" },
     { name = "starlette" },
+    { name = "typing-extensions" },
+    { name = "typing-inspection" },
     { name = "uvicorn", marker = "sys_platform != 'emscripten'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/3a/f5/9506eb5578d5bbe9819ee8ba3198d0ad0e2fbe3bab8b257e4131ceb7dfb6/mcp-1.11.0.tar.gz", hash = "sha256:49a213df56bb9472ff83b3132a4825f5c8f5b120a90246f08b0dac6bedac44c8", size = 406907, upload-time = "2025-07-10T16:41:09.388Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ba/93/0142dc84a666daf8ad51a34268f34c12fd6fda4f3810c4be2504eecc8212/mcp-1.30.0.tar.gz", hash = "sha256:445414625fce5c295faa505bb11bacece661ab6f4028d57c935db57820b7a3e4", size = 680511, upload-time = "2026-09-07T14:34:15.845Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/92/9c/c9ca79f9c512e4113a5d07043013110bb3369fc7770040c61378c7fbcf70/mcp-1.11.0-py3-none-any.whl", hash = "sha256:58deac37f7483e4b338524b98bc949b7c2b7c33d978f5fafab5bde041c5e2595", size = 155880, upload-time = "2025-07-10T16:41:07.935Z" },
+    { url = "https://files.pythonhosted.org/packages/f5/f4/e58bc33317c92a0203664daaf00bf6f41166cc0149e5d6870a03f7cd004a/mcp-1.30.0-py3-none-any.whl", hash = "sha256:666edb5009503e1047c9d60346a756f94b261f05cc2625f23d41c728ffc484d0", size = 234581, upload-time = "2026-09-07T14:34:14.266Z" },
 ]
 
 [[package]]
