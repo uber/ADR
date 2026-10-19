@@ -63,6 +63,9 @@ def search_policies(keywords: List[str]) -> Dict[str, Any]:
     for policy in policies:
         # Search in policy text fields
         policy_text = f"{policy.get('name', '')} {policy.get('description', '')}"
+        # The policy store keeps each policy's main text under `policy`.
+        if policy.get('policy'):
+            policy_text += " " + str(policy['policy'])
         if policy.get('requirements'):
             policy_text += " " + " ".join(policy.get('requirements', []))
 
