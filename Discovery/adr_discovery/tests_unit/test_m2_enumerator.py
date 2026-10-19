@@ -386,3 +386,16 @@ def test_legacy_home_roots_with_root_is_not_treated_as_parent():
     assert "/root" in discovered
     assert "/home/alice" in discovered
     assert "/root/child_dir" not in discovered
+
+
+def test_darwin_brew_reports_newest_keg_by_version(world):
+    """With old kegs left in the Cellar, the newest is chosen by version
+    order: "0.10.1" is newer than "0.9.6" though it sorts first by name."""
+    from adr_discovery.world.platform.darwin import DarwinProviders
+
+    world.dir("/opt/homebrew/Cellar/ollama/0.9.6").dir("/opt/homebrew/Cellar/ollama/0.10.1")
+    world.file("/opt/homebrew/Cellar/ollama/.DS_Store")
+    result = world.gate(providers=DarwinProviders()).packages()
+    assert result.ok
+    (brew,) = [p for p in result.value if p.manager == "brew"]
+    assert (brew.name, brew.version) == ("ollama", "0.10.1")

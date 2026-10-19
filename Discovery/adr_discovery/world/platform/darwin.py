@@ -7,6 +7,7 @@ name, so the exe requirement is met without /proc.
 from __future__ import annotations
 
 import plistlib
+import re
 
 try:
     import pwd
@@ -125,13 +126,21 @@ class DarwinProviders(HostResolver, NullProviders):
                     continue
                 name = entry.path.rsplit("/", 1)[-1]
                 versions = gate.list_dir(entry.path)
-                version = (
-                    versions.value[-1].path.rsplit("/", 1)[-1] if versions.ok and versions.value else None
-                )
+                kegs = [v.path.rsplit("/", 1)[-1] for v in versions.value if v.is_dir] if versions.ok else []
+                # Newest keg by version, not by name: "0.10.1" sorts before "0.9.6".
+                version = max(kegs, key=_version_key) if kegs else None
                 found.append(Package("brew", name, version, entry.path))
         if not found:
             return self._unavailable(gate, "packages")
         return Ok(tuple(found))
+
+
+def _version_key(version: str) -> tuple:
+    """Order version strings numerically where they are numeric."""
+    return tuple(
+        (0, int(part), "") if part.isdigit() else (1, 0, part)
+        for part in re.findall(r"\d+|[^\d.]+", version)
+    )
 
 
 def _str_or_none(v):
