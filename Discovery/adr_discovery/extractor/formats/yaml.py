@@ -53,7 +53,7 @@ def _sequence(lines, i: int, indent: int):
         rest = body[2:].strip()
         i += 1
 
-        if ":" not in rest:
+        if not _opens_mapping(rest):
             out.append(_scalar(rest, lineno))
             continue
 
@@ -68,6 +68,17 @@ def _sequence(lines, i: int, indent: int):
             raise Unrepresentable(f"line {block[consumed][0]}: indentation does not resolve")
         out.append(value)
     return out, i
+
+
+def _opens_mapping(item: str) -> bool:
+    """Whether a sequence item is `key: value` rather than a scalar.
+
+    A key is followed by `: ` or ends the line; `localhost:9000`, a URL, or
+    a quoted `"8080:80"` is one scalar.
+    """
+    if len(item) >= 2 and item[0] in "\"'" and item[-1] == item[0] and item[0] not in item[1:-1]:
+        return False
+    return item.endswith(":") or ": " in item
 
 
 def _mapping(lines, i: int, indent: int):
