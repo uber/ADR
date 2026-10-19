@@ -97,13 +97,15 @@ def _mapping(lines, i: int, indent: int):
 def _guard(body: str, lineno: int) -> None:
     if body.startswith(REFUSED_PREFIXES):
         raise Unrepresentable(f"line {lineno}: construct outside the supported subset")
-    tail = body.split(":", 1)[-1]
-    if any(c in tail for c in REFUSED_CHARS):
+    # A flow collection is a value that *opens* with a bracket; `${{ x }}`
+    # or `a[0]` inside a plain scalar is ordinary text.
+    tail = body.split(":", 1)[-1].strip()
+    if body.startswith(REFUSED_CHARS) or tail.startswith(REFUSED_CHARS):
         raise Unrepresentable(f"line {lineno}: flow collection outside the supported subset")
 
 
 def _scalar(token: str, lineno: int):
-    if token.startswith(REFUSED_PREFIXES) or any(c in token for c in REFUSED_CHARS):
+    if token.startswith(REFUSED_PREFIXES) or token.startswith(REFUSED_CHARS):
         raise Unrepresentable(f"line {lineno}: scalar outside the supported subset")
     return typed_scalar(token)
 
