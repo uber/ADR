@@ -299,7 +299,7 @@ class CopilotParser(BaseParser):
             if tool is not None:
                 success = bool(data.get("success"))
                 result_text = self._normalize_tool_result(data.get("result"))
-                error_text = self._normalize_tool_result(data.get("error"))
+                error_text = self._normalize_tool_error(data.get("error"))
                 tool["result"] = result_text
                 tool["status"] = "success" if success else "error"
                 if not success:
@@ -512,6 +512,14 @@ class CopilotParser(BaseParser):
             return text
 
         return truncate_middle(text, max_length=MAX_STRING_LENGTH, edge_chars=EDGE_CHARS)
+
+    def _normalize_tool_error(self, error: Any) -> Optional[str]:
+        """Use the message of Copilot's {"message", "code"} error object."""
+        if isinstance(error, dict):
+            message = error.get("message")
+            if isinstance(message, str) and message:
+                return truncate_middle(message, max_length=MAX_STRING_LENGTH, edge_chars=EDGE_CHARS)
+        return self._normalize_tool_result(error)
 
     def _truncate_large_arguments(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Truncate large string values within tool argument dictionaries."""

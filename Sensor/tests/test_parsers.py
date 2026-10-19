@@ -1680,6 +1680,33 @@ class TestCopilotParser:
         assert tool.result is None
         assert tool.error == "File not found"
 
+    def test_tool_failure_uses_message_of_error_object(self, tmp_path):
+        """Copilot's schema records a failed tool's error as {"message", "code"}."""
+        session_dir = tmp_path / "error-object"
+        events = self._minimal_events("error-object") + [
+            {
+                "type": "tool.execution_start",
+                "timestamp": "2026-08-10T10:00:02.000Z",
+                "data": {"toolCallId": "call-1", "toolName": "bash", "arguments": {"command": "rm -rf build"}},
+            },
+            {
+                "type": "tool.execution_complete",
+                "timestamp": "2026-08-10T10:00:03.000Z",
+                "data": {
+                    "toolCallId": "call-1",
+                    "success": False,
+                    "error": {"message": "The user rejected this tool call.", "code": "denied"},
+                },
+            },
+        ]
+        self._write_events(session_dir, events)
+
+        entry = CopilotParser(base_path=tmp_path).parse_session_dir(session_dir)
+
+        tool = [tool for message in entry.chat_history for tool in message.tools][0]
+        assert tool.status == "error"
+        assert tool.error == "The user rejected this tool call."
+
     def test_default_max_age_days(self):
         assert CopilotParser().max_age_days == 14
 
