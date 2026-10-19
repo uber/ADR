@@ -150,6 +150,7 @@ class CopilotParser(BaseParser):
                 ToolUsage(
                     tool_name=tool_dict["tool_name"],
                     tool_type=tool_dict["tool_type"],
+                    server_name=tool_dict.get("server_name"),
                     arguments=tool_dict["arguments"],
                     result=tool_dict.get("result"),
                     status=tool_dict.get("status"),
@@ -264,6 +265,7 @@ class CopilotParser(BaseParser):
                     "status": "pending",
                     "error": None,
                 }
+                self._apply_mcp_server(tool_dict, request.get("mcpServerName"))
                 tools.append(tool_dict)
                 if tool_call_id:
                     session_data["pending_tool_calls"][tool_call_id] = tool_dict
@@ -291,6 +293,7 @@ class CopilotParser(BaseParser):
                 tool["tool_name"] = data.get("toolName") or tool["tool_name"]
                 tool["arguments"] = self._truncate_large_arguments(data.get("arguments") or tool["arguments"])
                 tool["status"] = "running"
+                self._apply_mcp_server(tool, data.get("mcpServerName"))
             session_data["model"] = data.get("model") or session_data["model"]
             return
 
@@ -426,6 +429,13 @@ class CopilotParser(BaseParser):
 
         if event_type == "session.plan_changed":
             session_data["plan_changes"].append(self._sanitize_for_context(data))
+
+    @staticmethod
+    def _apply_mcp_server(tool: Dict[str, Any], server_name: Any) -> None:
+        """Attribute a tool to the MCP server Copilot recorded for it."""
+        if isinstance(server_name, str) and server_name:
+            tool["tool_type"] = "mcp_tool"
+            tool["server_name"] = server_name
 
     def _get_or_create_tool(
         self,

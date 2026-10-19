@@ -1680,6 +1680,58 @@ class TestCopilotParser:
         assert tool.result is None
         assert tool.error == "File not found"
 
+    def test_mcp_tools_are_attributed_to_their_server(self, tmp_path):
+        """toolRequests and tool.execution_start carry mcpServerName for MCP tools."""
+        session_dir = tmp_path / "mcp-session"
+        events = self._minimal_events("mcp-session") + [
+            {
+                "type": "assistant.message",
+                "timestamp": "2026-08-10T10:00:02.000Z",
+                "data": {
+                    "messageId": "assistant-1",
+                    "content": "",
+                    "toolRequests": [
+                        {
+                            "toolCallId": "call-1",
+                            "name": "github-mcp-server-get_issue",
+                            "type": "function",
+                            "arguments": {"issue_number": 7},
+                            "mcpServerName": "github-mcp-server",
+                            "mcpToolName": "get_issue",
+                        },
+                        {
+                            "toolCallId": "call-2",
+                            "name": "bash",
+                            "type": "function",
+                            "arguments": {"command": "ls"},
+                        },
+                    ],
+                },
+            },
+            {
+                "type": "tool.execution_start",
+                "timestamp": "2026-08-10T10:00:03.000Z",
+                "data": {
+                    "toolCallId": "call-3",
+                    "toolName": "playwright-browser_navigate",
+                    "arguments": {"url": "https://example.com"},
+                    "mcpServerName": "playwright",
+                    "mcpToolName": "browser_navigate",
+                },
+            },
+        ]
+        self._write_events(session_dir, events)
+
+        entry = CopilotParser(base_path=tmp_path).parse_session_dir(session_dir)
+
+        tools = {tool.tool_name: tool for message in entry.chat_history for tool in message.tools}
+        assert tools["github-mcp-server-get_issue"].tool_type == "mcp_tool"
+        assert tools["github-mcp-server-get_issue"].server_name == "github-mcp-server"
+        assert tools["playwright-browser_navigate"].tool_type == "mcp_tool"
+        assert tools["playwright-browser_navigate"].server_name == "playwright"
+        assert tools["bash"].tool_type == "function"
+        assert tools["bash"].server_name is None
+
     def test_default_max_age_days(self):
         assert CopilotParser().max_age_days == 14
 
