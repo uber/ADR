@@ -1,0 +1,75 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "summary",
+    "findings"
+  ],
+  "properties": {
+    "summary": {
+      "type": "string"
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "title",
+          "category",
+          "severity",
+          "confidence",
+          "message_index",
+          "evidence",
+          "explanation",
+          "suggestion"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "prompt_injection",
+              "data_exfiltration",
+              "credential_exposure",
+              "destructive_action",
+              "unauthorized_action",
+              "malicious_artifact"
+            ]
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ]
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "message_index": {
+            "type": "integer"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "explanation": {
+            "type": "string"
+          },
+          "suggestion": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

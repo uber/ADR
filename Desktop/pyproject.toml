@@ -30,7 +30,9 @@ adr-sensor = { path = "../Sensor", editable = true }
 include = ["adr_desktop*"]
 
 [tool.setuptools.package-data]
-adr_desktop = ["web/*", "native/*.c", "bin/*", "adapters/*.js", "plugins/*.json", "detection/inline/feed/*.json"]
+adr_desktop = ["web/*", "native/*.c", "bin/*", "adapters/*.js", "plugins/*.json", "detection/inline/feed/*.json",
+    "detection/review/config/*.json", "detection/review/prompts/*.txt", "detection/review/sql/*.sql",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,0 +1,18 @@
+{
+  "provider": "claude",
+  "model": "",
+  "background": false,
+  "mode": "budget",
+  "max_tokens": 12000,
+  "daily_tokens": 50000,
+  "daily_jobs": 5,
+  "max_seconds": 180,
+  "max_cost_usd": 0.5,
+  "daily_cost_usd": 2.0,
+  "allow_paid": false,
+  "reserve_percent": 35,
+  "idle_minutes": 15,
+  "reset_within_hours": 4,
+  "projects": [],
+  "consented": false
+}

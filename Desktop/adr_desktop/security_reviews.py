@@ -7,27 +7,13 @@ import uuid
 from .config import command_prefix
 from .detection.review.coordinator import ReviewCoordinator
 from .detection.review.quota import claude_quota, number
+from .detection.review.resources import config
 from .detection.review.runners import LocalReviewDriver
 from .detection.review.usage import connection_status
 
-DEFAULTS = {
-    "provider": "claude",
-    "model": "",
-    "background": False,
-    "mode": "budget",
-    "max_tokens": 12000,
-    "daily_tokens": 50000,
-    "daily_jobs": 5,
-    "max_seconds": 180,
-    "max_cost_usd": 0.50,
-    "daily_cost_usd": 2.0,
-    "allow_paid": False,
-    "reserve_percent": 35,
-    "idle_minutes": 15,
-    "reset_within_hours": 4,
-    "projects": [],
-    "consented": False,
-}
+DEFAULTS = config("defaults")
+
+
 def validate_preferences(value):
     if set(value) != set(DEFAULTS) | {"revision"}:
         raise ValueError("Invalid review settings")
