@@ -299,6 +299,25 @@ class ClaudeParser(BaseParser):
 
         return entries
 
+    @staticmethod
+    def _classify_tool(tool_name: str) -> Tuple[str, Optional[str]]:
+        """Classify a Claude Code tool into tool_type and optional server_name.
+
+        Claude Code names tools as:
+        - 'Bash': Terminal command execution ('terminal_command')
+        - 'mcp__<server>__<tool>': MCP server tool invocation ('mcp_tool')
+        - Others (e.g. Read, Edit, Glob, Grep, View): Built-in tool usage ('tool_use')
+        """
+        if not isinstance(tool_name, str):
+            return "tool_use", None
+        if tool_name in ("Bash", "bash"):
+            return "terminal_command", None
+        if tool_name.startswith("mcp__"):
+            parts = tool_name.split("__", 2)
+            if len(parts) >= 2 and parts[1]:
+                return "mcp_tool", parts[1]
+        return "tool_use", None
+
     def _extract_message_data(self, obj: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Extract only the needed data from a message object."""
         msg_type = obj.get("type")
@@ -336,14 +355,30 @@ class ClaudeParser(BaseParser):
                             self.record_diagnostic("record_shape_error")
                             continue
                         result_content = item.get("content", "")
-                        if "toolUseResult" in obj and isinstance(obj["toolUseResult"], dict):
-                            result_content = obj["toolUseResult"].get("result", result_content)
+                        tur = obj.get("toolUseResult") if isinstance(obj.get("toolUseResult"), dict) else {}
+                        if tur:
+                            result_content = tur.get("result", result_content)
+                            if not result_content and "error" in tur:
+                                result_content = tur.get("error", "")
 
                         result_content = self._normalize_result_content(result_content)
 
                         if result_content and isinstance(result_content, str):
                             result_content = truncate_middle(result_content, max_length=1000, edge_chars=400)
-                        tool_results.append({"tool_use_id": tool_use_id, "result": result_content})
+
+                        is_error = bool(
+                            item.get("is_error") is True
+                            or item.get("is_error") == "true"
+                            or tur.get("is_error") is True
+                            or tur.get("is_error") == "true"
+                            or tur.get("status") == "error"
+                            or "error" in tur
+                        )
+                        tool_results.append({
+                            "tool_use_id": tool_use_id,
+                            "result": result_content,
+                            "is_error": is_error,
+                        })
 
             extracted["tool_results"] = tool_results
 
@@ -354,7 +389,7 @@ class ClaudeParser(BaseParser):
                     if not isinstance(item, dict) or item.get("type") != "tool_use":
                         continue
                     raw_input = item.get("input", {})
-                    name = item.get("name", "unknown")
+                    name = item.get("name") or "unknown"
                     if not isinstance(raw_input, dict) or not isinstance(name, str):
                         self.record_diagnostic("record_shape_error")
                         continue
@@ -391,14 +426,19 @@ class ClaudeParser(BaseParser):
                         for tool_result in tool_results:
                             tool_use_id = tool_result.get("tool_use_id")
                             result = tool_result.get("result")
+                            is_error = tool_result.get("is_error", False)
                             if tool_use_id in pending_tools:
                                 message_index, tool_index = pending_tools[tool_use_id]
                                 old_message = chat_history[message_index]
+                                old_tool = old_message.tools[tool_index]
                                 new_tools = list(old_message.tools)
+                                status = "error" if is_error else "success"
+                                error = result if is_error and result else None
                                 new_tools[tool_index] = replace(
-                                    new_tools[tool_index],
+                                    old_tool,
                                     result=result,
-                                    status="success" if result else "unknown",
+                                    status=status,
+                                    error=error,
                                 )
                                 chat_history[message_index] = replace(old_message, tools=new_tools)
 
@@ -412,9 +452,12 @@ class ClaudeParser(BaseParser):
                     tools = []
 
                     for tool_data in msg_data.get("tools", []):
+                        tool_name = tool_data.get("name") or "unknown"
+                        tool_type, server_name = self._classify_tool(tool_name)
                         tool = ToolUsage(
-                            tool_name=tool_data.get("name", "unknown"),
-                            tool_type="tool_use",
+                            tool_name=tool_name,
+                            tool_type=tool_type,
+                            server_name=server_name,
                             arguments=tool_data.get("input", {}),
                             result=None,
                         )

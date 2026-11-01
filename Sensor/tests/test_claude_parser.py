@@ -376,3 +376,219 @@ def test_incomplete_records_are_never_joined_across_physical_lines(tmp_path):
 
     assert _contents(entries) == ["Independent complete message"]
     assert entries[0].session_context["event_count"] == 1
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "expected_type", "expected_server"),
+    [
+        ("Bash", "terminal_command", None),
+        ("bash", "terminal_command", None),
+        ("mcp__github__create_issue", "mcp_tool", "github"),
+        ("mcp__postgres_db__query_rows", "mcp_tool", "postgres_db"),
+        ("mcp__fetch__fetch", "mcp_tool", "fetch"),
+        ("mcp__server", "mcp_tool", "server"),
+        ("mcp__", "tool_use", None),
+        ("mcp____tool", "tool_use", None),
+        ("Read", "tool_use", None),
+        ("Edit", "tool_use", None),
+        ("Glob", "tool_use", None),
+        ("Grep", "tool_use", None),
+        ("unknown_tool", "tool_use", None),
+        (None, "tool_use", None),
+    ],
+)
+def test_classify_tool_direct(tool_name, expected_type, expected_server):
+    tool_type, server_name = ClaudeParser._classify_tool(tool_name)
+    assert tool_type == expected_type
+    assert server_name == expected_server
+
+
+def test_tool_classification_in_parsed_session(tmp_path):
+    path = _write_records(
+        tmp_path / "session.jsonl",
+        [
+            _record("user", "Run multiple operations"),
+            _record(
+                "assistant",
+                [
+                    {"type": "tool_use", "id": "call_1", "name": "Bash", "input": {"command": "ls -la"}},
+                    {
+                        "type": "tool_use",
+                        "id": "call_2",
+                        "name": "mcp__github__create_issue",
+                        "input": {"title": "bug"},
+                    },
+                    {"type": "tool_use", "id": "call_3", "name": "Edit", "input": {"file_path": "foo.py"}},
+                ],
+            ),
+        ],
+    )
+
+    entries = ClaudeParser().parse_jsonl_file(path)
+    assert len(entries) == 1
+    assistant_msg = entries[0].chat_history[1]
+    assert len(assistant_msg.tools) == 3
+
+    assert assistant_msg.tools[0].tool_name == "Bash"
+    assert assistant_msg.tools[0].tool_type == "terminal_command"
+    assert assistant_msg.tools[0].server_name is None
+
+    assert assistant_msg.tools[1].tool_name == "mcp__github__create_issue"
+    assert assistant_msg.tools[1].tool_type == "mcp_tool"
+    assert assistant_msg.tools[1].server_name == "github"
+
+    assert assistant_msg.tools[2].tool_name == "Edit"
+    assert assistant_msg.tools[2].tool_type == "tool_use"
+    assert assistant_msg.tools[2].server_name is None
+
+
+def test_server_name_and_tool_type_survive_tool_result_merge(tmp_path):
+    path = _write_records(
+        tmp_path / "session.jsonl",
+        [
+            _record("user", "Fetch website content"),
+            _record(
+                "assistant",
+                [
+                    {
+                        "type": "tool_use",
+                        "id": "fetch_1",
+                        "name": "mcp__fetch__fetch_url",
+                        "input": {"url": "https://uber.com"},
+                    }
+                ],
+            ),
+            _record(
+                "user",
+                [{"type": "tool_result", "tool_use_id": "fetch_1", "content": "<html>Uber</html>"}],
+            ),
+        ],
+    )
+
+    entries = ClaudeParser().parse_jsonl_file(path)
+    assert len(entries) == 1
+    assistant_msg = entries[0].chat_history[1]
+    assert len(assistant_msg.tools) == 1
+
+    tool = assistant_msg.tools[0]
+    assert tool.tool_name == "mcp__fetch__fetch_url"
+    assert tool.tool_type == "mcp_tool"
+    assert tool.server_name == "fetch"
+    assert tool.status == "success"
+    assert tool.result == "<html>Uber</html>"
+    assert tool.error is None
+
+
+def test_is_error_flag_marks_status_error_and_populates_error_field(tmp_path):
+    path = _write_records(
+        tmp_path / "session.jsonl",
+        [
+            _record("user", "Attempt unauthorized command"),
+            _record(
+                "assistant",
+                [{"type": "tool_use", "id": "bash_1", "name": "Bash", "input": {"command": "cat /etc/shadow"}}],
+            ),
+            _record(
+                "user",
+                [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "bash_1",
+                        "content": "Permission denied",
+                        "is_error": True,
+                    }
+                ],
+            ),
+        ],
+    )
+
+    entries = ClaudeParser().parse_jsonl_file(path)
+    assert len(entries) == 1
+    assistant_msg = entries[0].chat_history[1]
+    tool = assistant_msg.tools[0]
+
+    assert tool.tool_name == "Bash"
+    assert tool.tool_type == "terminal_command"
+    assert tool.status == "error"
+    assert tool.error == "Permission denied"
+    assert tool.result == "Permission denied"
+
+
+def test_tool_use_result_envelope_error_and_fallback(tmp_path):
+    path = _write_records(
+        tmp_path / "session.jsonl",
+        [
+            _record("user", "Query MCP server"),
+            _record(
+                "assistant",
+                [{"type": "tool_use", "id": "db_1", "name": "mcp__db__query", "input": {"sql": "SELECT 1"}}],
+            ),
+            _record(
+                "user",
+                [{"type": "tool_result", "tool_use_id": "db_1", "content": ""}],
+                toolUseResult={"error": "Connection refused to database", "is_error": True},
+            ),
+        ],
+    )
+
+    entries = ClaudeParser().parse_jsonl_file(path)
+    assert len(entries) == 1
+    assistant_msg = entries[0].chat_history[1]
+    tool = assistant_msg.tools[0]
+
+    assert tool.tool_name == "mcp__db__query"
+    assert tool.tool_type == "mcp_tool"
+    assert tool.server_name == "db"
+    assert tool.status == "error"
+    assert tool.error == "Connection refused to database"
+    assert tool.result == "Connection refused to database"
+
+
+def test_empty_result_without_error_has_success_status(tmp_path):
+    path = _write_records(
+        tmp_path / "session.jsonl",
+        [
+            _record("user", "Touch file"),
+            _record(
+                "assistant",
+                [{"type": "tool_use", "id": "touch_1", "name": "Bash", "input": {"command": "touch empty.txt"}}],
+            ),
+            _record(
+                "user",
+                [{"type": "tool_result", "tool_use_id": "touch_1", "content": ""}],
+            ),
+        ],
+    )
+
+    entries = ClaudeParser().parse_jsonl_file(path)
+    assert len(entries) == 1
+    assistant_msg = entries[0].chat_history[1]
+    tool = assistant_msg.tools[0]
+
+    assert tool.tool_type == "terminal_command"
+    assert tool.status == "success"
+    assert tool.result == ""
+    assert tool.error is None
+
+
+def test_null_or_absent_tool_name_does_not_drop_session(tmp_path):
+    path = _write_records(
+        tmp_path / "session.jsonl",
+        [
+            _record("user", "Run tool with null name"),
+            _record(
+                "assistant",
+                [{"type": "tool_use", "id": "call_null", "name": None, "input": {}}],
+            ),
+        ],
+    )
+
+    entries = ClaudeParser().parse_jsonl_file(path)
+    assert len(entries) == 1
+    assistant_msg = entries[0].chat_history[1]
+    assert len(assistant_msg.tools) == 1
+    tool = assistant_msg.tools[0]
+    assert tool.tool_name == "unknown"
+    assert tool.tool_type == "tool_use"
+    assert tool.server_name is None
+
