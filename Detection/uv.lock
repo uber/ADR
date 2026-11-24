@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.10, <3.13"
 resolution-markers = [
     "python_full_version >= '3.12.4' and sys_platform == 'darwin'",
@@ -5603,11 +5603,11 @@ wheels = [
 
 [[package]]
 name = "simpleeval"
-version = "1.0.3"
+version = "1.0.5"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/ff/6f/15be211749430f52f2c8f0c69158a6fc961c03aac93fa28d44d1a6f5ebc7/simpleeval-1.0.3.tar.gz", hash = "sha256:67bbf246040ac3b57c29cf048657b9cf31d4e7b9d6659684daa08ca8f1e45829", size = 24358, upload-time = "2024-11-02T10:29:46.912Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/92/ea/42430694f12bfb20ac00f1c4ae0e489ef23b302ea6abe6266934bb749bf6/simpleeval-1.0.5.tar.gz", hash = "sha256:b6b7933fffe13a345ada9917f8579c72e7b8afcfb7f7759b18fdd068aaa60486", size = 40853, upload-time = "2026-03-13T09:22:49.449Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a0/e9/e58082fbb8cecbb6fb4133033c40cc50c248b1a331582be3a0f39138d65b/simpleeval-1.0.3-py3-none-any.whl", hash = "sha256:e3bdbb8c82c26297c9a153902d0fd1858a6c3774bf53ff4f134788c3f2035c38", size = 15762, upload-time = "2024-11-02T10:29:45.706Z" },
+    { url = "https://files.pythonhosted.org/packages/2e/9c/43d7a2845fdf72f21572a0d7c33076cb69c2c73db9a297a5bfc6b87ebb54/simpleeval-1.0.5-py3-none-any.whl", hash = "sha256:c0de42a9f7849b7bc8c51338295341126f103a2a86beceffebafd9388e3cdfce", size = 18608, upload-time = "2026-03-13T09:22:47.875Z" },
 ]
 
 [[package]]
